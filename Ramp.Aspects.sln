@@ -8,6 +8,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ramp.Aspects.Fody", "Ramp.Aspects.Fody\Ramp.Aspects.Fody.csproj", "{A6C6A8FF-5516-4356-9AF0-7B55C5A8B8E6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ramp.Aspects.Fody.Tests", "Ramp.Aspects.Fody.Tests\Ramp.Aspects.Fody.Tests.csproj", "{60B1BD7A-5CA1-4C34-8931-44894A09E3BE}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D1B243E1-B46B-48CF-9CEC-2E0FF357473A} = {D1B243E1-B46B-48CF-9CEC-2E0FF357473A}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ramp.Aspects.Fody.TestTarget", "Ramp.Aspects.Fody.TestTarget\Ramp.Aspects.Fody.TestTarget.csproj", "{D1B243E1-B46B-48CF-9CEC-2E0FF357473A}"
 EndProject

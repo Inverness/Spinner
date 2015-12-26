@@ -43,15 +43,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="OutputRedirector.cs" />
     <Compile Include="WeaverTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Ramp.Aspects.Fody.TestTarget\Ramp.Aspects.Fody.TestTarget.csproj">
-      <Project>{d1b243e1-b46b-48cf-9cec-2e0ff357473a}</Project>
-      <Name>Ramp.Aspects.Fody.TestTarget</Name>
-	  <!--<ReferenceOutputAssembly>false</ReferenceOutputAssembly>-->
-    </ProjectReference>
     <ProjectReference Include="..\Ramp.Aspects.Fody\Ramp.Aspects.Fody.csproj">
       <Project>{a6c6a8ff-5516-4356-9af0-7b55c5a8b8e6}</Project>
       <Name>Ramp.Aspects.Fody</Name>

@@ -45,9 +45,11 @@
     <Compile Include="FeaturesAttribute.cs" />
     <Compile Include="FlowBehavior.cs" />
     <Compile Include="IAspect.cs" />
+    <Compile Include="IMethodBinding.cs" />
     <Compile Include="IMethodBoundaryAspect.cs" />
     <Compile Include="IMethodInterceptionAspect.cs" />
     <Compile Include="Internal\ArgumentsT.cs" />
+    <Compile Include="Internal\BoundMethodInterceptionArgs.cs" />
     <Compile Include="Internal\CompilerHelper.cs" />
     <Compile Include="MethodBoundaryAspect.cs" />
     <Compile Include="MethodExecutionArgs.cs" />
