@@ -1,0 +1,4 @@
+[submodule "Roslyn"]
+	path = Roslyn
+	url = https://github.com/Inverness/Roslyn.git
+	branch = features/aspects
