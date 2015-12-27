@@ -13,21 +13,35 @@ namespace Ramp.Aspects.Fody.TestTarget
         }
     }
 
+    public class TestIntercept2 : MethodInterceptionAspect
+    {
+        public override void OnInvoke(MethodInterceptionArgs args)
+        {
+            Console.WriteLine("Entry 2");
+            args.Proceed();
+            Console.WriteLine("Success 2");
+        }
+    }
+
     public class TestClass
     {
         public static void Run()
         {
-            Console.WriteLine("Result: " + TestMethod(10, 20, "thirty"));
+            var tc = new TestClass();
+            int b;
+            tc.TestMethod(10, out b, "thirty");
+            Console.WriteLine("Result: " + b);
         }
 
         [TestIntercept]
-        internal static int TestMethod(int a, int b, string c)
+        [TestIntercept2]
+        internal void TestMethod(int a, out int b, string c)
         {
+            b = 20;
             Console.WriteLine("test: " + (a + b) + " --- " + c);
-            return b - a;
         }
 
-        internal static int TestMethodCompare(int a, int b, string c)
+        internal int TestMethodCompare(int a, int b, ref string c)
         {
             var arguments = new Arguments<int, int, string>
             {
@@ -37,6 +51,51 @@ namespace Ramp.Aspects.Fody.TestTarget
             };
 
             return b - arguments.Item1;
+        }
+
+        internal static void TestMethodCompare2(ref object instance, Arguments args)
+        {
+            var castedArgs = (Arguments<int, int, string>) args;
+            ((TestClass) instance).TestMethod(castedArgs.Item0, out castedArgs.Item1, castedArgs.Item2);
+        }
+    }
+
+
+    public struct TestClassStruct
+    {
+        public static void Run()
+        {
+            var tc = new TestClassStruct();
+            Console.WriteLine("Result: " + tc.TestMethod(10, 20, "thirty"));
+        }
+
+        [TestIntercept]
+        [TestIntercept2]
+        internal int TestMethod(int a, int b, string c)
+        {
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            return b - a;
+        }
+
+        internal int TestMethodCompare(int a, int b, string c)
+        {
+            var arguments = new Arguments<int, int, string>
+            {
+                Item0 = a,
+                Item1 = b,
+                Item2 = c
+            };
+
+            return b - arguments.Item1;
+        }
+
+        internal static int TestMethodCompare2(ref object instance, Arguments args)
+        {
+            var castedArgs = (Arguments<int, int, string>) args;
+            int a = castedArgs.Item0;
+            int b = castedArgs.Item1;
+            string c = castedArgs.Item2;
+            return ((TestClassStruct) instance).TestMethod(a, b, c);
         }
     }
 }

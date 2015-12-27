@@ -1,15 +1,10 @@
 ﻿using System;
 using System.Linq;
-using System.Reflection;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Ramp.Aspects.Fody.Utilities;
-using FieldAttributes = Mono.Cecil.FieldAttributes;
-using MethodAttributes = Mono.Cecil.MethodAttributes;
-using ParameterAttributes = Mono.Cecil.ParameterAttributes;
-using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
@@ -35,7 +30,7 @@ namespace Ramp.Aspects.Fody.Weavers
 
             // Duplicate the target method under a new name: <Name>z__OriginalMethod
 
-            string originalName = $"<{ExtractOriginalName(Method.Name)}>z__OriginalMethod";
+            string originalName = $"<{ExtractOriginalName(Method.Name)}>z__OriginalMethod" + Method.DeclaringType.Methods.Count;
 
             MethodAttributes originalAttributes = Method.Attributes & preservedAttributes |
                                                   MethodAttributes.Private;
@@ -73,34 +68,29 @@ namespace Ramp.Aspects.Fody.Weavers
 
             ILProcessor il = Method.Body.GetILProcessor();
             var lp = new LabelProcessor(il);
-
-            // Create the Arguments<...> instance and set its fields from the arguments
+            
+            //WriteOutArgumentInit(il);
 
             VariableDefinition argumentsVariable;
             FieldReference[] argumentFields;
-            WriteArgumentsInit(il, out argumentsVariable, out argumentFields);
+            WriteArgumentContainerInit(il, out argumentsVariable, out argumentFields);
 
-            // Create the aspect cache field and initialize the reference
+            WriteCopyArgumentsToContainer(il, argumentsVariable, argumentFields, true);
             
             FieldReference aspectField;
             WriteAspectInit(il, lp, out aspectField);
-            
-            // Create the nested binding classa and initialize the reference
 
             FieldReference bindingField;
             WriteBindingInit(il, lp, original, argumentFields, out bindingField);
-
-            // Write the MethodInterceptionArgs initialization.
 
             FieldReference returnValueField;
             VariableDefinition miaVariable;
             WriteMiaInit(il, argumentsVariable, bindingField, out miaVariable, out returnValueField);
 
-            // Call the OnInvoke() advice
-
             WriteCallOnInvoke(il, aspectField, miaVariable);
 
-            // Write the return statement which uses the TypedReturnValue from the MethodInterceptionArgs.
+            // Copy out and ref arguments from container
+            WriteCopyArgumentsFromContainer(il, argumentsVariable, argumentFields, false, true);
 
             WriteReturn(il, miaVariable, returnValueField);
 
@@ -110,10 +100,17 @@ namespace Ramp.Aspects.Fody.Weavers
             il.Body.OptimizeMacros();
         }
         
+        /// <summary>
+        /// Writes the MethodInterceptionArgs initialization.
+        /// </summary>
+        /// <param name="il">An IL processor</param>
+        /// <param name="argumentsVariable">A local variable containing the initialized arguments container.</param>
+        /// <param name="bindingField">A reference to the field containing the MethodBinding implementation.</param>
+        /// <param name="miaVariable">A local variable containing the initialized MethodInterceptionArgs.</param>
+        /// <param name="returnValueField">A reference the typed field on the MIA that holds the return value.</param>
         private void WriteMiaInit(ILProcessor il, VariableDefinition argumentsVariable, FieldReference bindingField, out VariableDefinition miaVariable, out FieldReference returnValueField)
         {
             ModuleDefinition module = Method.Module;
-            TypeSystem typeSystem = module.TypeSystem;
             
             TypeReference miaType;
             MethodReference constructor;
@@ -152,7 +149,10 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 il.Emit(OpCodes.Ldarg_0);
                 if (Method.DeclaringType.IsValueType)
-                    il.Emit(OpCodes.Box, typeSystem.Object);
+                {
+                    il.Emit(OpCodes.Ldobj, Method.DeclaringType);
+                    il.Emit(OpCodes.Box, Method.DeclaringType);
+                }
             }
 
             if (argumentsVariable == null)
@@ -178,12 +178,18 @@ namespace Ramp.Aspects.Fody.Weavers
             il.Emit(OpCodes.Stloc, miaVariable);
         }
 
+        /// <summary>
+        /// Write aspect initialization.
+        /// </summary>
+        /// <param name="il">An IL processor</param>
+        /// <param name="lp">A label processor</param>
+        /// <param name="aspectField">A reference to the static field containing the aspect</param>
         private void WriteAspectInit(ILProcessor il, LabelProcessor lp, out FieldReference aspectField)
         {
             var fattrs = FieldAttributes.Private |
                          FieldAttributes.Static;
 
-            string fname = $"<{Method.Name}>z__CachedAspect" + Method.DeclaringType.Fields.Count;
+            string fname = $"<{ExtractOriginalName(Method.Name)}>z__CachedAspect" + Method.DeclaringType.Fields.Count;
 
             var aspectFieldDef = new FieldDefinition(fname, fattrs, Method.Module.Import(AspectType));
             Method.DeclaringType.Fields.Add(aspectFieldDef);
@@ -191,17 +197,23 @@ namespace Ramp.Aspects.Fody.Weavers
             aspectField = aspectFieldDef;
 
             // NOTE: Aspect type can't be generic since its declared by an attribute
-            MethodDefinition constructorDef = AspectType.GetConstructors().Single(m => m.HasThis && m.Parameters.Count == 0);
-            MethodReference constructor = Method.Module.Import(constructorDef);
+            MethodDefinition ctorDef = AspectType.GetConstructors().Single(m => m.HasThis && m.Parameters.Count == 0);
+            MethodReference ctor = Method.Module.Import(ctorDef);
             
             Label notNullLabel = lp.DefineLabel();
             il.Emit(OpCodes.Ldsfld, aspectField);
             il.Emit(OpCodes.Brtrue, notNullLabel.Instruction);
-            il.Emit(OpCodes.Newobj, constructor);
+            il.Emit(OpCodes.Newobj, ctor);
             il.Emit(OpCodes.Stsfld, aspectField);
             lp.MarkLabel(notNullLabel);
         }
 
+        /// <summary>
+        /// Write a call to OnInvoke().
+        /// </summary>
+        /// <param name="il">An IL processor</param>
+        /// <param name="aspectField">The field containing the aspect instance</param>
+        /// <param name="miaVariable">The MethodInterceptionArgs to pass to OnInvoke()</param>
         private void WriteCallOnInvoke(ILProcessor il, FieldReference aspectField, VariableDefinition miaVariable)
         {
             MethodDefinition onInvokeMethodDef = AspectType.Methods.Single(m => m.Name == "OnInvoke");
@@ -212,14 +224,36 @@ namespace Ramp.Aspects.Fody.Weavers
             il.Emit(OpCodes.Callvirt, onInvokeMethod);
         }
 
+        /// <summary>
+        /// Write the return statement that uses the TypedReturnValue from the MethodInterceptionArgs if applicable.
+        /// </summary>
+        /// <param name="il"></param>
+        /// <param name="miaVariable"></param>
+        /// <param name="returnValueField"></param>
         private void WriteReturn(ILProcessor il, VariableDefinition miaVariable, FieldReference returnValueField)
         {
-            il.Emit(OpCodes.Ldloc, miaVariable);
-            il.Emit(OpCodes.Ldfld, returnValueField);
+            if (returnValueField != null)
+            {
+                il.Emit(OpCodes.Ldloc, miaVariable);
+                il.Emit(OpCodes.Ldfld, returnValueField);
+            }
             il.Emit(OpCodes.Ret);
         }
 
-        private void WriteBindingInit(ILProcessor il, LabelProcessor lp, MethodReference original, FieldReference[] argumentFields, out FieldReference bindingField)
+        /// <summary>
+        /// Generate the MethodBinding implementation and write its initialization.
+        /// </summary>
+        /// <param name="il"></param>
+        /// <param name="lp"></param>
+        /// <param name="original"></param>
+        /// <param name="argumentFields"></param>
+        /// <param name="bindingField"></param>
+        private void WriteBindingInit(
+            ILProcessor il,
+            LabelProcessor lp,
+            MethodReference original,
+            FieldReference[] argumentFields,
+            out FieldReference bindingField)
         {
             ModuleDefinition module = Method.Module;
 
@@ -231,11 +265,12 @@ namespace Ramp.Aspects.Fody.Weavers
             }
             else
             {
-                baseType = module.Import(AspectLibraryModule.GetType("Ramp.Aspects.Internal.MethodBinding`1"))
-                                 .MakeGenericInstanceType(Method.ReturnType);
+                TypeDefinition baseTypeDef = AspectLibraryModule.GetType("Ramp.Aspects.Internal.MethodBinding`1");
+                baseType = module.Import(baseTypeDef).MakeGenericInstanceType(Method.ReturnType);
             }
 
-            string className = $"<{Method.Name}>z__MethodBinding";
+            string className = $"<{ExtractOriginalName(Method.Name)}>z__MethodBinding" +
+                               Method.DeclaringType.NestedTypes.Count;
 
             var tattrs = TypeAttributes.NestedPrivate |
                          TypeAttributes.Class |
@@ -268,7 +303,9 @@ namespace Ramp.Aspects.Fody.Weavers
                               MethodAttributes.ReuseSlot;
 
             var invokeMethod = new MethodDefinition("Invoke", invokeAttrs, Method.ReturnType);
-            
+
+            bindingTypeDef.Methods.Add(invokeMethod);
+
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
             TypeReference argumentsBaseType = module.Import(AspectLibraryModule.GetType("Ramp.Aspects.Arguments"));
 
@@ -276,10 +313,10 @@ namespace Ramp.Aspects.Fody.Weavers
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));
 
             ILProcessor bil = invokeMethod.Body.GetILProcessor();
-            var argumentVariables = new VariableDefinition[Method.Parameters.Count];
-            VariableDefinition argsContainer = null;
 
-            if (argumentVariables.Length != 0)
+            // Case the arguments container from its base type to the generic instance type
+            VariableDefinition argsContainer = null;
+            if (Method.Parameters.Count != 0)
             {
                 argsContainer = new VariableDefinition("castedArgs", argumentFields[0].DeclaringType);
                 bil.Body.Variables.Add(argsContainer);
@@ -290,53 +327,38 @@ namespace Ramp.Aspects.Fody.Weavers
                 bil.Emit(OpCodes.Stloc, argsContainer);
             }
 
-            for (int i = 0; i < argumentVariables.Length; i++)
-            {
-                ParameterDefinition parameter = Method.Parameters[i];
-
-                TypeReference realType = parameter.ParameterType.IsByReference
-                    ? parameter.ParameterType.GetElementType()
-                    : parameter.ParameterType;
-
-                var argumentVariable = new VariableDefinition(parameter.Name, realType);
-                bil.Body.Variables.Add(argumentVariable);
-
-                argumentVariables[i] = argumentVariable;
-
-                if (parameter.IsOut)
-                    continue;
-
-                bil.Emit(OpCodes.Ldloc, argsContainer);
-                bil.Emit(OpCodes.Ldfld, argumentFields[i]);
-                bil.Emit(OpCodes.Stloc, argumentVariable);
-            }
-
+            // Load the instance for the method call
             if (!Method.IsStatic)
             {
-                var instanceVariable = new VariableDefinition("unboxedInstance", Method.DeclaringType);
-
-                bil.Body.Variables.Add(instanceVariable);
-                bil.Body.InitLocals = true;
-
-                bil.Emit(OpCodes.Ldarg_1);
-                bil.Emit(Method.DeclaringType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, Method.DeclaringType);
-                bil.Emit(OpCodes.Stloc, instanceVariable);
-                bil.Emit(Method.DeclaringType.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc);
+                if (Method.DeclaringType.IsValueType)
+                {
+                    bil.Emit(OpCodes.Ldarg_1);
+                    bil.Emit(OpCodes.Ldind_Ref);
+                    bil.Emit(OpCodes.Unbox, Method.DeclaringType);
+                }
+                else
+                {
+                    bil.Emit(OpCodes.Ldarg_1);
+                    bil.Emit(OpCodes.Ldind_Ref);
+                    bil.Emit(OpCodes.Castclass, Method.DeclaringType);
+                }
             }
 
+            // Load arguments or addresses directly from the arguments container
             for (int i = 0; i < Method.Parameters.Count; i++)
             {
-                OpCode opcode = Method.Parameters[i].ParameterType.IsByReference ? OpCodes.Ldloca : OpCodes.Ldloc;
-                bil.Emit(opcode, argumentVariables[i]);
+                bool byRef = Method.Parameters[i].ParameterType.IsByReference;
+
+                bil.Emit(OpCodes.Ldloc, argsContainer);
+                bil.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentFields[i]);
             }
 
             if (Method.IsStatic || Method.DeclaringType.IsValueType)
                 bil.Emit(OpCodes.Call, original);
             else
                 bil.Emit(OpCodes.Callvirt, original);
-            bil.Emit(OpCodes.Ret);
 
-            bindingTypeDef.Methods.Add(invokeMethod);
+            bil.Emit(OpCodes.Ret);
 
             // Initialize the binding instance
 

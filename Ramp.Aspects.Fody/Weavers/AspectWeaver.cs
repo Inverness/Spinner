@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -29,7 +30,16 @@ namespace Ramp.Aspects.Fody.Weavers
             ReturnsVoid = Method.ReturnType == Method.Module.TypeSystem.Void;
         }
 
-        protected void WriteArgumentsInit(ILProcessor il, out VariableDefinition argumentsVariable, out FieldReference[] argumentFields)
+        /// <summary>
+        /// Write code to initialize the argument container instance.
+        /// </summary>
+        /// <param name="il"></param>
+        /// <param name="argumentsVariable"></param>
+        /// <param name="argumentFields"></param>
+        protected void WriteArgumentContainerInit(
+            ILProcessor il,
+            out VariableDefinition argumentsVariable,
+            out FieldReference[] argumentFields)
         {
             if (Method.Parameters.Count == 0)
             {
@@ -47,8 +57,10 @@ namespace Ramp.Aspects.Fody.Weavers
                     .Select(p => p.ParameterType.IsByReference ? p.ParameterType.GetElementType() : p.ParameterType)
                     .ToArray();
 
-            TypeDefinition argumentsTypeDef = AspectLibraryModule.GetType("Ramp.Aspects.Internal.Arguments`" + Method.Parameters.Count);
-            GenericInstanceType argumentsType = module.Import(argumentsTypeDef).MakeGenericInstanceType(baseParameterTypes);
+            TypeDefinition argumentsTypeDef =
+                AspectLibraryModule.GetType("Ramp.Aspects.Internal.Arguments`" + Method.Parameters.Count);
+            GenericInstanceType argumentsType =
+                module.Import(argumentsTypeDef).MakeGenericInstanceType(baseParameterTypes);
 
             argumentsVariable = new VariableDefinition("arguments", argumentsType);
             il.Body.Variables.Add(argumentsVariable);
@@ -57,8 +69,9 @@ namespace Ramp.Aspects.Fody.Weavers
             MethodReference constructor = module.Import(constructorDef).WithGenericDeclaringType(argumentsType);
 
             il.Emit(OpCodes.Newobj, constructor);
-
-            // Write variable initiations
+            il.Emit(OpCodes.Stloc, argumentsVariable);
+            
+            // Cache argument fields for later use
             argumentFields = new FieldReference[Method.Parameters.Count];
 
             for (int i = 0; i < Method.Parameters.Count; i++)
@@ -68,16 +81,123 @@ namespace Ramp.Aspects.Fody.Weavers
                 FieldReference field = module.Import(fieldDef).WithGenericDeclaringType(argumentsType);
 
                 argumentFields[i] = field;
+            }
+        }
 
-                if (Method.Parameters[i].IsOut)
+        /// <summary>
+        /// Copies arguments from the method to the generic arguments container.
+        /// </summary>
+        /// <param name="il"></param>
+        /// <param name="argumentsVariable"></param>
+        /// <param name="argumentFields"></param>
+        /// <param name="excludeOut"></param>
+        protected void WriteCopyArgumentsToContainer(ILProcessor il, VariableDefinition argumentsVariable, FieldReference[] argumentFields, bool excludeOut)
+        {
+            for (int i = 0; i < Method.Parameters.Count; i++)
+            {
+                if (Method.Parameters[i].IsOut && excludeOut)
                     continue;
 
-                il.Emit(OpCodes.Dup);
-                il.Emit(OpCodes.Ldarg, i);
-                il.Emit(OpCodes.Stfld, module.Import(field));
-            }
+                TypeReference parameterType = Method.Parameters[i].ParameterType;
+                int argumentIndex = Method.IsStatic ? i : i + 1;
 
-            il.Emit(OpCodes.Stloc, argumentsVariable);
+                il.Emit(OpCodes.Ldloc, argumentsVariable);
+                il.Emit(OpCodes.Ldarg, argumentIndex);
+                if (parameterType.IsByReference)
+                {
+                    if (parameterType.GetElementType().IsValueType)
+                        il.Emit(OpCodes.Ldobj, parameterType.GetElementType());
+                    else
+                        il.Emit(OpCodes.Ldind_Ref);
+                }
+
+                il.Emit(OpCodes.Stfld, argumentFields[i]);
+            }
+        }
+
+        /// <summary>
+        /// Copies arguments from the generic arguments container to the method.
+        /// </summary>
+        /// <param name="il"></param>
+        /// <param name="argumentsVariable"></param>
+        /// <param name="argumentFields"></param>
+        /// <param name="includeNormal"></param>
+        /// <param name="includeRef"></param>
+        protected void WriteCopyArgumentsFromContainer(ILProcessor il, VariableDefinition argumentsVariable, FieldReference[] argumentFields, bool includeNormal, bool includeRef)
+        {
+            for (int i = 0; i < Method.Parameters.Count; i++)
+            {
+                TypeReference parameterType = Method.Parameters[i].ParameterType;
+
+                int argumentIndex = Method.IsStatic ? i : i + 1;
+
+                if (parameterType.IsByReference)
+                {
+                    if (!includeRef)
+                        continue;
+                    
+                    il.Emit(OpCodes.Ldarg, argumentIndex);
+                    il.Emit(OpCodes.Ldloc, argumentsVariable);
+                    il.Emit(OpCodes.Ldfld, argumentFields[i]);
+                    if (parameterType.GetElementType().IsValueType)
+                        il.Emit(OpCodes.Stobj, parameterType.GetElementType());
+                    else
+                        il.Emit(OpCodes.Stind_Ref);
+                }
+                else
+                {
+                    if (!includeNormal)
+                        continue;
+
+                    il.Emit(OpCodes.Ldloc, argumentsVariable);
+                    il.Emit(OpCodes.Ldfld, argumentFields[i]);
+                    il.Emit(OpCodes.Starg, argumentIndex);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Initializes out arugments to their default values.
+        /// </summary>
+        /// <param name="il"></param>
+        protected void WriteOutArgumentInit(ILProcessor il)
+        {
+            for (int i = 0; i < Method.Parameters.Count; i++)
+            {
+                if (!Method.Parameters[i].IsOut)
+                    continue;
+
+                TypeReference parameterType = Method.Parameters[i].ParameterType;
+                int argumentIndex = Method.IsStatic ? i : i + 1;
+
+                if (parameterType.IsByReference)
+                {
+                    il.Emit(OpCodes.Ldarg, argumentIndex);
+                    if (parameterType.GetElementType().IsValueType)
+                    {
+                        il.Emit(OpCodes.Initobj, parameterType.GetElementType());
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldnull);
+                        il.Emit(OpCodes.Stind_Ref);
+                    }
+                }
+                else
+                {
+                    if (parameterType.IsValueType)
+                    {
+                        il.Emit(OpCodes.Ldarga, argumentIndex);
+                        il.Emit(OpCodes.Initobj, parameterType);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldnull);
+                        il.Emit(OpCodes.Starg, argumentIndex);
+                    }
+
+                }
+            }
         }
     }
 }
