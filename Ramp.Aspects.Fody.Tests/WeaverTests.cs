@@ -10,7 +10,7 @@ namespace Ramp.Aspects.Fody.Tests
 {
     public class WeaverTests
     {
-        private const string RelativeProjectpath = @"..\..\..\Ramp.Aspects.Fody.TestTarget\Ramp.Aspects.Fody.TestTarget.csproj";
+        private const string RelativeProjectpath = @"..\..\..\Ramp.Aspects.Fody.Tests\Ramp.Aspects.Fody.Tests.csproj";
         private const string RelativeAssemblyPath = @"bin\Debug\Ramp.Aspects.Fody.TestTarget.dll";
         private const string TestClassName = "Ramp.Aspects.Fody.TestTarget.TestClass";
         private const string PeVerifyName = "PEVerify.exe";
@@ -44,18 +44,26 @@ namespace Ramp.Aspects.Fody.Tests
             pdbPath = pdbPath.Replace("Debug", "Release");
 #endif
             string newAssemblyPath = assemblyPath.Replace(".dll", ".w.dll");
-            //string newPdbPath = pdbPath.Replace(".pdb", ".w.pdb");
+            string newPdbPath = pdbPath.Replace(".pdb", ".w.pdb");
 
             File.Copy(assemblyPath, newAssemblyPath, true);
             File.SetLastWriteTimeUtc(newAssemblyPath, DateTime.UtcNow);
-            //File.Copy(pdbPath, newPdbPath, true);
+            File.Copy(pdbPath, newPdbPath, true);
 
             var resolver = new DefaultAssemblyResolver();
             resolver.AddSearchDirectory(Path.GetDirectoryName(newAssemblyPath));
-            ModuleDefinition md = ModuleDefinition.ReadModule(newAssemblyPath, new ReaderParameters { AssemblyResolver = resolver});
+
+            var rp = new ReaderParameters {AssemblyResolver = resolver, ReadSymbols = true};
+
+            ModuleDefinition md = ModuleDefinition.ReadModule(newAssemblyPath, rp);
+
             var weaver = new ModuleWeaver
             {
-                ModuleDefinition = md
+                ModuleDefinition = md,
+                LogDebug = s => _output.WriteLine("Debug: " + s),
+                LogInfo = s => _output.WriteLine(s),
+                LogWarning = s => _output.WriteLine("WARNING: " + s),
+                LogError = s => _output.WriteLine("ERROR: " + s)
             };
 
             weaver.Execute();
@@ -129,18 +137,18 @@ namespace Ramp.Aspects.Fody.Tests
             }
         }
 
-        [Fact(DisplayName = "Weave Only")]
+        [Fact(DisplayName = "Weave Only", Skip = "NA")]
         public void WeaveOnly()
         {
             Assembly a = WeaveAndLoadAssembly();
             RunPeVerify(a.Location, 0);
         }
 
-        [Fact(DisplayName = "Weave and Run", Skip = "NA")]
+        [Fact(DisplayName = "Weave and Run")]
         public void WeaveAndRun()
         {
-
             Assembly a = WeaveAndLoadAssembly();
+            RunPeVerify(a.Location, 0);
 
             InvokeRunMethod(a);
         }

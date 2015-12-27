@@ -1,7 +1,4 @@
-﻿using System.Linq;
-using Mono.Cecil;
-using Mono.Cecil.Cil;
-using Mono.Cecil.Rocks;
+﻿using Mono.Cecil;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
@@ -45,8 +42,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 //_aspectCacheFieldsType.Methods.Add(_aspectCacheFieldsTypeConstructor);
             }
 
-            var fattrs = FieldAttributes.CompilerControlled |
-                         FieldAttributes.Assembly |
+            var fattrs = FieldAttributes.Assembly |
                          FieldAttributes.Static;
                          //FieldAttributes.InitOnly |
 

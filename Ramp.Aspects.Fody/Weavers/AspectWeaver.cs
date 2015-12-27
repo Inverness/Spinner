@@ -14,6 +14,7 @@ namespace Ramp.Aspects.Fody.Weavers
         protected readonly CacheClassBuilder CacheClassBuilder;
         protected readonly MethodDefinition Method;
         protected readonly TypeDefinition AspectType;
+        protected readonly bool ReturnsVoid;
 
         protected AspectWeaver(
             ModuleDefinition aspectLibraryModule,
@@ -25,12 +26,16 @@ namespace Ramp.Aspects.Fody.Weavers
             CacheClassBuilder = ccb;
             Method = method;
             AspectType = aspectType;
+            ReturnsVoid = Method.ReturnType == Method.Module.TypeSystem.Void;
         }
 
-        protected VariableDefinition WriteArgumentsInit(ILProcessor il)
+        protected VariableDefinition WriteArgumentsInit(ILProcessor il, out FieldReference[] argumentFields)
         {
             if (Method.Parameters.Count == 0)
+            {
+                argumentFields = null;
                 return null;
+            }
 
             ModuleDefinition module = Method.Module;
 
@@ -54,15 +59,18 @@ namespace Ramp.Aspects.Fody.Weavers
             il.Emit(OpCodes.Stloc, argumentsLocal);
 
             // Write variable initiations
+            argumentFields = new FieldReference[Method.Parameters.Count];
 
             for (int i = 0; i < Method.Parameters.Count; i++)
             {
-                if (Method.Parameters[i].IsOut)
-                    continue;
-
                 string fieldName = "Item" + i;
                 FieldDefinition fieldDef = argumentsTypeDef.Fields.First(f => f.Name == fieldName);
                 FieldReference field = module.Import(fieldDef.MakeGenericDeclaringType(argumentsType));
+
+                argumentFields[i] = field;
+
+                if (Method.Parameters[i].IsOut)
+                    continue;
 
                 il.Emit(OpCodes.Ldloc, argumentsLocal);
                 il.Emit(OpCodes.Ldarg, i);

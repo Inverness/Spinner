@@ -10,8 +10,6 @@ namespace Ramp.Aspects
             : base(instance)
         {
             Arguments = arguments;
-            ReturnValue = null;
-            Method = null;
         }
 
         /// <summary>

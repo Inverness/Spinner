@@ -53,7 +53,7 @@ namespace Ramp.Aspects.Internal
 
     public sealed class BoundMethodInterceptionArgs<T> : MethodInterceptionArgs
     {
-        public T ReturnValueT;
+        public T TypedReturnValue;
 
         private readonly MethodBinding<T> _binding;
 
@@ -65,14 +65,14 @@ namespace Ramp.Aspects.Internal
 
         public override object ReturnValue
         {
-            get { return ReturnValueT; }
+            get { return TypedReturnValue; }
 
-            set { ReturnValueT = (T) value; }
+            set { TypedReturnValue = (T) value; }
         }
 
         public override void Proceed()
         {
-            ReturnValueT = _binding.Invoke(ref InternalInstance, Arguments);
+            TypedReturnValue = _binding.Invoke(ref InternalInstance, Arguments);
         }
 
         public override object Invoke(Arguments args)
