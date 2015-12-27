@@ -1,4 +1,5 @@
 ﻿using System;
+using Ramp.Aspects.Internal;
 
 namespace Ramp.Aspects.Fody.TestTarget
 {
@@ -24,6 +25,18 @@ namespace Ramp.Aspects.Fody.TestTarget
         {
             Console.WriteLine("test: " + (a + b) + " --- " + c);
             return b - a;
+        }
+
+        internal static int TestMethodCompare(int a, int b, string c)
+        {
+            var arguments = new Arguments<int, int, string>
+            {
+                Item0 = a,
+                Item1 = b,
+                Item2 = c
+            };
+
+            return b - arguments.Item1;
         }
     }
 }

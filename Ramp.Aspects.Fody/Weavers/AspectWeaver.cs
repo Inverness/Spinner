@@ -29,12 +29,13 @@ namespace Ramp.Aspects.Fody.Weavers
             ReturnsVoid = Method.ReturnType == Method.Module.TypeSystem.Void;
         }
 
-        protected VariableDefinition WriteArgumentsInit(ILProcessor il, out FieldReference[] argumentFields)
+        protected void WriteArgumentsInit(ILProcessor il, out VariableDefinition argumentsVariable, out FieldReference[] argumentFields)
         {
             if (Method.Parameters.Count == 0)
             {
+                argumentsVariable = null;
                 argumentFields = null;
-                return null;
+                return;
             }
 
             ModuleDefinition module = Method.Module;
@@ -49,14 +50,13 @@ namespace Ramp.Aspects.Fody.Weavers
             TypeDefinition argumentsTypeDef = AspectLibraryModule.GetType("Ramp.Aspects.Internal.Arguments`" + Method.Parameters.Count);
             GenericInstanceType argumentsType = module.Import(argumentsTypeDef).MakeGenericInstanceType(baseParameterTypes);
 
-            var argumentsLocal = new VariableDefinition("arguments", argumentsType);
-            il.Body.Variables.Add(argumentsLocal);
+            argumentsVariable = new VariableDefinition("arguments", argumentsType);
+            il.Body.Variables.Add(argumentsVariable);
 
             MethodDefinition constructorDef = argumentsTypeDef.GetConstructors().Single(m => m.HasThis);
-            MethodReference constructor = module.Import(constructorDef.MakeGenericDeclaringType(argumentsType));
+            MethodReference constructor = module.Import(constructorDef).WithGenericDeclaringType(argumentsType);
 
             il.Emit(OpCodes.Newobj, constructor);
-            il.Emit(OpCodes.Stloc, argumentsLocal);
 
             // Write variable initiations
             argumentFields = new FieldReference[Method.Parameters.Count];
@@ -65,19 +65,19 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 string fieldName = "Item" + i;
                 FieldDefinition fieldDef = argumentsTypeDef.Fields.First(f => f.Name == fieldName);
-                FieldReference field = module.Import(fieldDef.MakeGenericDeclaringType(argumentsType));
+                FieldReference field = module.Import(fieldDef).WithGenericDeclaringType(argumentsType);
 
                 argumentFields[i] = field;
 
                 if (Method.Parameters[i].IsOut)
                     continue;
 
-                il.Emit(OpCodes.Ldloc, argumentsLocal);
+                il.Emit(OpCodes.Dup);
                 il.Emit(OpCodes.Ldarg, i);
                 il.Emit(OpCodes.Stfld, module.Import(field));
             }
 
-            return argumentsLocal;
+            il.Emit(OpCodes.Stloc, argumentsVariable);
         }
     }
 }

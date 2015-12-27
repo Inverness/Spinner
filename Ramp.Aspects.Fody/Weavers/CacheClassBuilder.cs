@@ -16,7 +16,7 @@ namespace Ramp.Aspects.Fody.Weavers
             _module = module;
         }
 
-        internal FieldDefinition AddAspectCacheField(TypeReference aspectType)
+        internal FieldDefinition CreateAspectCacheField(TypeReference aspectType)
         {
             // Initialize the type on first call
             if (_aspectCacheFieldsType == null)

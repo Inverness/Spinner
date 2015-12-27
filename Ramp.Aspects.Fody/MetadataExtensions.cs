@@ -1,5 +1,5 @@
-﻿using Mono.Cecil;
-using Mono.Cecil.Rocks;
+﻿using System.Diagnostics;
+using Mono.Cecil;
 
 namespace Ramp.Aspects.Fody
 {
@@ -14,13 +14,10 @@ namespace Ramp.Aspects.Fody
             };
         }
 
-        internal static MethodReference MakeGenericDeclaringType(this MethodReference self, params TypeReference[] args)
+        internal static MethodReference WithGenericDeclaringType(this MethodReference self, GenericInstanceType type)
         {
-            return MakeGenericDeclaringType(self, self.DeclaringType.MakeGenericInstanceType(args));
-        }
+            Debug.Assert(type.Module == self.Module);
 
-        internal static MethodReference MakeGenericDeclaringType(this MethodReference self, GenericInstanceType type)
-        {
             var reference = new MethodReference(self.Name, self.ReturnType, type)
             {
                 HasThis = self.HasThis,
@@ -37,13 +34,10 @@ namespace Ramp.Aspects.Fody
             return reference;
         }
 
-        internal static FieldReference MakeGenericDeclaringType(this FieldReference self, params TypeReference[] args)
+        internal static FieldReference WithGenericDeclaringType(this FieldReference self, GenericInstanceType type)
         {
-            return MakeGenericDeclaringType(self, self.DeclaringType.MakeGenericInstanceType(args));
-        }
+            Debug.Assert(type.Module == self.Module);
 
-        internal static FieldReference MakeGenericDeclaringType(this FieldReference self, GenericInstanceType type)
-        {
             return new FieldReference(self.Name, self.FieldType, type);
         }
     }
