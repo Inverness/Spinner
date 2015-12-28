@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -21,37 +22,72 @@ namespace Ramp.Aspects.Fody
 
         // Definition for IMethodInterceptionAspect
         private TypeDefinition _methodInterceptionAspectTypeDef;
-        private CacheClassBuilder _ccb;
+        private TypeDefinition _propertyInterceptionAspectTypeDef;
 
-        public void Execute()
+        public ModuleWeaver()
         {
             LogDebug = s => { };
             LogInfo = s => { };
             LogWarning = s => { };
             LogError = s => { };
+        }
 
-            _ccb = new CacheClassBuilder(ModuleDefinition);
-
+        public void Execute()
+        {
             AssemblyNameReference aspectsModuleName = ModuleDefinition.AssemblyReferences.First(a => a.Name == "Ramp.Aspects");
             AssemblyDefinition aspectsAssembly = ModuleDefinition.AssemblyResolver.Resolve(aspectsModuleName);
+            ModuleDefinition alm = aspectsAssembly.MainModule;
 
-            _methodInterceptionAspectTypeDef = aspectsAssembly.MainModule.GetType("Ramp.Aspects.IMethodInterceptionAspect");
+            _methodInterceptionAspectTypeDef = alm.GetType("Ramp.Aspects.IMethodInterceptionAspect");
+            _propertyInterceptionAspectTypeDef = alm.GetType("Ramp.Aspects.IPropertyInterceptionAspect");
 
-            foreach (TypeDefinition type in ModuleDefinition.GetAllTypes().ToList())
+            int aspectIndexCounter = 0;
+
+            var typeList = new List<TypeDefinition>(ModuleDefinition.GetAllTypes());
+            var methodList = new List<MethodDefinition>();
+            var propertyList = new List<PropertyDefinition>();
+
+            foreach (TypeDefinition type in typeList)
             {
-                foreach (MethodDefinition method in type.Methods.ToList())
+                methodList.AddRange(type.Methods);
+
+                foreach (MethodDefinition method in methodList)
                 {
                     foreach (CustomAttribute a in method.CustomAttributes)
                     {
-                        TypeDefinition attributeTypeDef = a.AttributeType.Resolve();
-                        if (IsMethodInterceptionAspectAttribute(attributeTypeDef))
+                        TypeDefinition attributeType = a.AttributeType.Resolve();
+                        if (IsMethodInterceptionAspectAttribute(attributeType))
                         {
                             Debug.Assert(method.HasBody);
-                            var w = new MethodInterceptionAspectWeaver(aspectsAssembly.MainModule, _ccb, method, attributeTypeDef);
-                            w.Weave();
+
+                            int aspectIndex = aspectIndexCounter++;
+
+                            MethodInterceptionAspectWeaver.Weave(alm, method, attributeType, aspectIndex);
                         }
                     }
                 }
+
+                methodList.Clear();
+
+                propertyList.AddRange(type.Properties);
+
+                foreach (PropertyDefinition property in propertyList)
+                {
+                    foreach (CustomAttribute a in property.CustomAttributes)
+                    {
+                        TypeDefinition attributeType = a.AttributeType.Resolve();
+                        if (IsPropertyInterceptionAspectAttribute(attributeType))
+                        {
+                            Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+
+                            int aspectIndex = aspectIndexCounter++;
+
+                            PropertyInterceptionAspectWeaver.Weave(alm, property, attributeType, aspectIndex);
+                        }
+                    }
+                }
+
+                propertyList.Clear();
             }
         }
 
@@ -63,6 +99,23 @@ namespace Ramp.Aspects.Fody
                 foreach (TypeReference ir in current.Interfaces)
                 {
                     if (ir.Resolve() == _methodInterceptionAspectTypeDef)
+                        return true;
+                }
+
+                current = current.BaseType?.Resolve();
+            } while (current != null);
+
+            return false;
+        }
+
+        private bool IsPropertyInterceptionAspectAttribute(TypeDefinition attributeTypeDef)
+        {
+            TypeDefinition current = attributeTypeDef;
+            do
+            {
+                foreach (TypeReference ir in current.Interfaces)
+                {
+                    if (ir.Resolve() == _propertyInterceptionAspectTypeDef)
                         return true;
                 }
 

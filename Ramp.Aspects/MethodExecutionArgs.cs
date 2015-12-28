@@ -7,30 +7,14 @@ namespace Ramp.Aspects
     /// <summary>
     ///     Arguments provided to a method boundary aspect about the method being executed.
     /// </summary>
-    public struct MethodExecutionArgs
+    public class MethodExecutionArgs : AdviceArgs
     {
         [DebuggerStepThrough]
         public MethodExecutionArgs(object instance, Arguments arguments)
+            : base(instance)
         {
-            Instance = instance;
-            Tag = null;
             Arguments = arguments;
-            FlowBehavior = FlowBehavior.Default;
-            ReturnValue = null;
-            YieldValue = null;
-            Exception = null;
-            Method = null;
         }
-
-        /// <summary>
-        ///     Gets the instance the method is being executed. This will be null for static methods.
-        /// </summary>
-        public object Instance { get; set; }
-
-        /// <summary>
-        ///     Gets or sets user-specified data that is stored while an aspect is being executed.
-        /// </summary>
-        public object Tag { get; set; }
 
         /// <summary>
         ///     Gets the arguments list for the method invocation. This will be null if the Arguments feature

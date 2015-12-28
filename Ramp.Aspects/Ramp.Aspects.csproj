@@ -50,12 +50,21 @@
     <Compile Include="IMethodInterceptionAspect.cs" />
     <Compile Include="Internal\ArgumentsT.cs" />
     <Compile Include="Internal\BoundMethodInterceptionArgs.cs" />
+    <Compile Include="Internal\BoundMethodInterceptionArgsT.cs" />
+    <Compile Include="Internal\BoundPropertyInterceptionArgs.cs" />
     <Compile Include="Internal\CompilerHelper.cs" />
+    <Compile Include="Internal\MethodBinding.cs" />
+    <Compile Include="Internal\MethodBindingT.cs" />
+    <Compile Include="Internal\PropertyBinding.cs" />
+    <Compile Include="IPropertyBinding.cs" />
+    <Compile Include="IPropertyInterceptionAspect.cs" />
     <Compile Include="MethodBoundaryAspect.cs" />
     <Compile Include="MethodExecutionArgs.cs" />
     <Compile Include="MethodInterceptionArgs.cs" />
     <Compile Include="MethodInterceptionAspect.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="PropertyInterceptionArgs.cs" />
+    <Compile Include="PropertyInterceptionAspect.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

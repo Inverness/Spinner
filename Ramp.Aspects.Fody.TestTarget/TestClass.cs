@@ -23,14 +23,47 @@ namespace Ramp.Aspects.Fody.TestTarget
         }
     }
 
+    public class TestPropIntercept : PropertyInterceptionAspect
+    {
+        public override void OnGetValue(PropertyInterceptionArgs args)
+        {
+            Console.WriteLine("Get value !");
+            args.ProceedGetValue();
+        }
+
+        public override void OnSetValue(PropertyInterceptionArgs args)
+        {
+            Console.WriteLine("Set value !");
+            args.ProceedSetValue();
+        }
+    }
+
     public class TestClass
     {
+        private int _x;
+
         public static void Run()
         {
             var tc = new TestClass();
             int b;
             tc.TestMethod(10, out b, "thirty");
             Console.WriteLine("Result: " + b);
+        }
+
+        [TestPropIntercept]
+        public int TestProperty
+        {
+            get { return _x; }
+
+            set { _x = value + 1; }
+        }
+
+        [TestPropIntercept]
+        public int this[int index, string a]
+        {
+            get { return _x + index; }
+
+            set { _x = index + 1; }
         }
 
         [TestIntercept]

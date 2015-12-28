@@ -49,6 +49,7 @@
     <Compile Include="Weavers\AspectWeaver.cs" />
     <Compile Include="Weavers\CacheClassBuilder.cs" />
     <Compile Include="Weavers\MethodInterceptionAspectWeaver.cs" />
+    <Compile Include="Weavers\PropertyInterceptionAspectWeaver.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="project.json" />
