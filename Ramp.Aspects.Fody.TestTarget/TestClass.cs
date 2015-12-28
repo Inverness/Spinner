@@ -61,7 +61,7 @@ namespace Ramp.Aspects.Fody.TestTarget
         [TestPropIntercept]
         public int this[int index, string a]
         {
-            get { return _x + index; }
+            //get { return _x + index; }
 
             set { _x = index + 1; }
         }

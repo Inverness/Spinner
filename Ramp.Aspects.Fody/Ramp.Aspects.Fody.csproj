@@ -41,6 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CollectionExtensions.cs" />
+    <Compile Include="ImportContext.cs" />
     <Compile Include="MetadataExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -50,9 +51,16 @@
     <Compile Include="Weavers\CacheClassBuilder.cs" />
     <Compile Include="Weavers\MethodInterceptionAspectWeaver.cs" />
     <Compile Include="Weavers\PropertyInterceptionAspectWeaver.cs" />
+    <Compile Include="WellKnownLibraryMembers.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="project.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ramp.Aspects\Ramp.Aspects.csproj">
+      <Project>{c94d87b4-8ac6-4259-87f1-7cd57ed2dbd4}</Project>
+      <Name>Ramp.Aspects</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

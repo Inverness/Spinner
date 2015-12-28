@@ -3,6 +3,7 @@ using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using Mono.Collections.Generic;
 using Ramp.Aspects.Fody.Utilities;
 
 namespace Ramp.Aspects.Fody.Weavers
@@ -12,6 +13,8 @@ namespace Ramp.Aspects.Fody.Weavers
     /// </summary>
     internal class AspectWeaver
     {
+        protected const string BindingInstanceFieldName = "Instance";
+
         protected static int GetEffectiveParameterCount(MethodDefinition method)
         {
             int e = method.Parameters.Count;
@@ -64,8 +67,8 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Write code to initialize the argument container instance. Works for property getters and setters too.
         /// </summary>
         protected static void WriteArgumentContainerInit(
+            ImportContext ic,
             MethodDefinition method,
-            ModuleDefinition alm,
             ILProcessor il,
             out VariableDefinition argumentsVariable)
         {
@@ -78,29 +81,25 @@ namespace Ramp.Aspects.Fody.Weavers
                 return;
             }
 
-            ModuleDefinition module = method.Module;
-
             // Write the constructor
             
             GenericInstanceType argumentsType;
             FieldReference[] argumentFields;
-            GetArgumentContainerInfo(method, alm, out argumentsType, out argumentFields);
+            GetArgumentContainerInfo(ic, method, out argumentsType, out argumentFields);
             TypeDefinition argumentsTypeDef = argumentsType.Resolve();
 
-            argumentsVariable = new VariableDefinition("arguments", argumentsType);
-            il.Body.InitLocals = true;
-            il.Body.Variables.Add(argumentsVariable);
+            argumentsVariable = il.Body.AddVariableDefinition("arguments", argumentsType);
 
             MethodDefinition constructorDef = argumentsTypeDef.GetConstructors().Single(m => m.HasThis);
-            MethodReference constructor = module.Import(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodReference constructor = ic.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
             il.Emit(OpCodes.Newobj, constructor);
             il.Emit(OpCodes.Stloc, argumentsVariable);
         }
 
         protected static void GetArgumentContainerInfo(
+            ImportContext ic,
             MethodDefinition method,
-            ModuleDefinition alm,
             out GenericInstanceType type,
             out FieldReference[] fields)
         {
@@ -126,8 +125,8 @@ namespace Ramp.Aspects.Fody.Weavers
                 baseParameterTypes[i] = pt;
             }
 
-            TypeDefinition typeDef = alm.GetType("Ramp.Aspects.Internal.Arguments`" + effectiveParameterCount);
-            type = method.Module.Import(typeDef).MakeGenericInstanceType(baseParameterTypes);
+            TypeDefinition typeDef = ic.Library.ArgumentContainer[effectiveParameterCount];
+            type = ic.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
@@ -135,7 +134,7 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 string fieldName = "Item" + i;
                 FieldDefinition fieldDef = typeDef.Fields.First(f => f.Name == fieldName);
-                FieldReference field = method.Module.Import(fieldDef).WithGenericDeclaringType(type);
+                FieldReference field = ic.SafeImport(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;
             }
@@ -145,15 +144,15 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Copies arguments from the method to the generic arguments container.
         /// </summary>
         protected static void WriteCopyArgumentsToContainer(
+            ImportContext rc,
             MethodDefinition method,
-            ModuleDefinition alm,
             ILProcessor il,
             VariableDefinition argumentsVariable,
             bool excludeOut)
         {
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(method, alm, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
 
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
@@ -181,8 +180,8 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Copies arguments from the generic arguments container to the method.
         /// </summary>
         protected static void WriteCopyArgumentsFromContainer(
+            ImportContext rc,
             MethodDefinition method,
-            ModuleDefinition alm,
             ILProcessor il,
             VariableDefinition argumentsVariable,
             bool includeNormal,
@@ -190,7 +189,7 @@ namespace Ramp.Aspects.Fody.Weavers
         {
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(method, alm, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
 
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
@@ -270,6 +269,7 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Write aspect initialization.
         /// </summary>
         protected static void WriteAspectInit(
+            ImportContext ic,
             MethodDefinition method,
             TypeDefinition aspectType,
             FieldReference aspectCacheField,
@@ -278,7 +278,7 @@ namespace Ramp.Aspects.Fody.Weavers
         {
             // NOTE: Aspect type can't be generic since its declared by an attribute
             MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => m.HasThis && m.Parameters.Count == 0);
-            MethodReference ctor = method.Module.Import(ctorDef);
+            MethodReference ctor = ic.SafeImport(ctorDef);
 
             Label notNullLabel = lp.DefineLabel();
             il.Emit(OpCodes.Ldsfld, aspectCacheField);
@@ -288,7 +288,41 @@ namespace Ramp.Aspects.Fody.Weavers
             lp.MarkLabel(notNullLabel);
         }
 
+        protected static void WriteCallAdvice(
+            ImportContext ic,
+            string name,
+            TypeDefinition aspectType,
+            ILProcessor il,
+            FieldReference aspectField,
+            VariableDefinition iaVariable)
+        {
+            MethodDefinition adviceDef = aspectType.Methods.Single(m => m.Name == name);
+            MethodReference advice = ic.SafeImport(adviceDef);
+
+            il.Emit(OpCodes.Ldsfld, aspectField);
+            il.Emit(OpCodes.Ldloc, iaVariable);
+            il.Emit(OpCodes.Callvirt, advice);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        protected static void WriteBindingInit(ILProcessor il, LabelProcessor lp, TypeDefinition bindingType)
+        {
+            // Initialize the binding instance
+            FieldReference instanceField = bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName);
+            MethodReference constructor = bindingType.Methods.Single(f => f.IsConstructor && !f.IsStatic);
+
+            Label notNullLabel = lp.DefineLabel();
+            il.Emit(OpCodes.Ldsfld, instanceField);
+            il.Emit(OpCodes.Brtrue, notNullLabel.Instruction);
+            il.Emit(OpCodes.Newobj, constructor);
+            il.Emit(OpCodes.Stsfld, instanceField);
+            lp.MarkLabel(notNullLabel);
+        }
+
         protected static void CreateAspectCacheField(
+            ImportContext ic,
             TypeDefinition declaringType,
             TypeReference aspectType,
             string cacheFieldName,
@@ -297,7 +331,7 @@ namespace Ramp.Aspects.Fody.Weavers
             var fattrs = FieldAttributes.Private | FieldAttributes.Static;
 
             // Find existing so property aspects do not generate two cache fields
-            var aspectFieldDef = new FieldDefinition(cacheFieldName, fattrs, declaringType.Module.Import(aspectType));
+            var aspectFieldDef = new FieldDefinition(cacheFieldName, fattrs, ic.SafeImport(aspectType));
             declaringType.Fields.Add(aspectFieldDef);
 
             aspectCacheField = aspectFieldDef;
@@ -316,6 +350,38 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 return name;
             }
+        }
+
+        protected static MethodDefinition MakeDefaultConstructor(ImportContext ic, TypeDefinition type)
+        {
+            TypeDefinition baseTypeDef = type.BaseType.Resolve();
+            MethodDefinition baseCtorDef = baseTypeDef.Methods.Single(m => m.HasThis && m.Parameters.Count == 0);
+
+            MethodReference baseCtor;
+            if (type.BaseType.IsGenericInstance)
+            {
+                var baseType = (GenericInstanceType) type.BaseType;
+
+                baseCtor = ic.SafeImport(baseCtorDef).WithGenericDeclaringType(baseType);
+            }
+            else
+            {
+                baseCtor = ic.SafeImport(baseCtorDef);
+            }
+
+            var attrs = MethodAttributes.Public |
+                        MethodAttributes.HideBySig |
+                        MethodAttributes.SpecialName |
+                        MethodAttributes.RTSpecialName;
+
+            var method = new MethodDefinition(".ctor", attrs, ic.CurrentModule.TypeSystem.Void);
+
+            Collection<Instruction> i = method.Body.Instructions;
+            i.Add(Instruction.Create(OpCodes.Ldarg_0));
+            i.Add(Instruction.Create(OpCodes.Call, baseCtor));
+            i.Add(Instruction.Create(OpCodes.Ret));
+
+            return method;
         }
     }
 }

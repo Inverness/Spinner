@@ -7,6 +7,8 @@ namespace Ramp.Aspects
 {
     public abstract class Arguments : IList<object>, IReadOnlyList<object>
     {
+        public static readonly int MaxItems = 8;
+
         private readonly int _count;
 
         [DebuggerStepThrough]

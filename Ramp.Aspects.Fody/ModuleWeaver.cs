@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
 using Ramp.Aspects.Fody.Weavers;
@@ -23,6 +25,8 @@ namespace Ramp.Aspects.Fody
         // Definition for IMethodInterceptionAspect
         private TypeDefinition _methodInterceptionAspectTypeDef;
         private TypeDefinition _propertyInterceptionAspectTypeDef;
+        private int _aspectIndexCounter;
+        private ImportContext _importContext;
 
         public ModuleWeaver()
         {
@@ -36,58 +40,50 @@ namespace Ramp.Aspects.Fody
         {
             AssemblyNameReference aspectsModuleName = ModuleDefinition.AssemblyReferences.First(a => a.Name == "Ramp.Aspects");
             AssemblyDefinition aspectsAssembly = ModuleDefinition.AssemblyResolver.Resolve(aspectsModuleName);
-            ModuleDefinition alm = aspectsAssembly.MainModule;
 
-            _methodInterceptionAspectTypeDef = alm.GetType("Ramp.Aspects.IMethodInterceptionAspect");
-            _propertyInterceptionAspectTypeDef = alm.GetType("Ramp.Aspects.IPropertyInterceptionAspect");
-
-            int aspectIndexCounter = 0;
+            var aspectLibraryModule = aspectsAssembly.MainModule;
+            _methodInterceptionAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IMethodInterceptionAspect");
+            _propertyInterceptionAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IPropertyInterceptionAspect");
+            _importContext = new ImportContext(ModuleDefinition, aspectLibraryModule);
 
             var typeList = new List<TypeDefinition>(ModuleDefinition.GetAllTypes());
-            var methodList = new List<MethodDefinition>();
-            var propertyList = new List<PropertyDefinition>();
 
-            foreach (TypeDefinition type in typeList)
+            ParallelLoopResult result = Parallel.ForEach(typeList, WeaveType);
+            Debug.Assert(result.IsCompleted);
+        }
+
+        private void WeaveType(TypeDefinition type)
+        {
+            foreach (MethodDefinition method in type.Methods.ToList())
             {
-                methodList.AddRange(type.Methods);
-
-                foreach (MethodDefinition method in methodList)
+                foreach (CustomAttribute a in method.CustomAttributes)
                 {
-                    foreach (CustomAttribute a in method.CustomAttributes)
+                    TypeDefinition attributeType = a.AttributeType.Resolve();
+                    if (IsMethodInterceptionAspectAttribute(attributeType))
                     {
-                        TypeDefinition attributeType = a.AttributeType.Resolve();
-                        if (IsMethodInterceptionAspectAttribute(attributeType))
-                        {
-                            Debug.Assert(method.HasBody);
+                        Debug.Assert(method.HasBody);
 
-                            int aspectIndex = aspectIndexCounter++;
+                        int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
 
-                            MethodInterceptionAspectWeaver.Weave(alm, method, attributeType, aspectIndex);
-                        }
+                        MethodInterceptionAspectWeaver.Weave(_importContext, method, attributeType, aspectIndex);
                     }
                 }
+            }
 
-                methodList.Clear();
-
-                propertyList.AddRange(type.Properties);
-
-                foreach (PropertyDefinition property in propertyList)
+            foreach (PropertyDefinition property in type.Properties.ToList())
+            {
+                foreach (CustomAttribute a in property.CustomAttributes)
                 {
-                    foreach (CustomAttribute a in property.CustomAttributes)
+                    TypeDefinition attributeType = a.AttributeType.Resolve();
+                    if (IsPropertyInterceptionAspectAttribute(attributeType))
                     {
-                        TypeDefinition attributeType = a.AttributeType.Resolve();
-                        if (IsPropertyInterceptionAspectAttribute(attributeType))
-                        {
-                            Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+                        Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+                        
+                        int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
 
-                            int aspectIndex = aspectIndexCounter++;
-
-                            PropertyInterceptionAspectWeaver.Weave(alm, property, attributeType, aspectIndex);
-                        }
+                        PropertyInterceptionAspectWeaver.Weave(_importContext, property, attributeType, aspectIndex);
                     }
                 }
-
-                propertyList.Clear();
             }
         }
 
