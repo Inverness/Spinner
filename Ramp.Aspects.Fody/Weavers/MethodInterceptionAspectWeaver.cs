@@ -15,7 +15,7 @@ namespace Ramp.Aspects.Fody.Weavers
         protected const string OnInvokeAdviceName = "OnInvoke";
 
         internal static void Weave(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
             int aspectIndex)
@@ -28,10 +28,10 @@ namespace Ramp.Aspects.Fody.Weavers
             MethodDefinition original = DuplicateOriginalMethod(method, aspectIndex);
             
             TypeDefinition bindingType;
-            CreateMethodBindingClass(ic, method, bindingClassName, original, out bindingType);
+            CreateMethodBindingClass(mwc, method, bindingClassName, original, out bindingType);
 
             FieldReference aspectField;
-            CreateAspectCacheField(ic, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
+            CreateAspectCacheField(mwc, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
 
             // Clear the target method body as it needs entirely new code
 
@@ -46,22 +46,22 @@ namespace Ramp.Aspects.Fody.Weavers
             //WriteOutArgumentInit(il);
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(ic, method, il, out argumentsVariable);
+            WriteArgumentContainerInit(mwc, method, il, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(ic, method, il, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(mwc, method, il, argumentsVariable, true);
             
-            WriteAspectInit(ic, method, aspectType, aspectField, il, lp);
+            WriteAspectInit(mwc, method, aspectType, aspectField, il, lp);
 
             WriteBindingInit(il, lp, bindingType);
             
             FieldReference valueField;
             VariableDefinition iaVariable;
-            WriteMiaInit(ic, method, il, argumentsVariable, bindingType, out iaVariable, out valueField);
+            WriteMiaInit(mwc, method, il, argumentsVariable, bindingType, out iaVariable, out valueField);
 
-            WriteCallAdvice(ic, OnInvokeAdviceName, aspectType, il, aspectField, iaVariable);
+            WriteCallAdvice(mwc, OnInvokeAdviceName, aspectType, il, aspectField, iaVariable);
             
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(ic, method, il, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(mwc, method, il, argumentsVariable, false, true);
 
             if (valueField != null)
             {
@@ -80,7 +80,7 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Writes the MethodInterceptionArgs initialization.
         /// </summary>
         protected static void WriteMiaInit(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             ILProcessor il,
             VariableDefinition argumentsVariable,
@@ -95,25 +95,25 @@ namespace Ramp.Aspects.Fody.Weavers
             
             if (method.ReturnType == module.TypeSystem.Void)
             {
-                TypeDefinition miaTypeDef = ic.Library.BoundMethodInterceptionArgs;
-                miaType = ic.SafeImport(miaTypeDef);
+                TypeDefinition miaTypeDef = mwc.Library.BoundMethodInterceptionArgs;
+                miaType = mwc.SafeImport(miaTypeDef);
 
-                MethodDefinition constructorDef = ic.Library.BoundMethodInterceptionArgs_ctor;
-                constructor = ic.SafeImport(constructorDef);
+                MethodDefinition constructorDef = mwc.Library.BoundMethodInterceptionArgs_ctor;
+                constructor = mwc.SafeImport(constructorDef);
 
                 returnValueField = null;
             }
             else
             {
-                TypeDefinition miaTypeDef = ic.Library.BoundMethodInterceptionArgsT1;
-                GenericInstanceType genericMiaType = ic.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
+                TypeDefinition miaTypeDef = mwc.Library.BoundMethodInterceptionArgsT1;
+                GenericInstanceType genericMiaType = mwc.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
                 miaType = genericMiaType;
 
-                MethodDefinition constructorDef = miaTypeDef.GetConstructors().Single(m => m.HasThis);
-                constructor = ic.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
+                MethodDefinition constructorDef = mwc.Library.BoundMethodInterceptionArgsT1_ctor;
+                constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
 
-                FieldDefinition returnValueFieldDef = ic.Library.BoundMethodInterceptionArgsT1_TypedReturnValue;
-                returnValueField = ic.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
+                FieldDefinition returnValueFieldDef = mwc.Library.BoundMethodInterceptionArgsT1_TypedReturnValue;
+                returnValueField = mwc.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
             miaVariable = il.Body.AddVariableDefinition(miaType);
@@ -156,7 +156,7 @@ namespace Ramp.Aspects.Fody.Weavers
         }
 
         protected static void CreateMethodBindingClass(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             string bindingClassName,
             MethodReference original,
@@ -168,11 +168,11 @@ namespace Ramp.Aspects.Fody.Weavers
 
             if (method.ReturnType == module.TypeSystem.Void)
             {
-                baseType = ic.SafeImport(ic.Library.MethodBinding);
+                baseType = mwc.SafeImport(mwc.Library.MethodBinding);
             }
             else
             {
-                baseType = ic.SafeImport(ic.Library.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
+                baseType = mwc.SafeImport(mwc.Library.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
             }
 
             var tattrs = TypeAttributes.NestedPrivate |
@@ -186,7 +186,7 @@ namespace Ramp.Aspects.Fody.Weavers
 
             method.DeclaringType.NestedTypes.Add(bindingTypeDef);
 
-            MethodDefinition constructorDef = MakeDefaultConstructor(ic, bindingTypeDef);
+            MethodDefinition constructorDef = MakeDefaultConstructor(mwc, bindingTypeDef);
 
             bindingTypeDef.Methods.Add(constructorDef);
 
@@ -210,7 +210,7 @@ namespace Ramp.Aspects.Fody.Weavers
             bindingTypeDef.Methods.Add(invokeMethod);
 
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-            TypeReference argumentsBaseType = ic.SafeImport(ic.Library.ArgumentContainerBase);
+            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Library.ArgumentsBase);
 
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));
@@ -219,7 +219,7 @@ namespace Ramp.Aspects.Fody.Weavers
 
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(ic, method, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(mwc, method, out argumentContainerType, out argumentContainerFields);
 
             // Case the arguments container from its base type to the generic instance type
             VariableDefinition argsContainer = null;

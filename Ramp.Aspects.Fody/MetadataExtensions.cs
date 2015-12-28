@@ -1,5 +1,4 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -58,35 +57,5 @@ namespace Ramp.Aspects.Fody
             self.InitLocals = true;
             return def;
         }
-
-        //internal static TypeReference SafeImport(this ModuleDefinition self, Type type)
-        //{
-        //    lock (self)
-        //        return self.Import(type);
-        //}
-
-        //internal static TypeReference SafeImport(this ModuleDefinition self, TypeReference type)
-        //{
-        //    lock (self)
-        //        return self.Import(type);
-        //}
-
-        //internal static MethodReference SafeImport(this ModuleDefinition self, MethodReference method)
-        //{
-        //    lock (self)
-        //        return self.Import(method);
-        //}
-
-        //internal static FieldReference SafeImport(this ModuleDefinition self, FieldReference field)
-        //{
-        //    lock (self)
-        //        return self.Import(field);
-        //}
-
-        //internal static TypeDefinition SafeGetType(this ModuleDefinition self, string fullName)
-        //{
-        //    lock (self)
-        //        return self.GetType(fullName);
-        //}
     }
 }

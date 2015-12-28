@@ -26,7 +26,7 @@ namespace Ramp.Aspects.Fody
         private TypeDefinition _methodInterceptionAspectTypeDef;
         private TypeDefinition _propertyInterceptionAspectTypeDef;
         private int _aspectIndexCounter;
-        private ImportContext _importContext;
+        private ModuleWeavingContext _moduleWeavingContext;
 
         public ModuleWeaver()
         {
@@ -44,45 +44,79 @@ namespace Ramp.Aspects.Fody
             var aspectLibraryModule = aspectsAssembly.MainModule;
             _methodInterceptionAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IMethodInterceptionAspect");
             _propertyInterceptionAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IPropertyInterceptionAspect");
-            _importContext = new ImportContext(ModuleDefinition, aspectLibraryModule);
+            _moduleWeavingContext = new ModuleWeavingContext(ModuleDefinition, aspectLibraryModule);
 
             var typeList = new List<TypeDefinition>(ModuleDefinition.GetAllTypes());
 
-            ParallelLoopResult result = Parallel.ForEach(typeList, WeaveType);
-            Debug.Assert(result.IsCompleted);
+            // Execute type weavings in parallel. Module weaving context provides thread-safe imports.
+            // Weaving does not require any other module-level changes.
+            ParallelLoopResult parallelLoopResult = Parallel.ForEach(typeList, WeaveType);
+            Debug.Assert(parallelLoopResult.IsCompleted, "parallelLoopResult.IsCompleted");
         }
 
         private void WeaveType(TypeDefinition type)
         {
-            foreach (MethodDefinition method in type.Methods.ToList())
+            List<Tuple<MethodDefinition, TypeDefinition>> methodInterceptions = null;
+            List<Tuple<PropertyDefinition, TypeDefinition>> propertyInterceptions = null;
+
+            foreach (MethodDefinition method in type.Methods)
             {
                 foreach (CustomAttribute a in method.CustomAttributes)
                 {
                     TypeDefinition attributeType = a.AttributeType.Resolve();
+
                     if (IsMethodInterceptionAspectAttribute(attributeType))
                     {
                         Debug.Assert(method.HasBody);
 
-                        int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
-
-                        MethodInterceptionAspectWeaver.Weave(_importContext, method, attributeType, aspectIndex);
+                        if (methodInterceptions == null)
+                            methodInterceptions = new List<Tuple<MethodDefinition, TypeDefinition>>();
+                        methodInterceptions.Add(Tuple.Create(method, attributeType));
                     }
                 }
             }
 
-            foreach (PropertyDefinition property in type.Properties.ToList())
+            foreach (PropertyDefinition property in type.Properties)
             {
                 foreach (CustomAttribute a in property.CustomAttributes)
                 {
                     TypeDefinition attributeType = a.AttributeType.Resolve();
+
                     if (IsPropertyInterceptionAspectAttribute(attributeType))
                     {
                         Debug.Assert(property.GetMethod != null || property.SetMethod != null);
                         
-                        int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
-
-                        PropertyInterceptionAspectWeaver.Weave(_importContext, property, attributeType, aspectIndex);
+                        if (propertyInterceptions == null)
+                            propertyInterceptions = new List<Tuple<PropertyDefinition, TypeDefinition>>();
+                        propertyInterceptions.Add(Tuple.Create(property, attributeType));
                     }
+                }
+            }
+
+            if (methodInterceptions != null)
+            {
+                foreach (Tuple<MethodDefinition, TypeDefinition> method in methodInterceptions)
+                {
+                    int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+
+                    // TODO: Support aspect constructor arguments
+                    MethodInterceptionAspectWeaver.Weave(_moduleWeavingContext,
+                                                         method.Item1,
+                                                         method.Item2,
+                                                         aspectIndex);
+                }
+            }
+
+            if (propertyInterceptions != null)
+            {
+                foreach (Tuple<PropertyDefinition, TypeDefinition> property in propertyInterceptions)
+                {
+                    int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+
+                    PropertyInterceptionAspectWeaver.Weave(_moduleWeavingContext,
+                                                           property.Item1,
+                                                           property.Item2,
+                                                           aspectIndex);
                 }
             }
         }

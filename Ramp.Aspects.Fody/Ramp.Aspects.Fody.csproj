@@ -41,7 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CollectionExtensions.cs" />
-    <Compile Include="ImportContext.cs" />
+    <Compile Include="ModuleWeavingContext.cs" />
     <Compile Include="MetadataExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

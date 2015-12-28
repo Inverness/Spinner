@@ -15,12 +15,13 @@ namespace Ramp.Aspects.Fody.Weavers
         protected const string OnSetValueAdviceName = "OnSetValue";
 
         internal static void Weave(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             PropertyDefinition property,
             TypeDefinition aspectType,
             int aspectIndex)
         {
-
+            Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+            
             string originalName = ExtractOriginalName(property.Name);
 
             string cacheFieldName = $"<{originalName}>z__CachedAspect" + aspectIndex;
@@ -33,19 +34,19 @@ namespace Ramp.Aspects.Fody.Weavers
             MethodDefinition originalSetter = setter != null ? DuplicateOriginalMethod(setter, aspectIndex) : null;
 
             TypeDefinition bindingType;
-            CreatePropertyBindingClass(property, ic, bindingClassName, originalGetter, originalSetter, out bindingType);
+            CreatePropertyBindingClass(mwc, property, bindingClassName, originalGetter, originalSetter, out bindingType);
 
             FieldReference aspectField;
-            CreateAspectCacheField(ic, property.DeclaringType, aspectType, cacheFieldName, out aspectField);
+            CreateAspectCacheField(mwc, property.DeclaringType, aspectType, cacheFieldName, out aspectField);
 
             if (getter != null)
-                WeaveMethod(ic, property, getter, aspectType, aspectField, bindingType);
+                WeaveMethod(mwc, property, getter, aspectType, aspectField, bindingType);
             if (setter != null)
-                WeaveMethod(ic, property, setter, aspectType, aspectField, bindingType);
+                WeaveMethod(mwc, property, setter, aspectType, aspectField, bindingType);
         }
 
         private static void WeaveMethod(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             PropertyDefinition property,
             MethodDefinition method,
             TypeDefinition aspectType,
@@ -53,8 +54,8 @@ namespace Ramp.Aspects.Fody.Weavers
             TypeDefinition bindingType)
         {
             Debug.Assert(method.IsGetter || method.IsSetter);
-            // Clear the target method body as it needs entirely new code
 
+            // Clear the target method body as it needs entirely new code
             method.Body.InitLocals = false;
             method.Body.Instructions.Clear();
             method.Body.Variables.Clear();
@@ -64,17 +65,17 @@ namespace Ramp.Aspects.Fody.Weavers
             var lp = new LabelProcessor(il);
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(ic, method, il, out argumentsVariable);
+            WriteArgumentContainerInit(mwc, method, il, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(ic, method, il, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(mwc, method, il, argumentsVariable, true);
             
-            WriteAspectInit(ic, method, aspectType, aspectField, il, lp);
+            WriteAspectInit(mwc, method, aspectType, aspectField, il, lp);
 
             WriteBindingInit(il, lp, bindingType);
             
             FieldReference valueField;
             VariableDefinition iaVariable;
-            WritePiaInit(ic, method, property, il, argumentsVariable, bindingType, out iaVariable, out valueField);
+            WritePiaInit(mwc, method, property, il, argumentsVariable, bindingType, out iaVariable, out valueField);
             
             if (method.IsSetter)
             {
@@ -87,10 +88,10 @@ namespace Ramp.Aspects.Fody.Weavers
             }
 
             string adviceName = method.IsGetter ? OnGetValueAdviceName : OnSetValueAdviceName;
-            WriteCallAdvice(ic, adviceName, aspectType, il, aspectField, iaVariable);
+            WriteCallAdvice(mwc, adviceName, aspectType, il, aspectField, iaVariable);
 
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(ic, method, il, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(mwc, method, il, argumentsVariable, false, true);
             
             if (method.IsGetter)
             {
@@ -107,8 +108,8 @@ namespace Ramp.Aspects.Fody.Weavers
         }
 
         protected static void CreatePropertyBindingClass(
+            ModuleWeavingContext mwc,
             PropertyDefinition property,
-            ImportContext ic,
             string bindingClassName,
             MethodReference originalGetter,
             MethodReference originalSetter,
@@ -116,7 +117,7 @@ namespace Ramp.Aspects.Fody.Weavers
         {
             ModuleDefinition module = property.Module;
             
-            TypeReference baseType = ic.SafeImport(ic.Library.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
+            TypeReference baseType = mwc.SafeImport(mwc.Library.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
 
             var tattrs = TypeAttributes.NestedPrivate |
                          TypeAttributes.Class |
@@ -129,7 +130,7 @@ namespace Ramp.Aspects.Fody.Weavers
 
             property.DeclaringType.NestedTypes.Add(bindingTypeDef);
 
-            MethodDefinition constructorDef = MakeDefaultConstructor(ic, bindingTypeDef);
+            MethodDefinition constructorDef = MakeDefaultConstructor(mwc, bindingTypeDef);
 
             bindingTypeDef.Methods.Add(constructorDef);
 
@@ -153,7 +154,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 bindingTypeDef.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = ic.SafeImport(ic.Library.ArgumentContainerBase);
+                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Library.ArgumentsBase);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -164,7 +165,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 {
                     GenericInstanceType argumentContainerType;
                     FieldReference[] argumentContainerFields;
-                    GetArgumentContainerInfo(ic, property.GetMethod, out argumentContainerType,
+                    GetArgumentContainerInfo(mwc, property.GetMethod, out argumentContainerType,
                         out argumentContainerFields);
 
                     // Case the arguments container from its base type to the generic instance type
@@ -241,7 +242,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 bindingTypeDef.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = ic.SafeImport(ic.Library.ArgumentContainerBase);
+                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Library.ArgumentsBase);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -256,7 +257,7 @@ namespace Ramp.Aspects.Fody.Weavers
 
                     GenericInstanceType argumentContainerType;
                     FieldReference[] argumentContainerFields;
-                    GetArgumentContainerInfo(ic, property.SetMethod, out argumentContainerType, out argumentContainerFields);
+                    GetArgumentContainerInfo(mwc, property.SetMethod, out argumentContainerType, out argumentContainerFields);
 
                     // Case the arguments container from its base type to the generic instance type
                     VariableDefinition argsContainer = null;
@@ -312,7 +313,7 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Writes the PropertyInterceptionArgs initialization.
         /// </summary>
         protected static void WritePiaInit(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             PropertyDefinition property,
             ILProcessor il,
@@ -321,15 +322,15 @@ namespace Ramp.Aspects.Fody.Weavers
             out VariableDefinition iaVariable,
             out FieldReference valueField)
         {
-            TypeDefinition piaTypeDef = ic.Library.BoundPropertyInterceptionArgsT1;
-            GenericInstanceType genericPiaType = ic.SafeImport(piaTypeDef).MakeGenericInstanceType(property.PropertyType);
+            TypeDefinition piaTypeDef = mwc.Library.BoundPropertyInterceptionArgsT1;
+            GenericInstanceType genericPiaType = mwc.SafeImport(piaTypeDef).MakeGenericInstanceType(property.PropertyType);
             TypeReference piaType = genericPiaType;
 
-            MethodDefinition constructorDef = ic.Library.BoundPropertyInterceptionArgsT1_ctor;
-            MethodReference constructor = ic.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
+            MethodDefinition constructorDef = mwc.Library.BoundPropertyInterceptionArgsT1_ctor;
+            MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
 
-            FieldDefinition valueFieldDef = ic.Library.BoundPropertyInterceptionArgsT1_TypedValue;
-            valueField = ic.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
+            FieldDefinition valueFieldDef = mwc.Library.BoundPropertyInterceptionArgsT1_TypedValue;
+            valueField = mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
             iaVariable = il.Body.AddVariableDefinition(piaType);
 

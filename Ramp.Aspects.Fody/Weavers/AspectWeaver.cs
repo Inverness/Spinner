@@ -15,6 +15,9 @@ namespace Ramp.Aspects.Fody.Weavers
     {
         protected const string BindingInstanceFieldName = "Instance";
 
+        /// <summary>
+        /// Gets an effective parameter count by excluding the value parameter of a property setter.
+        /// </summary>
         protected static int GetEffectiveParameterCount(MethodDefinition method)
         {
             int e = method.Parameters.Count;
@@ -67,12 +70,11 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Write code to initialize the argument container instance. Works for property getters and setters too.
         /// </summary>
         protected static void WriteArgumentContainerInit(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             ILProcessor il,
             out VariableDefinition argumentsVariable)
         {
-            // For property setters, the last argument is the property value which is handled separately.
             int effectiveParameterCount = GetEffectiveParameterCount(method);
 
             if (effectiveParameterCount == 0)
@@ -80,25 +82,22 @@ namespace Ramp.Aspects.Fody.Weavers
                 argumentsVariable = null;
                 return;
             }
-
-            // Write the constructor
             
             GenericInstanceType argumentsType;
             FieldReference[] argumentFields;
-            GetArgumentContainerInfo(ic, method, out argumentsType, out argumentFields);
-            TypeDefinition argumentsTypeDef = argumentsType.Resolve();
+            GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
             argumentsVariable = il.Body.AddVariableDefinition("arguments", argumentsType);
 
-            MethodDefinition constructorDef = argumentsTypeDef.GetConstructors().Single(m => m.HasThis);
-            MethodReference constructor = ic.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodDefinition constructorDef = mwc.Library.Arguments_ctor[effectiveParameterCount];
+            MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
             il.Emit(OpCodes.Newobj, constructor);
             il.Emit(OpCodes.Stloc, argumentsVariable);
         }
 
         protected static void GetArgumentContainerInfo(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             out GenericInstanceType type,
             out FieldReference[] fields)
@@ -125,16 +124,15 @@ namespace Ramp.Aspects.Fody.Weavers
                 baseParameterTypes[i] = pt;
             }
 
-            TypeDefinition typeDef = ic.Library.ArgumentContainer[effectiveParameterCount];
-            type = ic.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
+            TypeDefinition typeDef = mwc.Library.Arguments[effectiveParameterCount];
+            type = mwc.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
             for (int i = 0; i < effectiveParameterCount; i++)
             {
-                string fieldName = "Item" + i;
-                FieldDefinition fieldDef = typeDef.Fields.First(f => f.Name == fieldName);
-                FieldReference field = ic.SafeImport(fieldDef).WithGenericDeclaringType(type);
+                FieldDefinition fieldDef = mwc.Library.Arguments_Item[effectiveParameterCount][i];
+                FieldReference field = mwc.SafeImport(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;
             }
@@ -144,7 +142,7 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Copies arguments from the method to the generic arguments container.
         /// </summary>
         protected static void WriteCopyArgumentsToContainer(
-            ImportContext rc,
+            ModuleWeavingContext rc,
             MethodDefinition method,
             ILProcessor il,
             VariableDefinition argumentsVariable,
@@ -180,7 +178,7 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Copies arguments from the generic arguments container to the method.
         /// </summary>
         protected static void WriteCopyArgumentsFromContainer(
-            ImportContext rc,
+            ModuleWeavingContext rc,
             MethodDefinition method,
             ILProcessor il,
             VariableDefinition argumentsVariable,
@@ -269,7 +267,7 @@ namespace Ramp.Aspects.Fody.Weavers
         /// Write aspect initialization.
         /// </summary>
         protected static void WriteAspectInit(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
             FieldReference aspectCacheField,
@@ -277,8 +275,8 @@ namespace Ramp.Aspects.Fody.Weavers
             LabelProcessor lp)
         {
             // NOTE: Aspect type can't be generic since its declared by an attribute
-            MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => m.HasThis && m.Parameters.Count == 0);
-            MethodReference ctor = ic.SafeImport(ctorDef);
+            MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
+            MethodReference ctor = mwc.SafeImport(ctorDef);
 
             Label notNullLabel = lp.DefineLabel();
             il.Emit(OpCodes.Ldsfld, aspectCacheField);
@@ -289,7 +287,7 @@ namespace Ramp.Aspects.Fody.Weavers
         }
 
         protected static void WriteCallAdvice(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             string name,
             TypeDefinition aspectType,
             ILProcessor il,
@@ -297,7 +295,7 @@ namespace Ramp.Aspects.Fody.Weavers
             VariableDefinition iaVariable)
         {
             MethodDefinition adviceDef = aspectType.Methods.Single(m => m.Name == name);
-            MethodReference advice = ic.SafeImport(adviceDef);
+            MethodReference advice = mwc.SafeImport(adviceDef);
 
             il.Emit(OpCodes.Ldsfld, aspectField);
             il.Emit(OpCodes.Ldloc, iaVariable);
@@ -322,7 +320,7 @@ namespace Ramp.Aspects.Fody.Weavers
         }
 
         protected static void CreateAspectCacheField(
-            ImportContext ic,
+            ModuleWeavingContext mwc,
             TypeDefinition declaringType,
             TypeReference aspectType,
             string cacheFieldName,
@@ -331,7 +329,7 @@ namespace Ramp.Aspects.Fody.Weavers
             var fattrs = FieldAttributes.Private | FieldAttributes.Static;
 
             // Find existing so property aspects do not generate two cache fields
-            var aspectFieldDef = new FieldDefinition(cacheFieldName, fattrs, ic.SafeImport(aspectType));
+            var aspectFieldDef = new FieldDefinition(cacheFieldName, fattrs, mwc.SafeImport(aspectType));
             declaringType.Fields.Add(aspectFieldDef);
 
             aspectCacheField = aspectFieldDef;
@@ -352,29 +350,21 @@ namespace Ramp.Aspects.Fody.Weavers
             }
         }
 
-        protected static MethodDefinition MakeDefaultConstructor(ImportContext ic, TypeDefinition type)
+        protected static MethodDefinition MakeDefaultConstructor(ModuleWeavingContext mwc, TypeDefinition type)
         {
             TypeDefinition baseTypeDef = type.BaseType.Resolve();
-            MethodDefinition baseCtorDef = baseTypeDef.Methods.Single(m => m.HasThis && m.Parameters.Count == 0);
+            MethodDefinition baseCtorDef = baseTypeDef.Methods.Single(m => !m.IsStatic && m.Parameters.Count == 0);
 
-            MethodReference baseCtor;
-            if (type.BaseType.IsGenericInstance)
-            {
-                var baseType = (GenericInstanceType) type.BaseType;
-
-                baseCtor = ic.SafeImport(baseCtorDef).WithGenericDeclaringType(baseType);
-            }
-            else
-            {
-                baseCtor = ic.SafeImport(baseCtorDef);
-            }
+            MethodReference baseCtor = type.BaseType.IsGenericInstance
+                ? mwc.SafeImport(baseCtorDef).WithGenericDeclaringType((GenericInstanceType) type.BaseType)
+                : mwc.SafeImport(baseCtorDef);
 
             var attrs = MethodAttributes.Public |
                         MethodAttributes.HideBySig |
                         MethodAttributes.SpecialName |
                         MethodAttributes.RTSpecialName;
 
-            var method = new MethodDefinition(".ctor", attrs, ic.CurrentModule.TypeSystem.Void);
+            var method = new MethodDefinition(".ctor", attrs, mwc.Module.TypeSystem.Void);
 
             Collection<Instruction> i = method.Body.Instructions;
             i.Add(Instruction.Create(OpCodes.Ldarg_0));
