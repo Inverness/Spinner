@@ -7,7 +7,7 @@ namespace Ramp.Aspects
     /// <summary>
     ///     Arguments provided to a method boundary aspect about the method being executed.
     /// </summary>
-    public class MethodExecutionArgs : AdviceArgs
+    public sealed class MethodExecutionArgs : AdviceArgs
     {
         [DebuggerStepThrough]
         public MethodExecutionArgs(object instance, Arguments arguments)

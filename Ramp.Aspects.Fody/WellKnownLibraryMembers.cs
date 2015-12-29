@@ -35,20 +35,20 @@ namespace Ramp.Aspects.Fody
         internal readonly FieldDefinition[][] Arguments_Item;
         // ReSharper restore InconsistentNaming
 
-        internal WellKnownLibraryMembers(ModuleDefinition module)
+        internal WellKnownLibraryMembers(ModuleDefinition libraryModule)
         {
-            ArgumentsBase = module.GetType(Namespace, "Arguments");
+            ArgumentsBase = libraryModule.GetType(Namespace, "Arguments");
 
             Arguments = new TypeDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                Arguments[i] = module.GetType(InternalNamespace, "Arguments`" + i);
+                Arguments[i] = libraryModule.GetType(InternalNamespace, "Arguments`" + i);
 
-            BoundMethodInterceptionArgs = module.GetType(InternalNamespace, "BoundMethodInterceptionArgs");
-            BoundMethodInterceptionArgsT1 = module.GetType(InternalNamespace, "BoundMethodInterceptionArgs`1");
-            MethodBinding = module.GetType(InternalNamespace, "MethodBinding");
-            MethodBindingT1 = module.GetType(InternalNamespace, "MethodBinding`1");
-            PropertyBindingT1 = module.GetType(InternalNamespace, "PropertyBinding`1");
-            BoundPropertyInterceptionArgsT1 = module.GetType(InternalNamespace, "BoundPropertyInterceptionArgs`1");
+            BoundMethodInterceptionArgs = libraryModule.GetType(InternalNamespace, "BoundMethodInterceptionArgs");
+            BoundMethodInterceptionArgsT1 = libraryModule.GetType(InternalNamespace, "BoundMethodInterceptionArgs`1");
+            MethodBinding = libraryModule.GetType(InternalNamespace, "MethodBinding");
+            MethodBindingT1 = libraryModule.GetType(InternalNamespace, "MethodBinding`1");
+            PropertyBindingT1 = libraryModule.GetType(InternalNamespace, "PropertyBinding`1");
+            BoundPropertyInterceptionArgsT1 = libraryModule.GetType(InternalNamespace, "BoundPropertyInterceptionArgs`1");
 
             BoundMethodInterceptionArgs_ctor = BoundMethodInterceptionArgs.Methods.Single(m => m.IsConstructor && !m.IsStatic);
 

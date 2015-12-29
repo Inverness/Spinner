@@ -10,12 +10,17 @@ namespace Ramp.Aspects.Fody.Utilities
     /// </summary>
     internal class LabelProcessor
     {
-        private readonly ILProcessor _il;
-        private readonly List<Label> _labels = new List<Label>(); 
+        private readonly Collection<Instruction> _instructions;
+        private readonly List<Label> _labels = new List<Label>();
 
         internal LabelProcessor(ILProcessor il)
         {
-            _il = il;
+            _instructions = il.Body.Instructions;
+        }
+
+        internal LabelProcessor(Collection<Instruction> instructions)
+        {
+            _instructions = instructions;
         }
 
         public Label DefineLabel()
@@ -29,7 +34,7 @@ namespace Ramp.Aspects.Fody.Utilities
         {
             if (label.Marked)
                 throw new InvalidOperationException();
-            _il.Append(label.Instruction);
+            _instructions.Add(label.Instruction);
             label.Marked = true;
         }
 
@@ -41,7 +46,7 @@ namespace Ramp.Aspects.Fody.Utilities
             if (_labels.Count == 0)
                 return;
 
-            Collection<Instruction> instructions = _il.Body.Instructions;
+            Collection<Instruction> instructions = _instructions;
             List<Instruction> breaks = new List<Instruction>();
             Dictionary<Instruction, Instruction> newInstructions = new Dictionary<Instruction, Instruction>();
             int last = instructions.Count - 1;
@@ -96,6 +101,11 @@ namespace Ramp.Aspects.Fody.Utilities
         internal Label(Instruction i)
         {
             Instruction = i;
+        }
+
+        public static implicit operator Instruction(Label label)
+        {
+            return label?.Instruction;
         }
     }
 }

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Ramp.Aspects.Internal;
 
 namespace Ramp.Aspects.Fody.TestTarget
@@ -38,9 +40,23 @@ namespace Ramp.Aspects.Fody.TestTarget
         }
     }
 
+    public class TestBoundary : MethodBoundaryAspect
+    {
+        public override void OnEntry(MethodExecutionArgs args)
+        {
+            Console.WriteLine("Boundary Entry!");
+        }
+
+        public override void OnSuccess(MethodExecutionArgs args)
+        {
+            Console.WriteLine("Boundary success!");
+        }
+    }
+
     public class TestClass
     {
         private int _x;
+        private EventHandler _testEvent2;
 
         public static void Run()
         {
@@ -48,6 +64,15 @@ namespace Ramp.Aspects.Fody.TestTarget
             int b;
             tc.TestMethod(10, out b, "thirty");
             Console.WriteLine("Result: " + b);
+        }
+
+        public event EventHandler TestEvent;
+
+        public event EventHandler TestEvent2
+        {
+            add { _testEvent2 += value; }
+
+            remove { _testEvent2 -= value; }
         }
 
         [TestPropIntercept]
@@ -61,7 +86,7 @@ namespace Ramp.Aspects.Fody.TestTarget
         [TestPropIntercept]
         public int this[int index, string a]
         {
-            //get { return _x + index; }
+            get { return _x + index; }
 
             set { _x = index + 1; }
         }
@@ -72,6 +97,88 @@ namespace Ramp.Aspects.Fody.TestTarget
         {
             b = 20;
             Console.WriteLine("test: " + (a + b) + " --- " + c);
+            TestEvent?.Invoke(this, EventArgs.Empty);
+
+        }
+
+        [TestBoundary]
+        internal void TestMethod2(int a, out int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            TestEvent?.Invoke(this, EventArgs.Empty);
+        }
+
+        internal async Task<int> TestAsyncMethod(int a, int b, string c)
+        {
+            await Task.Delay(a);
+            a -= b;
+            await Task.Delay(a);
+            a -= b;
+            await Task.Delay(a);
+            return b - a;
+        }
+
+        internal IEnumerable<int> TestGeneratorMethod(int a, int b, string c)
+        {
+            yield return a;
+            a -= b;
+            yield return a;
+            a -= b;
+            yield return a;
+            if (a < 5)
+                yield break;
+            a -= b;
+            yield return a;
+        } 
+
+        internal int TestExceptionMethod(int a, out int b, string c)
+        {
+            try
+            {
+                b = 20;
+                Console.WriteLine("test: " + (a + b) + " --- " + c);
+            }
+            catch (FormatException ex)
+            {
+                Console.WriteLine(ex.Message);
+                b = 4;
+                return 3;
+            }
+            catch (InvalidOperationException ex) when (FilterFunc(a, ex))
+            {
+                b = 3;
+                return 2;
+            }
+            catch (Exception ex)
+            {
+                b = 6;
+                return 1;
+            }
+            finally
+            {
+                a += 3;
+            }
+            return b - a;
+        }
+
+        internal int TestSimpleExceptionMethod(int a, out int b, string c)
+        {
+            try
+            {
+                b = 20;
+                Console.WriteLine("test: " + (a + b) + " --- " + c);
+            }
+            catch (Exception ex) when (FilterFunc(a, ex))
+            {
+                b = 3;
+                return 2;
+            }
+            finally
+            {
+                a += 3;
+            }
+            return b - a;
         }
 
         internal int TestMethodCompare(int a, int b, ref string c)
@@ -90,6 +197,11 @@ namespace Ramp.Aspects.Fody.TestTarget
         {
             var castedArgs = (Arguments<int, int, string>) args;
             ((TestClass) instance).TestMethod(castedArgs.Item0, out castedArgs.Item1, castedArgs.Item2);
+        }
+
+        internal static bool FilterFunc(int a, Exception ex)
+        {
+            return a > 5;
         }
     }
 

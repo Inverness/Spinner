@@ -8,37 +8,37 @@ namespace Ramp.Aspects
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property | AttributeTargets.Event, AllowMultiple = false, Inherited = false)]
     public abstract class MethodBoundaryAspect : Aspect, IMethodBoundaryAspect
     {
-        public virtual void OnEntry(ref MethodExecutionArgs args)
+        public virtual void OnEntry(MethodExecutionArgs args)
         {
 
         }
 
-        public virtual void OnExit(ref MethodExecutionArgs args)
+        public virtual void OnExit(MethodExecutionArgs args)
         {
 
         }
 
-        public virtual void OnException(ref MethodExecutionArgs args)
+        public virtual void OnException(MethodExecutionArgs args)
         {
 
         }
 
-        public virtual void OnSuccess(ref MethodExecutionArgs args)
+        public virtual void OnSuccess(MethodExecutionArgs args)
         {
 
         }
 
-        public virtual void OnYield(ref MethodExecutionArgs args)
+        public virtual void OnYield(MethodExecutionArgs args)
         {
 
         }
 
-        public virtual void OnResume(ref MethodExecutionArgs args)
+        public virtual void OnResume(MethodExecutionArgs args)
         {
 
         }
 
-        public virtual bool FilterException(ref MethodExecutionArgs args, Exception ex)
+        public virtual bool FilterException(MethodExecutionArgs args, Exception ex)
         {
             return true;
         }

@@ -4,18 +4,18 @@ namespace Ramp.Aspects
 {
     public interface IMethodBoundaryAspect : IAspect
     {
-        void OnEntry(ref MethodExecutionArgs args);
+        void OnEntry(MethodExecutionArgs args);
 
-        void OnExit(ref MethodExecutionArgs args);
+        void OnExit(MethodExecutionArgs args);
 
-        void OnException(ref MethodExecutionArgs args);
+        void OnException(MethodExecutionArgs args);
 
-        void OnSuccess(ref MethodExecutionArgs args);
+        void OnSuccess(MethodExecutionArgs args);
 
-        void OnYield(ref MethodExecutionArgs args);
+        void OnYield(MethodExecutionArgs args);
 
-        void OnResume(ref MethodExecutionArgs args);
+        void OnResume(MethodExecutionArgs args);
 
-        bool FilterException(ref MethodExecutionArgs args, Exception ex);
+        bool FilterException(MethodExecutionArgs args, Exception ex);
     }
 }

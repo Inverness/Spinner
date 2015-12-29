@@ -10,11 +10,13 @@ namespace Ramp.Aspects.Fody
     {
         internal readonly ModuleDefinition Module;
         internal readonly WellKnownLibraryMembers Library;
+        internal readonly WellKnownFrameworkMembers Framework;
         
         internal ModuleWeavingContext(ModuleDefinition module, ModuleDefinition libraryModule)
         {
-            Library = new WellKnownLibraryMembers(libraryModule);
             Module = module;
+            Library = new WellKnownLibraryMembers(libraryModule);
+            Framework = new WellKnownFrameworkMembers(module);
         }
 
         //internal TypeDefinition SafeResolve(TypeReference type)

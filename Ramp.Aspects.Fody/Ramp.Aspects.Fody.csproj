@@ -49,8 +49,10 @@
     <Compile Include="Utilities\LabelProcessor.cs" />
     <Compile Include="Weavers\AspectWeaver.cs" />
     <Compile Include="Weavers\CacheClassBuilder.cs" />
+    <Compile Include="Weavers\MethodBoundaryAspectWeaver.cs" />
     <Compile Include="Weavers\MethodInterceptionAspectWeaver.cs" />
     <Compile Include="Weavers\PropertyInterceptionAspectWeaver.cs" />
+    <Compile Include="WellKnownFrameworkMembers.cs" />
     <Compile Include="WellKnownLibraryMembers.cs" />
   </ItemGroup>
   <ItemGroup>

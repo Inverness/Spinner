@@ -25,6 +25,7 @@ namespace Ramp.Aspects.Fody
         // Definition for IMethodInterceptionAspect
         private TypeDefinition _methodInterceptionAspectTypeDef;
         private TypeDefinition _propertyInterceptionAspectTypeDef;
+        private TypeDefinition _methodBoundaryAspectTypeDef;
         private int _aspectIndexCounter;
         private ModuleWeavingContext _moduleWeavingContext;
 
@@ -42,6 +43,7 @@ namespace Ramp.Aspects.Fody
             AssemblyDefinition aspectsAssembly = ModuleDefinition.AssemblyResolver.Resolve(aspectsModuleName);
 
             var aspectLibraryModule = aspectsAssembly.MainModule;
+            _methodBoundaryAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IMethodBoundaryAspect");
             _methodInterceptionAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IMethodInterceptionAspect");
             _propertyInterceptionAspectTypeDef = aspectLibraryModule.GetType("Ramp.Aspects.IPropertyInterceptionAspect");
             _moduleWeavingContext = new ModuleWeavingContext(ModuleDefinition, aspectLibraryModule);
@@ -56,8 +58,7 @@ namespace Ramp.Aspects.Fody
 
         private void WeaveType(TypeDefinition type)
         {
-            List<Tuple<MethodDefinition, TypeDefinition>> methodInterceptions = null;
-            List<Tuple<PropertyDefinition, TypeDefinition>> propertyInterceptions = null;
+            List<Tuple<IMemberDefinition, TypeDefinition, int>> aspects = null;
 
             foreach (MethodDefinition method in type.Methods)
             {
@@ -65,13 +66,21 @@ namespace Ramp.Aspects.Fody
                 {
                     TypeDefinition attributeType = a.AttributeType.Resolve();
 
-                    if (IsMethodInterceptionAspectAttribute(attributeType))
+                    if (IsAspectAttribute(attributeType, _methodBoundaryAspectTypeDef))
                     {
                         Debug.Assert(method.HasBody);
 
-                        if (methodInterceptions == null)
-                            methodInterceptions = new List<Tuple<MethodDefinition, TypeDefinition>>();
-                        methodInterceptions.Add(Tuple.Create(method, attributeType));
+                        if (aspects == null)
+                            aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                        aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 0));
+                    }
+                    else if (IsAspectAttribute(attributeType, _methodInterceptionAspectTypeDef))
+                    {
+                        Debug.Assert(method.HasBody);
+
+                        if (aspects == null)
+                            aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                        aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 1));
                     }
                 }
             }
@@ -82,70 +91,56 @@ namespace Ramp.Aspects.Fody
                 {
                     TypeDefinition attributeType = a.AttributeType.Resolve();
 
-                    if (IsPropertyInterceptionAspectAttribute(attributeType))
+                    if (IsAspectAttribute(attributeType, _propertyInterceptionAspectTypeDef))
                     {
                         Debug.Assert(property.GetMethod != null || property.SetMethod != null);
                         
-                        if (propertyInterceptions == null)
-                            propertyInterceptions = new List<Tuple<PropertyDefinition, TypeDefinition>>();
-                        propertyInterceptions.Add(Tuple.Create(property, attributeType));
+                        if (aspects == null)
+                            aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                        aspects.Add(Tuple.Create((IMemberDefinition) property, attributeType, 2));
                     }
                 }
             }
 
-            if (methodInterceptions != null)
-            {
-                foreach (Tuple<MethodDefinition, TypeDefinition> method in methodInterceptions)
-                {
-                    int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+            if (aspects == null) return;
 
-                    // TODO: Support aspect constructor arguments
-                    MethodInterceptionAspectWeaver.Weave(_moduleWeavingContext,
-                                                         method.Item1,
-                                                         method.Item2,
+            foreach (Tuple<IMemberDefinition, TypeDefinition, int> a in aspects)
+            {
+                int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+
+                switch (a.Item3)
+                {
+                    case 0:
+                        MethodBoundaryAspectWeaver.Weave(_moduleWeavingContext,
+                                                         (MethodDefinition) a.Item1,
+                                                         a.Item2,
                                                          aspectIndex);
-                }
-            }
+                        break;
+                    case 1:
+                        MethodInterceptionAspectWeaver.Weave(_moduleWeavingContext,
+                                                             (MethodDefinition) a.Item1,
+                                                             a.Item2,
+                                                             aspectIndex);
+                        break;
+                    case 2:
+                        PropertyInterceptionAspectWeaver.Weave(_moduleWeavingContext,
+                                                               (PropertyDefinition) a.Item1,
+                                                               a.Item2,
+                                                               aspectIndex);
+                        break;
 
-            if (propertyInterceptions != null)
-            {
-                foreach (Tuple<PropertyDefinition, TypeDefinition> property in propertyInterceptions)
-                {
-                    int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
-
-                    PropertyInterceptionAspectWeaver.Weave(_moduleWeavingContext,
-                                                           property.Item1,
-                                                           property.Item2,
-                                                           aspectIndex);
                 }
             }
         }
 
-        private bool IsMethodInterceptionAspectAttribute(TypeDefinition attributeTypeDef)
+        private static bool IsAspectAttribute(TypeDefinition attributeTypeDef, TypeDefinition aspectTypeDef)
         {
             TypeDefinition current = attributeTypeDef;
             do
             {
                 foreach (TypeReference ir in current.Interfaces)
                 {
-                    if (ir.Resolve() == _methodInterceptionAspectTypeDef)
-                        return true;
-                }
-
-                current = current.BaseType?.Resolve();
-            } while (current != null);
-
-            return false;
-        }
-
-        private bool IsPropertyInterceptionAspectAttribute(TypeDefinition attributeTypeDef)
-        {
-            TypeDefinition current = attributeTypeDef;
-            do
-            {
-                foreach (TypeReference ir in current.Interfaces)
-                {
-                    if (ir.Resolve() == _propertyInterceptionAspectTypeDef)
+                    if (ir.Resolve() == aspectTypeDef)
                         return true;
                 }
 
