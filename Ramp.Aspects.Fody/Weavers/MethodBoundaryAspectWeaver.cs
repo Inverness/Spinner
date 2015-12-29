@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using Mono.Collections.Generic;
-using Ins = Mono.Cecil.Cil.Instruction;
+using Mono.Cecil.Rocks;
+using InstructionCollection = Mono.Collections.Generic.Collection<Mono.Cecil.Cil.Instruction>;
+using Instruction = Mono.Cecil.Cil.Instruction;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
@@ -32,15 +32,20 @@ namespace Ramp.Aspects.Fody.Weavers
             int aspectIndex)
         {
             string cacheFieldName = $"<{method.Name}>z__CachedAspect" + aspectIndex;
+
+            Features features = GetFeatures(mwc, aspectType);
             
             FieldReference aspectField;
             CreateAspectCacheField(mwc, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
 
             TypeDefinition stateMachineType;
             StateMachineKind stateMachineKind = GetStateMachineKind(mwc, method, out stateMachineType);
-            
-            TypeDefinition effectiveReturnType;
 
+            if (stateMachineKind != StateMachineKind.None)
+                throw new NotImplementedException("state machines not yet supported");
+            
+            // Decide the effective return type
+            TypeDefinition effectiveReturnType;
             switch (stateMachineKind)
             {
                 case StateMachineKind.None:
@@ -60,135 +65,349 @@ namespace Ramp.Aspects.Fody.Weavers
                     throw new ArgumentOutOfRangeException();
             }
 
-            VariableDefinition returnValueHolder = null;
+            var originalBody = new InstructionCollection(method.Body.Instructions);
+            method.Body.Instructions.Clear();
+            ILProcessor il = method.Body.GetILProcessor();
+
+            VariableDefinition returnValueVar = null;
             if (effectiveReturnType != null)
-                returnValueHolder = method.Body.AddVariableDefinition(effectiveReturnType);
+                returnValueVar = method.Body.AddVariableDefinition(effectiveReturnType);
 
-            WrapWithTryCatch(mwc, method, aspectType, returnValueHolder, aspectField, null);
+            WriteAspectInit(mwc, method, aspectType, aspectField, il);
 
+            VariableDefinition argumentsVar = null;
+            if ((features & Features.GetArguments) != 0)
+            {
+                WriteArgumentContainerInit(mwc, method, il, out argumentsVar);
+                WriteCopyArgumentsToContainer(mwc, method, il, argumentsVar, true);
+            }
+
+            VariableDefinition meaVar;
+            WriteMeaInit(mwc, method, argumentsVar, il, out meaVar);
+
+            // Write OnEntry call
+            WriteOnEntryCall(mwc, method, aspectType, features, returnValueVar, aspectField, meaVar, il);
+
+            // Re-add original body
+            int tryStartIndex = method.Body.Instructions.Count;
+            method.Body.Instructions.AddRange(originalBody);
+
+            // Wrap the body, including the OnEntry() call, in an exception handler
+            WriteExceptionHandler(mwc, method, aspectType, features, returnValueVar, aspectField, meaVar, il, tryStartIndex);
+
+            method.Body.OptimizeMacros();
             method.Body.RemoveNops();
         }
 
-        protected static void WrapWithTryCatch(
+        protected static void WriteMeaInit(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            VariableDefinition argumentsVar,
+            ILProcessor il,
+            out VariableDefinition meaVar
+            )
+        {
+            TypeReference meaType = mwc.SafeImport(mwc.Library.MethodExecutionArgs);
+            MethodReference meaCtor = mwc.SafeImport(mwc.Library.MethodExecutionArgs_ctor);
+
+            meaVar = method.Body.AddVariableDefinition(meaType);
+
+            if (method.IsStatic)
+            {
+                il.Emit(OpCodes.Ldnull);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                if (method.DeclaringType.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
+                    il.Emit(OpCodes.Box, method.DeclaringType);
+                }
+            }
+
+            if (argumentsVar == null)
+            {
+                il.Emit(OpCodes.Ldnull);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldloc, argumentsVar);
+            }
+
+            il.Emit(OpCodes.Newobj, meaCtor);
+            il.Emit(OpCodes.Stloc, meaVar);
+        }
+
+        protected static void WriteOnEntryCall(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
+            Features features,
             VariableDefinition returnValueHolder,
             FieldReference aspectField,
-            VariableDefinition meaVariable)
+            VariableDefinition meaVar,
+            ILProcessor il)
         {
-            List<MethodDefinition> allMethods = aspectType.GetInheritedMethods().ToList();
-            MethodDefinition filterExceptionDef = allMethods.Single(m => m.Name == FilterExceptionAdviceName);
-            MethodReference filterExcetion = mwc.SafeImport(filterExceptionDef);
-            MethodDefinition onExceptionDef = allMethods.Single(m => m.Name == OnExceptionAdviceName);
-            MethodReference onException = mwc.SafeImport(onExceptionDef);
+            if ((features & Features.OnEntry) == 0)
+                return;
 
-            Collection<Ins> inslist = method.Body.Instructions;
+            MethodDefinition onEntryDef = aspectType.GetInheritedMethods().First(m => m.Name == OnEntryAdviceName);
+            MethodReference onEntry = mwc.SafeImport(onEntryDef);
 
-            var jtNewReturn = Ins.Create(OpCodes.Nop);
+            il.Emit(OpCodes.Ldsfld, aspectField);
+            il.Emit(OpCodes.Ldloc, meaVar);
+            il.Emit(OpCodes.Callvirt, onEntry);
+        }
 
-            // Replace returns with store and leave
-            for (int i = 0; i < inslist.Count; i++)
+        protected static void WriteExceptionHandler(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            TypeDefinition aspectType,
+            Features features,
+            VariableDefinition returnValueHolder,
+            FieldReference aspectField,
+            VariableDefinition meaVar,
+            ILProcessor il,
+            int tryStartIndex)
+        {
+            bool withException = (features & Features.OnException) != 0;
+            bool withExit = (features & Features.OnExit) != 0;
+            bool withSuccess = (features & Features.OnSuccess) != 0;
+
+            if (!(withException || withExit || withSuccess))
+                return;
+
+            Instruction labelNewReturn = CreateNop();
+            Instruction labelSuccess = CreateNop();
+            InstructionCollection inslist = il.Body.Instructions;
+
+            // Replace returns with a break or leave 
+            int last = inslist.Count - 1;
+            for (int i = tryStartIndex; i < inslist.Count; i++)
             {
-                Ins ins = inslist[i];
+                Instruction ins = inslist[i];
 
                 if (ins.OpCode == OpCodes.Ret)
                 {
+                    var insNewBreak = withSuccess
+                        ? Instruction.Create(OpCodes.Br, labelSuccess)
+                        : Instruction.Create(OpCodes.Leave, labelNewReturn);
+
                     if (returnValueHolder != null)
                     {
-                        var nins1 = Ins.Create(OpCodes.Stloc, returnValueHolder);
-                        var nins2 = Ins.Create(OpCodes.Leave, jtNewReturn);
+                        var insStoreReturnValue = Instruction.Create(OpCodes.Stloc, returnValueHolder);
 
-                        ReplaceOperands(inslist, ins, nins1);
+                        inslist.ReplaceOperands(ins, insStoreReturnValue);
+                        inslist[i] = insStoreReturnValue;
 
-                        inslist[i] = nins1;
-                        inslist.Insert(++i, nins2);
+                        // Do not write a jump to the very next instruction
+                        if (withSuccess && i == last)
+                            break;
+
+                        inslist.Insert(++i, insNewBreak);
+                        last++;
                     }
                     else
                     {
-                        var nins = Ins.Create(OpCodes.Leave, jtNewReturn);
+                        if (withSuccess && i == last)
+                        {
+                            // Replace with Nop since there is not another operand to replace it with
+                            var insNop = CreateNop();
 
-                        ReplaceOperands(inslist, ins, nins);
-
-                        inslist[i] = nins;
+                            inslist.ReplaceOperands(ins, insNop);
+                            inslist[i] = insNop;
+                        }
+                        else
+                        {
+                            inslist.ReplaceOperands(ins, insNewBreak);
+                            inslist[i] = insNewBreak;
+                        }
                     }
                 }
             }
 
-            Ins tryStart = inslist.First();
+            // Write success block
 
-            // Write filter
-            TypeReference exceptionType = mwc.SafeImport(mwc.Framework.Exception);
-
-            VariableDefinition exceptionHolder = method.Body.AddVariableDefinition(exceptionType);
-            
-            Ins labelFilterTrue = Ins.Create(OpCodes.Nop);
-            Ins labelFilterEnd = Ins.Create(OpCodes.Nop);
-            
-            inslist.Add(Ins.Create(OpCodes.Isinst, exceptionType));
-            Ins filterStart = inslist.Last();
-            inslist.Add(Ins.Create(OpCodes.Dup));
-            inslist.Add(Ins.Create(OpCodes.Brtrue, labelFilterTrue));
-
-            inslist.Add(Ins.Create(OpCodes.Pop)); // exception
-            inslist.Add(Ins.Create(OpCodes.Ldc_I4_0));
-            inslist.Add(Ins.Create(OpCodes.Br, labelFilterEnd));
-
-            inslist.Add(labelFilterTrue);
-            inslist.Add(Ins.Create(OpCodes.Stloc, exceptionHolder));
-            inslist.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-            if (meaVariable != null)
-                inslist.Add(Ins.Create(OpCodes.Ldloc, meaVariable));
-            else
-                inslist.Add(Ins.Create(OpCodes.Ldnull));
-            inslist.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
-            inslist.Add(Ins.Create(OpCodes.Callvirt, filterExcetion));
-            inslist.Add(Ins.Create(OpCodes.Ldc_I4_0));
-            inslist.Add(Ins.Create(OpCodes.Cgt_Un));
-            inslist.Add(labelFilterEnd);
-            inslist.Add(Ins.Create(OpCodes.Endfilter));
-
-            // Write Handler
-
-            inslist.Add(Ins.Create(OpCodes.Pop)); // not sure, in generated code
-            Ins handlerStart = inslist.Last();
-            inslist.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-            if (meaVariable != null)
-                inslist.Add(Ins.Create(OpCodes.Ldloc, meaVariable));
-            else
-                inslist.Add(Ins.Create(OpCodes.Ldnull));
-            inslist.Add(Ins.Create(OpCodes.Callvirt, onException));
-            inslist.Add(Ins.Create(OpCodes.Leave, jtNewReturn));
-
-            // Finish
-
-            inslist.Add(jtNewReturn);
-            Ins handlerEnd = inslist.Last();
-            if (returnValueHolder != null)
-                inslist.Add(Ins.Create(OpCodes.Ldloc, returnValueHolder));
-            inslist.Add(Ins.Create(OpCodes.Ret));
-
-            // NOTE TryEnd and HandlerEnd point to the instruction AFTER the 'leave'
-
-            // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
-            var eh = new ExceptionHandler(ExceptionHandlerType.Catch | ExceptionHandlerType.Filter)
+            if (withSuccess)
             {
-                TryStart = tryStart,
-                TryEnd = filterStart,
-                FilterStart = filterStart,
-                HandlerStart = handlerStart,
-                HandlerEnd = handlerEnd,
-                CatchType = exceptionType
-            };
+                MethodDefinition onSuccessDef = aspectType.GetInheritedMethods().First(m => m.Name == OnSuccessAdviceName);
+                MethodReference onSuccess = mwc.SafeImport(onSuccessDef);
+                
+                il.Append(labelSuccess);
+                il.Emit(OpCodes.Ldsfld, aspectField);
+                if (meaVar != null)
+                    il.Emit(OpCodes.Ldloc, meaVar);
+                else
+                    il.Emit(OpCodes.Ldnull);
+                il.Emit(OpCodes.Callvirt, onSuccess);
 
-            method.Body.ExceptionHandlers.Add(eh);
-        }
+                if (withException || withExit)
+                    il.Emit(OpCodes.Leave, labelNewReturn);
+            }
 
-        private static void ReplaceOperands(Collection<Ins> instructions, Ins oldValue, Ins newValue)
-        {
-            foreach (Ins instruction in instructions)
-                if (ReferenceEquals(instruction.Operand, oldValue))
-                    instruction.Operand = newValue;
+            // Write exception filter and handler
+
+            TypeReference exceptionType = null;
+            int ehTryCatchEnd = -1;
+            int ehFilterStart = -1;
+            int ehCatchStart = -1;
+            int ehCatchEnd = -1;
+
+            if (withException)
+            {
+                MethodDefinition filterExceptionDef = aspectType.GetInheritedMethods().First(m => m.Name == FilterExceptionAdviceName);
+                MethodReference filterExcetion = mwc.SafeImport(filterExceptionDef);
+                MethodDefinition onExceptionDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExceptionAdviceName);
+                MethodReference onException = mwc.SafeImport(onExceptionDef);
+                exceptionType = mwc.SafeImport(mwc.Framework.Exception);
+
+                VariableDefinition exceptionHolder = method.Body.AddVariableDefinition(exceptionType);
+
+                Instruction labelFilterTrue = CreateNop();
+                Instruction labelFilterEnd = CreateNop();
+
+                ehTryCatchEnd = inslist.Count;
+                ehFilterStart = inslist.Count;
+
+                // Check if its actually Exception. Non-Exception types can be thrown by native code.
+                il.Emit(OpCodes.Isinst, exceptionType);
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Brtrue, labelFilterTrue);
+
+                // Not an Exception, load 0 as endfilter argument
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Br, labelFilterEnd);
+
+                // Call FilterException()
+                il.Append(labelFilterTrue);
+                il.Emit(OpCodes.Stloc, exceptionHolder);
+                il.Emit(OpCodes.Ldsfld, aspectField);
+                if (meaVar != null)
+                    il.Emit(OpCodes.Ldloc, meaVar);
+                else
+                    il.Emit(OpCodes.Ldnull);
+                il.Emit(OpCodes.Ldloc, exceptionHolder);
+                il.Emit(OpCodes.Callvirt, filterExcetion);
+
+                // Compare FilterException result with 0 to get the endfilter argument
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);
+                il.Append(labelFilterEnd);
+                il.Emit(OpCodes.Endfilter);
+
+                ehCatchStart = inslist.Count;
+
+                il.Emit(OpCodes.Pop); // Exception already stored
+
+                // Call OnException()
+                if (meaVar != null)
+                {
+                    MethodReference getException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.GetMethod);
+                    MethodReference setException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.SetMethod);
+
+                    il.Emit(OpCodes.Ldloc, meaVar);
+                    il.Emit(OpCodes.Ldloc, exceptionHolder);
+                    il.Emit(OpCodes.Callvirt, setException);
+
+                    il.Emit(OpCodes.Ldsfld, aspectField);
+                    il.Emit(OpCodes.Ldloc, meaVar);
+                    il.Emit(OpCodes.Callvirt, onException);
+
+                    Instruction labelCaught = CreateNop();
+
+                    // If the Exception property was set to null, return normally, otherwise rethrow
+                    il.Emit(OpCodes.Ldloc, meaVar);
+                    il.Emit(OpCodes.Callvirt, getException);
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Brfalse, labelCaught);
+
+                    il.Emit(OpCodes.Rethrow);
+
+                    il.Append(labelCaught);
+                    il.Emit(OpCodes.Pop);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldsfld, aspectField);
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Callvirt, onException);
+                }
+                il.Emit(OpCodes.Leave, labelNewReturn);
+
+                ehCatchEnd = inslist.Count;
+            }
+
+            // End of try block for the finally handler
+
+            int ehFinallyEnd = -1;
+            int ehFinallyStart = -1;
+            int ehTryFinallyEnd = -1;
+
+            if (withExit)
+            {
+                MethodDefinition onExitDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExitAdviceName);
+                MethodReference onExit = mwc.SafeImport(onExitDef);
+
+                il.Emit(OpCodes.Leave, labelNewReturn);
+
+                ehTryFinallyEnd = inslist.Count;
+
+                // Begin finally block
+
+                ehFinallyStart = inslist.Count;
+
+                // Call OnExit()
+                il.Emit(OpCodes.Ldsfld, aspectField);
+                if (meaVar != null)
+                    il.Emit(OpCodes.Ldloc, meaVar);
+                else
+                    il.Emit(OpCodes.Ldnull);
+                il.Emit(OpCodes.Callvirt, onExit);
+                il.Emit(OpCodes.Endfinally);
+
+                ehFinallyEnd = inslist.Count;
+            }
+
+            // End finally block
+            
+            il.Append(labelNewReturn);
+
+            // Return the previously stored result
+            if (returnValueHolder != null)
+                il.Emit(OpCodes.Ldloc, returnValueHolder);
+            il.Emit(OpCodes.Ret);
+
+            if (withException)
+            {
+                // NOTE TryEnd and HandlerEnd point to the instruction AFTER the 'leave'
+
+                var catchHandler = new ExceptionHandler(ExceptionHandlerType.Filter)
+                {
+                    TryStart = inslist[tryStartIndex],
+                    TryEnd = inslist[ehTryCatchEnd],
+                    FilterStart = inslist[ehFilterStart],
+                    HandlerStart = inslist[ehCatchStart],
+                    HandlerEnd = inslist[ehCatchEnd],
+                    CatchType = exceptionType
+                };
+
+                method.Body.ExceptionHandlers.Add(catchHandler);
+            }
+
+            if (withExit)
+            {
+                var finallyHandler = new ExceptionHandler(ExceptionHandlerType.Finally)
+                {
+                    TryStart = inslist[tryStartIndex],
+                    TryEnd = inslist[ehTryFinallyEnd],
+                    HandlerStart = inslist[ehFinallyStart],
+                    HandlerEnd = inslist[ehFinallyEnd]
+                };
+
+                method.Body.ExceptionHandlers.Add(finallyHandler);
+            }
         }
 
         /// <summary>
@@ -216,6 +435,31 @@ namespace Ramp.Aspects.Fody.Weavers
 
             type = null;
             return StateMachineKind.None;
+        }
+
+        protected static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
+        {
+            TypeDefinition featuresAttributeType = mwc.Library.FeaturesAttribute;
+
+            TypeDefinition currentType = aspectType;
+            while (currentType != null)
+            {
+                if (currentType.HasCustomAttributes)
+                {
+                    foreach (CustomAttribute a in currentType.CustomAttributes)
+                    {
+                        if (a.AttributeType.Name == featuresAttributeType.Name &&
+                            a.AttributeType.Namespace == featuresAttributeType.Namespace)
+                        {
+                            return (Features) (int) a.ConstructorArguments.First().Value;
+                        }
+                    }
+                }
+
+                currentType = currentType.BaseType.Resolve();
+            }
+
+            return Features.None;
         }
     }
 }

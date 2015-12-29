@@ -71,7 +71,20 @@ namespace Ramp.Aspects.Fody
 
                 current = current.BaseType?.Resolve();
             }
-        } 
+        }
+
+        /// <summary>
+        /// Replaces all occurances of an instruction as an operand.
+        /// </summary>
+        /// <param name="self"></param>
+        /// <param name="oldValue"></param>
+        /// <param name="newValue"></param>
+        internal static void ReplaceOperands(this Collection<Instruction> self, Instruction oldValue, Instruction newValue)
+        {
+            foreach (Instruction instruction in self)
+                if (ReferenceEquals(instruction.Operand, oldValue))
+                    instruction.Operand = newValue;
+        }
 
         /// <summary>
         /// Removes all Nop's from the body's instructions and fixes up instruction operands and exception handlers.
@@ -86,7 +99,6 @@ namespace Ramp.Aspects.Fody
 
             HashSet<Instruction> breaks = new HashSet<Instruction>();
             Dictionary<Instruction, Instruction> newInstructions = new Dictionary<Instruction, Instruction>();
-            int last = instructions.Count - 1;
 
             // Find break that reference a label, and instructions that follow the no-ops
             for (int i = 0; i < instructions.Count; i++)
@@ -102,10 +114,24 @@ namespace Ramp.Aspects.Fody
                 }
                 else if (ins.OpCode == OpCodes.Nop)
                 {
-                    if (i == last)
-                        throw new InvalidOperationException("marked label at the end of instruction list; missing ret?");
+                    // Need to skip any following Nop's
+                    Instruction next = null;
 
-                    newInstructions.Add(ins, instructions[i + 1]);
+                    for (int n = i + 1; n < instructions.Count; n++)
+                    {
+                        Instruction maybeNext = instructions[n];
+                        if (maybeNext.OpCode != OpCodes.Nop)
+                        {
+                            next = maybeNext;
+                            break;
+                        }
+                    }
+
+                    // Next can be null if there are no more Nop's in the instruction list.
+                    newInstructions.Add(ins, next);
+
+                    if (next == null)
+                        continue;
 
                     instructions.RemoveAt(i);
                     i--;
@@ -114,7 +140,11 @@ namespace Ramp.Aspects.Fody
 
             // Update breaks to point to instructions that follow the no-ops
             foreach (Instruction ins in breaks)
-                ins.Operand = newInstructions[(Instruction) ins.Operand];
+            {
+                Instruction next = newInstructions[(Instruction) ins.Operand];
+                if (next != null)
+                    ins.Operand = next;
+            }
 
             if (!self.HasExceptionHandlers)
                 return;
@@ -128,7 +158,7 @@ namespace Ramp.Aspects.Fody
                     eh.TryStart = nins;
                 if (newInstructions.TryGetValue(eh.TryEnd, out nins))
                     eh.TryEnd = nins;
-                if (newInstructions.TryGetValue(eh.FilterStart, out nins))
+                if (eh.FilterStart != null && newInstructions.TryGetValue(eh.FilterStart, out nins))
                     eh.FilterStart = nins;
                 if (newInstructions.TryGetValue(eh.HandlerStart, out nins))
                     eh.HandlerStart = nins;

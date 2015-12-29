@@ -271,19 +271,18 @@ namespace Ramp.Aspects.Fody.Weavers
             MethodDefinition method,
             TypeDefinition aspectType,
             FieldReference aspectCacheField,
-            ILProcessor il,
-            LabelProcessor lp)
+            ILProcessor il)
         {
             // NOTE: Aspect type can't be generic since its declared by an attribute
             MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
             MethodReference ctor = mwc.SafeImport(ctorDef);
-
-            Label notNullLabel = lp.DefineLabel();
+            
+            Instruction jtNotNull = CreateNop();
             il.Emit(OpCodes.Ldsfld, aspectCacheField);
-            il.Emit(OpCodes.Brtrue, notNullLabel.Instruction);
+            il.Emit(OpCodes.Brtrue, jtNotNull);
             il.Emit(OpCodes.Newobj, ctor);
             il.Emit(OpCodes.Stsfld, aspectCacheField);
-            lp.MarkLabel(notNullLabel);
+            il.Append(jtNotNull);
         }
 
         protected static void WriteCallAdvice(
@@ -305,18 +304,18 @@ namespace Ramp.Aspects.Fody.Weavers
         /// <summary>
         /// 
         /// </summary>
-        protected static void WriteBindingInit(ILProcessor il, LabelProcessor lp, TypeDefinition bindingType)
+        protected static void WriteBindingInit(ILProcessor il, TypeDefinition bindingType)
         {
             // Initialize the binding instance
             FieldReference instanceField = bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName);
             MethodReference constructor = bindingType.Methods.Single(f => f.IsConstructor && !f.IsStatic);
 
-            Label notNullLabel = lp.DefineLabel();
+            Instruction notNullLabel = CreateNop();
             il.Emit(OpCodes.Ldsfld, instanceField);
-            il.Emit(OpCodes.Brtrue, notNullLabel.Instruction);
+            il.Emit(OpCodes.Brtrue, notNullLabel);
             il.Emit(OpCodes.Newobj, constructor);
             il.Emit(OpCodes.Stsfld, instanceField);
-            lp.MarkLabel(notNullLabel);
+            il.Append(notNullLabel);
         }
 
         protected static void CreateAspectCacheField(
@@ -372,6 +371,11 @@ namespace Ramp.Aspects.Fody.Weavers
             i.Add(Instruction.Create(OpCodes.Ret));
 
             return method;
+        }
+
+        protected static Instruction CreateNop()
+        {
+            return Instruction.Create(OpCodes.Nop);
         }
     }
 }

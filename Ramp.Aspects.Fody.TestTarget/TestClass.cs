@@ -40,6 +40,7 @@ namespace Ramp.Aspects.Fody.TestTarget
         }
     }
 
+    [Features(Features.All)]
     public class TestBoundary : MethodBoundaryAspect
     {
         public override void OnEntry(MethodExecutionArgs args)
@@ -102,11 +103,18 @@ namespace Ramp.Aspects.Fody.TestTarget
         }
 
         [TestBoundary]
-        internal void TestMethod2(int a, out int b, string c)
+        [TestBoundary]
+        internal int TestMethod2(int a, out int b, string c)
         {
             b = 20;
             Console.WriteLine("test: " + (a + b) + " --- " + c);
-            TestEvent?.Invoke(this, EventArgs.Empty);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return 99;
+            }
+            Console.WriteLine("Test 22");
+            return a;
         }
 
         internal async Task<int> TestAsyncMethod(int a, int b, string c)
@@ -145,12 +153,12 @@ namespace Ramp.Aspects.Fody.TestTarget
                 b = 4;
                 return 3;
             }
-            catch (InvalidOperationException ex) when (FilterFunc(a, ex))
+            catch (Exception ex) when (FilterFunc(a, ex))
             {
                 b = 3;
                 return 2;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 b = 6;
                 return 1;

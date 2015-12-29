@@ -10,57 +10,73 @@ namespace Ramp.Aspects.Fody
     {
         internal const int MaxArguments = Aspects.Arguments.MaxItems;
 
-        private const string Namespace = "Ramp.Aspects";
-        private const string InternalNamespace = "Ramp.Aspects.Internal";
-
+        private const string Ns = "Ramp.Aspects";
+        private const string IntNs = "Ramp.Aspects.Internal";
+        
+        // ReSharper disable InconsistentNaming
         internal readonly TypeDefinition ArgumentsBase;
         internal readonly TypeDefinition[] Arguments;
+        internal readonly TypeDefinition MethodExecutionArgs;
+        internal readonly MethodDefinition MethodExecutionArgs_ctor;
+        internal readonly PropertyDefinition MethodExecutionArgs_Exception;
+        internal readonly PropertyDefinition MethodExecutionArgs_FlowBehavior;
+        internal readonly PropertyDefinition MethodExecutionArgs_ReturnValue;
+        internal readonly PropertyDefinition MethodExecutionArgs_YieldValue;
         internal readonly TypeDefinition BoundMethodInterceptionArgs;
+        internal readonly MethodDefinition BoundMethodInterceptionArgs_ctor;
         internal readonly TypeDefinition BoundMethodInterceptionArgsT1;
+        internal readonly MethodDefinition BoundMethodInterceptionArgsT1_ctor;
+        internal readonly FieldDefinition BoundMethodInterceptionArgsT1_TypedReturnValue;
         internal readonly TypeDefinition MethodBinding;
         internal readonly TypeDefinition MethodBindingT1;
         internal readonly TypeDefinition PropertyBindingT1;
         internal readonly TypeDefinition BoundPropertyInterceptionArgsT1;
-
-        // ReSharper disable InconsistentNaming
-        internal readonly MethodDefinition BoundMethodInterceptionArgs_ctor;
-
-        internal readonly MethodDefinition BoundMethodInterceptionArgsT1_ctor;
-        internal readonly FieldDefinition BoundMethodInterceptionArgsT1_TypedReturnValue;
-
         internal readonly MethodDefinition BoundPropertyInterceptionArgsT1_ctor;
         internal readonly FieldDefinition BoundPropertyInterceptionArgsT1_TypedValue;
+        internal readonly TypeDefinition Features;
+        internal readonly TypeDefinition FeaturesAttribute;
+
 
         internal readonly MethodDefinition[] Arguments_ctor;
         internal readonly FieldDefinition[][] Arguments_Item;
         // ReSharper restore InconsistentNaming
 
-        internal WellKnownLibraryMembers(ModuleDefinition libraryModule)
+        internal WellKnownLibraryMembers(ModuleDefinition module)
         {
-            ArgumentsBase = libraryModule.GetType(Namespace, "Arguments");
+            ArgumentsBase = module.GetType(Ns, "Arguments");
 
             Arguments = new TypeDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                Arguments[i] = libraryModule.GetType(InternalNamespace, "Arguments`" + i);
+                Arguments[i] = module.GetType(IntNs, "Arguments`" + i);
 
-            BoundMethodInterceptionArgs = libraryModule.GetType(InternalNamespace, "BoundMethodInterceptionArgs");
-            BoundMethodInterceptionArgsT1 = libraryModule.GetType(InternalNamespace, "BoundMethodInterceptionArgs`1");
-            MethodBinding = libraryModule.GetType(InternalNamespace, "MethodBinding");
-            MethodBindingT1 = libraryModule.GetType(InternalNamespace, "MethodBinding`1");
-            PropertyBindingT1 = libraryModule.GetType(InternalNamespace, "PropertyBinding`1");
-            BoundPropertyInterceptionArgsT1 = libraryModule.GetType(InternalNamespace, "BoundPropertyInterceptionArgs`1");
+            MethodExecutionArgs = module.GetType(Ns, "MethodExecutionArgs");
+            MethodExecutionArgs_ctor = MethodExecutionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            MethodExecutionArgs_Exception = MethodExecutionArgs.Properties.First(m => m.Name == "Exception");
+            MethodExecutionArgs_FlowBehavior = MethodExecutionArgs.Properties.First(m => m.Name == "FlowBehavior");
+            MethodExecutionArgs_ReturnValue = MethodExecutionArgs.Properties.First(m => m.Name == "ReturnValue");
+            MethodExecutionArgs_YieldValue = MethodExecutionArgs.Properties.First(m => m.Name == "YieldValue");
 
-            BoundMethodInterceptionArgs_ctor = BoundMethodInterceptionArgs.Methods.Single(m => m.IsConstructor && !m.IsStatic);
+            MethodBinding = module.GetType(IntNs, "MethodBinding");
+            MethodBindingT1 = module.GetType(IntNs, "MethodBinding`1");
+            PropertyBindingT1 = module.GetType(IntNs, "PropertyBinding`1");
 
-            BoundMethodInterceptionArgsT1_ctor = BoundMethodInterceptionArgsT1.Methods.Single(m => m.IsConstructor && !m.IsStatic);
-            BoundMethodInterceptionArgsT1_TypedReturnValue = BoundMethodInterceptionArgsT1.Fields.Single(f => f.Name == "TypedReturnValue");
+            Features = module.GetType(Ns, "Features");
+            FeaturesAttribute = module.GetType(Ns, "FeaturesAttribute");
 
-            BoundPropertyInterceptionArgsT1_ctor = BoundPropertyInterceptionArgsT1.Methods.Single(m => m.IsConstructor && !m.IsStatic);
-            BoundPropertyInterceptionArgsT1_TypedValue = BoundPropertyInterceptionArgsT1.Fields.Single(f => f.Name == "TypedValue");
+            BoundMethodInterceptionArgs = module.GetType(IntNs, "BoundMethodInterceptionArgs");
+            BoundMethodInterceptionArgs_ctor = BoundMethodInterceptionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
+
+            BoundMethodInterceptionArgsT1 = module.GetType(IntNs, "BoundMethodInterceptionArgs`1");
+            BoundMethodInterceptionArgsT1_ctor = BoundMethodInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundMethodInterceptionArgsT1_TypedReturnValue = BoundMethodInterceptionArgsT1.Fields.First(f => f.Name == "TypedReturnValue");
+
+            BoundPropertyInterceptionArgsT1 = module.GetType(IntNs, "BoundPropertyInterceptionArgs`1");
+            BoundPropertyInterceptionArgsT1_ctor = BoundPropertyInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundPropertyInterceptionArgsT1_TypedValue = BoundPropertyInterceptionArgsT1.Fields.First(f => f.Name == "TypedValue");
 
             Arguments_ctor = new MethodDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                Arguments_ctor[i] = Arguments[i].Methods.Single(m => m.IsConstructor && !m.IsStatic);
+                Arguments_ctor[i] = Arguments[i].Methods.First(m => m.IsConstructor && !m.IsStatic);
 
             Arguments_Item = new FieldDefinition[MaxArguments + 1][];
             for (int i = 1; i <= MaxArguments; i++)

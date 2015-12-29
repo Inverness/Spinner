@@ -62,16 +62,15 @@ namespace Ramp.Aspects.Fody.Weavers
             method.Body.ExceptionHandlers.Clear();
 
             ILProcessor il = method.Body.GetILProcessor();
-            var lp = new LabelProcessor(il);
 
             VariableDefinition argumentsVariable;
             WriteArgumentContainerInit(mwc, method, il, out argumentsVariable);
 
             WriteCopyArgumentsToContainer(mwc, method, il, argumentsVariable, true);
             
-            WriteAspectInit(mwc, method, aspectType, aspectField, il, lp);
+            WriteAspectInit(mwc, method, aspectType, aspectField, il);
 
-            WriteBindingInit(il, lp, bindingType);
+            WriteBindingInit(il, bindingType);
             
             FieldReference valueField;
             VariableDefinition iaVariable;
@@ -102,9 +101,9 @@ namespace Ramp.Aspects.Fody.Weavers
             il.Emit(OpCodes.Ret);
 
             // Fix labels and optimize
-
-            lp.Finish();
+            
             il.Body.OptimizeMacros();
+            il.Body.RemoveNops();
         }
 
         protected static void CreatePropertyBindingClass(
