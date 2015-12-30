@@ -24,19 +24,20 @@ namespace Ramp.Aspects.Fody.Tests
         };
 
         private readonly ITestOutputHelper _output;
+        private readonly Assembly _assembly;
 
         public WeaverTests(ITestOutputHelper output)
         {
             _output = output;
             Console.SetOut(new OutputRedirector(output));
+
+            _assembly = WeaveAndLoadAssembly();
         }
 
         private Assembly WeaveAndLoadAssembly()
         {
             string projectPath = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, RelativeProjectpath));
-
             string assemblyPath = Path.Combine(Path.GetDirectoryName(projectPath), RelativeAssemblyPath);
-
             string pdbPath = assemblyPath.Replace(".dll", ".pdb");
 
 #if !DEBUG
@@ -46,20 +47,21 @@ namespace Ramp.Aspects.Fody.Tests
             string newAssemblyPath = assemblyPath.Replace(".dll", ".w.dll");
             string newPdbPath = pdbPath.Replace(".pdb", ".w.pdb");
 
-            File.Copy(assemblyPath, newAssemblyPath, true);
-            File.SetLastWriteTimeUtc(newAssemblyPath, DateTime.UtcNow);
-            File.Copy(pdbPath, newPdbPath, true);
+            if (File.Exists(newAssemblyPath))
+                File.Delete(newAssemblyPath);
+            if (File.Exists(newPdbPath))
+                File.Delete(newPdbPath);
 
-            var resolver = new DefaultAssemblyResolver();
-            resolver.AddSearchDirectory(Path.GetDirectoryName(newAssemblyPath));
+            File.Copy(assemblyPath, newAssemblyPath, false);
+            File.Copy(pdbPath, newPdbPath, false);
 
-            var rp = new ReaderParameters {AssemblyResolver = resolver, ReadSymbols = true};
+            var readerParameters = new ReaderParameters {ReadSymbols = true};
 
-            ModuleDefinition md = ModuleDefinition.ReadModule(newAssemblyPath, rp);
+            ModuleDefinition moduleDefinition = ModuleDefinition.ReadModule(newAssemblyPath, readerParameters);
 
             var weaver = new ModuleWeaver
             {
-                ModuleDefinition = md,
+                ModuleDefinition = moduleDefinition,
                 LogDebug = s => _output.WriteLine("Debug: " + s),
                 LogInfo = s => _output.WriteLine(s),
                 LogWarning = s => _output.WriteLine("WARNING: " + s),
@@ -68,9 +70,10 @@ namespace Ramp.Aspects.Fody.Tests
 
             weaver.Execute();
 
-            //md.Name = md.Name.Replace(".dll", ".w.dll");
+            moduleDefinition.Assembly.Name.Name = moduleDefinition.Assembly.Name.Name + ".w";
+            moduleDefinition.Name = moduleDefinition.Name.Replace(".dll", ".w.dll");
 
-            md.Write(newAssemblyPath, new WriterParameters { WriteSymbols = false });
+            moduleDefinition.Write(newAssemblyPath, new WriterParameters { WriteSymbols = true });
 
             _output.WriteLine("Wrote: " + newAssemblyPath);
 
@@ -140,17 +143,15 @@ namespace Ramp.Aspects.Fody.Tests
         [Fact(DisplayName = "Weave Only", Skip = "NA")]
         public void WeaveOnly()
         {
-            Assembly a = WeaveAndLoadAssembly();
-            RunPeVerify(a.Location, 0);
+            RunPeVerify(_assembly.Location, 0);
         }
 
         [Fact(DisplayName = "Weave and Run")]
         public void WeaveAndRun()
         {
-            Assembly a = WeaveAndLoadAssembly();
-            RunPeVerify(a.Location, 0);
+            RunPeVerify(_assembly.Location, 0);
 
-            InvokeRunMethod(a);
+            InvokeRunMethod(_assembly);
         }
     }
 }

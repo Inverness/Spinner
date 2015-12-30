@@ -8,6 +8,8 @@ namespace Ramp.Aspects.Fody
         internal readonly TypeDefinition Exception;
         internal readonly TypeDefinition AsyncStateMachineAttribute;
         internal readonly TypeDefinition IteratorStateMachineAttribute;
+        internal readonly TypeDefinition CompilerGeneratedAttribute;
+        internal readonly MethodDefinition CompilerGeneratedAttribute_ctor;
 
         internal WellKnownFrameworkMembers(ModuleDefinition currentModule)
         {
@@ -21,6 +23,8 @@ namespace Ramp.Aspects.Fody
             Exception = module.GetType("System.Exception");
             AsyncStateMachineAttribute = module.GetType("System.Runtime.CompilerServices.AsyncStateMachineAttribute");
             IteratorStateMachineAttribute = module.GetType("System.Runtime.CompilerServices.IteratorStateMachineAttribute");
+            CompilerGeneratedAttribute = module.GetType("System.Runtime.CompilerServices.CompilerGeneratedAttribute");
+            CompilerGeneratedAttribute_ctor = CompilerGeneratedAttribute.Methods.First(m => m.IsConstructor && !m.IsStatic && !m.HasParameters);
         }
     }
 }

@@ -45,6 +45,36 @@ namespace Ramp.Aspects.Fody
             return new FieldReference(self.Name, self.FieldType, type);
         }
 
+        internal static IEnumerable<MethodDefinition> GetInheritedMethods(this TypeDefinition type)
+        {
+            TypeDefinition current = type;
+            while (current != null)
+            {
+                foreach (MethodDefinition m in current.Methods)
+                    yield return m;
+
+                current = current.BaseType?.Resolve();
+            }
+        }
+
+        internal static bool IsSame(this TypeReference self, TypeReference other)
+        {
+            return self.Name == other.Name && self.Namespace == other.Namespace;
+        }
+
+        /// <summary>
+        /// Replaces all occurances of an instruction as an operand.
+        /// </summary>
+        /// <param name="self"></param>
+        /// <param name="oldValue"></param>
+        /// <param name="newValue"></param>
+        internal static void ReplaceOperands(this Collection<Instruction> self, Instruction oldValue, Instruction newValue)
+        {
+            foreach (Instruction instruction in self)
+                if (ReferenceEquals(instruction.Operand, oldValue))
+                    instruction.Operand = newValue;
+        }
+
         internal static VariableDefinition AddVariableDefinition(this MethodBody self, TypeReference type)
         {
             var def = new VariableDefinition(type);
@@ -59,31 +89,6 @@ namespace Ramp.Aspects.Fody
             self.Variables.Add(def);
             self.InitLocals = true;
             return def;
-        }
-
-        internal static IEnumerable<MethodDefinition> GetInheritedMethods(this TypeDefinition type)
-        {
-            TypeDefinition current = type;
-            while (current != null)
-            {
-                foreach (MethodDefinition m in current.Methods)
-                    yield return m;
-
-                current = current.BaseType?.Resolve();
-            }
-        }
-
-        /// <summary>
-        /// Replaces all occurances of an instruction as an operand.
-        /// </summary>
-        /// <param name="self"></param>
-        /// <param name="oldValue"></param>
-        /// <param name="newValue"></param>
-        internal static void ReplaceOperands(this Collection<Instruction> self, Instruction oldValue, Instruction newValue)
-        {
-            foreach (Instruction instruction in self)
-                if (ReferenceEquals(instruction.Operand, oldValue))
-                    instruction.Operand = newValue;
         }
 
         /// <summary>
@@ -158,12 +163,12 @@ namespace Ramp.Aspects.Fody
                     eh.TryStart = nins;
                 if (newInstructions.TryGetValue(eh.TryEnd, out nins))
                     eh.TryEnd = nins;
-                if (eh.FilterStart != null && newInstructions.TryGetValue(eh.FilterStart, out nins))
-                    eh.FilterStart = nins;
                 if (newInstructions.TryGetValue(eh.HandlerStart, out nins))
                     eh.HandlerStart = nins;
                 if (newInstructions.TryGetValue(eh.HandlerEnd, out nins))
                     eh.HandlerEnd = nins;
+                if (eh.FilterStart != null && newInstructions.TryGetValue(eh.FilterStart, out nins))
+                    eh.FilterStart = nins;
             }
         }
     }

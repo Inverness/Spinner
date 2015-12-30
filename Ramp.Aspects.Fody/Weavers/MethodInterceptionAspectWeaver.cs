@@ -2,7 +2,8 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Ramp.Aspects.Fody.Utilities;
+using Mono.Collections.Generic;
+using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
@@ -39,40 +40,40 @@ namespace Ramp.Aspects.Fody.Weavers
             method.Body.Instructions.Clear();
             method.Body.Variables.Clear();
             method.Body.ExceptionHandlers.Clear();
-
-            ILProcessor il = method.Body.GetILProcessor();
+            
+            Collection<Ins> insc = method.Body.Instructions;
             
             //WriteOutArgumentInit(il);
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(mwc, method, il, out argumentsVariable);
+            WriteArgumentContainerInit(mwc, method, insc.Count, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(mwc, method, il, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(mwc, method, insc.Count, argumentsVariable, true);
             
-            WriteAspectInit(mwc, method, aspectType, aspectField, il);
+            WriteAspectInit(mwc, method, insc.Count, aspectType, aspectField);
 
-            WriteBindingInit(il, bindingType);
+            WriteBindingInit(method, insc.Count, bindingType);
             
             FieldReference valueField;
             VariableDefinition iaVariable;
-            WriteMiaInit(mwc, method, il, argumentsVariable, bindingType, out iaVariable, out valueField);
+            WriteMiaInit(mwc, method, insc.Count, argumentsVariable, bindingType, out iaVariable, out valueField);
 
-            WriteCallAdvice(mwc, OnInvokeAdviceName, aspectType, il, aspectField, iaVariable);
+            WriteCallAdvice(mwc, method, insc.Count, OnInvokeAdviceName, aspectType, aspectField, iaVariable);
             
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(mwc, method, il, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);
 
             if (valueField != null)
             {
-                il.Emit(OpCodes.Ldloc, iaVariable);
-                il.Emit(OpCodes.Ldfld, valueField);
+                insc.Add(Ins.Create(OpCodes.Ldloc, iaVariable));
+                insc.Add(Ins.Create(OpCodes.Ldfld, valueField));
             }
-            il.Emit(OpCodes.Ret);
+            insc.Add(Ins.Create(OpCodes.Ret));
 
             // Fix labels and optimize
-            
-            il.Body.OptimizeMacros();
-            il.Body.RemoveNops();
+
+            method.Body.OptimizeMacros();
+            method.Body.RemoveNops();
         }
 
         /// <summary>
@@ -81,7 +82,7 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static void WriteMiaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
-            ILProcessor il,
+            int offset,
             VariableDefinition argumentsVariable,
             TypeDefinition bindingType,
             out VariableDefinition miaVariable,
@@ -115,43 +116,36 @@ namespace Ramp.Aspects.Fody.Weavers
                 returnValueField = mwc.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
-            miaVariable = il.Body.AddVariableDefinition(miaType);
+            miaVariable = method.Body.AddVariableDefinition(miaType);
+            var insc = new Collection<Ins>();
 
             if (method.IsStatic)
             {
-                il.Emit(OpCodes.Ldnull);
+                insc.Add(Ins.Create(OpCodes.Ldnull));
             }
             else
             {
-                il.Emit(OpCodes.Ldarg_0);
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
                 if (method.DeclaringType.IsValueType)
                 {
-                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
-                    il.Emit(OpCodes.Box, method.DeclaringType);
+                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
+                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
                 }
             }
 
-            if (argumentsVariable == null)
-            {
-                il.Emit(OpCodes.Ldnull);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldloc, argumentsVariable);
-            }
+            insc.Add(argumentsVariable == null
+                ? Ins.Create(OpCodes.Ldnull)
+                : Ins.Create(OpCodes.Ldloc, argumentsVariable));
 
             // the method binding
-            if (bindingType == null)
-            {
-                il.Emit(OpCodes.Ldnull);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldsfld, bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName));
-            }
+            insc.Add(bindingType == null
+                ? Ins.Create(OpCodes.Ldnull)
+                : Ins.Create(OpCodes.Ldsfld, bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName)));
 
-            il.Emit(OpCodes.Newobj, constructor);
-            il.Emit(OpCodes.Stloc, miaVariable);
+            insc.Add(Ins.Create(OpCodes.Newobj, constructor));
+            insc.Add(Ins.Create(OpCodes.Stloc, miaVariable));
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
 
         protected static void CreateMethodBindingClass(
@@ -182,6 +176,8 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 DeclaringType = method.DeclaringType
             };
+
+            AddCompilerGeneratedAttribute(mwc, bindingTypeDef);
 
             method.DeclaringType.NestedTypes.Add(bindingTypeDef);
 

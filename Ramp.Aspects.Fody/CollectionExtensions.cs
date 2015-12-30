@@ -9,5 +9,33 @@ namespace Ramp.Aspects.Fody
             foreach (T item in source)
                 collection.Add(item);
         }
+
+        internal static void InsertRange<T>(this IList<T> collection, int index, IEnumerable<T> source)
+        {
+            if (index == collection.Count)
+            {
+                foreach (T item in source)
+                    collection.Add(item);
+            }
+            else
+            {
+                foreach (T item in source)
+                    collection.Insert(index++, item);
+            }
+        }
+
+        internal static void InsertRange<T>(this IList<T> collection, int index, params T[] source)
+        {
+            if (index == collection.Count)
+            {
+                foreach (T item in source)
+                    collection.Add(item);
+            }
+            else
+            {
+                foreach (T item in source)
+                    collection.Insert(index++, item);
+            }
+        }
     }
 }

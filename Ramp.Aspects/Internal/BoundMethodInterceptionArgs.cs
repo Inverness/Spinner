@@ -1,6 +1,8 @@
-﻿
+﻿using System.Diagnostics;
+
 namespace Ramp.Aspects.Internal
 {
+    [DebuggerStepThrough]
     public sealed class BoundMethodInterceptionArgs : MethodInterceptionArgs
     {
         private readonly MethodBinding _binding;

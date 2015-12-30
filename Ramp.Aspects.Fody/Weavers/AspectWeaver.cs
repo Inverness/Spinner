@@ -4,7 +4,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
-using Ramp.Aspects.Fody.Utilities;
+using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
@@ -72,7 +72,7 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static void WriteArgumentContainerInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
-            ILProcessor il,
+            int offset,
             out VariableDefinition argumentsVariable)
         {
             int effectiveParameterCount = GetEffectiveParameterCount(method);
@@ -87,13 +87,14 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
-            argumentsVariable = il.Body.AddVariableDefinition("arguments", argumentsType);
+            argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
 
             MethodDefinition constructorDef = mwc.Library.Arguments_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
-            il.Emit(OpCodes.Newobj, constructor);
-            il.Emit(OpCodes.Stloc, argumentsVariable);
+            var insc = method.Body.Instructions;
+            insc.Insert(offset, Ins.Create(OpCodes.Newobj, constructor));
+            insc.Insert(offset + 1, Ins.Create(OpCodes.Stloc, argumentsVariable));
         }
 
         protected static void GetArgumentContainerInfo(
@@ -144,7 +145,7 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static void WriteCopyArgumentsToContainer(
             ModuleWeavingContext rc,
             MethodDefinition method,
-            ILProcessor il,
+            int offset,
             VariableDefinition argumentsVariable,
             bool excludeOut)
         {
@@ -152,26 +153,28 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldReference[] argumentContainerFields;
             GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
 
+            var insc = new Collection<Ins>();
+
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
                 if (method.Parameters[i].IsOut && excludeOut)
                     continue;
 
                 TypeReference parameterType = method.Parameters[i].ParameterType;
-                int argumentIndex = method.IsStatic ? i : i + 1;
 
-                il.Emit(OpCodes.Ldloc, argumentsVariable);
-                il.Emit(OpCodes.Ldarg, argumentIndex);
+                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVariable));
+                insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters[i]));
                 if (parameterType.IsByReference)
                 {
-                    if (parameterType.GetElementType().IsValueType)
-                        il.Emit(OpCodes.Ldobj, parameterType.GetElementType());
-                    else
-                        il.Emit(OpCodes.Ldind_Ref);
+                    insc.Add(parameterType.GetElementType().IsValueType
+                        ? Ins.Create(OpCodes.Ldobj, parameterType.GetElementType())
+                        : Ins.Create(OpCodes.Ldind_Ref));
                 }
 
-                il.Emit(OpCodes.Stfld, argumentContainerFields[i]);
+                insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
             }
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
 
         /// <summary>
@@ -180,7 +183,7 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static void WriteCopyArgumentsFromContainer(
             ModuleWeavingContext rc,
             MethodDefinition method,
-            ILProcessor il,
+            int offset,
             VariableDefinition argumentsVariable,
             bool includeNormal,
             bool includeRef)
@@ -189,79 +192,79 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldReference[] argumentContainerFields;
             GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
 
+            var insc = new Collection<Ins>();
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
                 TypeReference parameterType = method.Parameters[i].ParameterType;
-
-                int argumentIndex = method.IsStatic ? i : i + 1;
 
                 if (parameterType.IsByReference)
                 {
                     if (!includeRef)
                         continue;
                     
-                    il.Emit(OpCodes.Ldarg, argumentIndex);
-                    il.Emit(OpCodes.Ldloc, argumentsVariable);
-                    il.Emit(OpCodes.Ldfld, argumentContainerFields[i]);
-                    if (parameterType.GetElementType().IsValueType)
-                        il.Emit(OpCodes.Stobj, parameterType.GetElementType());
-                    else
-                        il.Emit(OpCodes.Stind_Ref);
+                    insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters[i]));
+                    insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVariable));
+                    insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
+                    insc.Add(parameterType.GetElementType().IsValueType
+                        ? Ins.Create(OpCodes.Stobj, parameterType.GetElementType())
+                        : Ins.Create(OpCodes.Stind_Ref));
                 }
                 else
                 {
                     if (!includeNormal)
                         continue;
 
-                    il.Emit(OpCodes.Ldloc, argumentsVariable);
-                    il.Emit(OpCodes.Ldfld, argumentContainerFields[i]);
-                    il.Emit(OpCodes.Starg, argumentIndex);
+                    insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVariable));
+                    insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
+                    insc.Add(Ins.Create(OpCodes.Starg, method.Parameters[i]));
                 }
             }
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
 
-        /// <summary>
-        /// Initializes out arugments to their default values.
-        /// </summary>
-        protected static void WriteOutArgumentInit(MethodDefinition method, ILProcessor il)
-        {
-            for (int i = 0; i < GetEffectiveParameterCount(method); i++)
-            {
-                if (!method.Parameters[i].IsOut)
-                    continue;
+        ///// <summary>
+        ///// Initializes out arugments to their default values.
+        ///// </summary>
+        //protected static void WriteOutArgumentInit(MethodDefinition method, ILProcessor il)
+        //{
+        //    for (int i = 0; i < GetEffectiveParameterCount(method); i++)
+        //    {
+        //        if (!method.Parameters[i].IsOut)
+        //            continue;
 
-                TypeReference parameterType = method.Parameters[i].ParameterType;
-                int argumentIndex = method.IsStatic ? i : i + 1;
+        //        TypeReference parameterType = method.Parameters[i].ParameterType;
+        //        int argumentIndex = method.IsStatic ? i : i + 1;
 
-                if (parameterType.IsByReference)
-                {
-                    il.Emit(OpCodes.Ldarg, argumentIndex);
-                    if (parameterType.GetElementType().IsValueType)
-                    {
-                        il.Emit(OpCodes.Initobj, parameterType.GetElementType());
-                    }
-                    else
-                    {
-                        il.Emit(OpCodes.Ldnull);
-                        il.Emit(OpCodes.Stind_Ref);
-                    }
-                }
-                else
-                {
-                    if (parameterType.IsValueType)
-                    {
-                        il.Emit(OpCodes.Ldarga, argumentIndex);
-                        il.Emit(OpCodes.Initobj, parameterType);
-                    }
-                    else
-                    {
-                        il.Emit(OpCodes.Ldnull);
-                        il.Emit(OpCodes.Starg, argumentIndex);
-                    }
+        //        if (parameterType.IsByReference)
+        //        {
+        //            il.Emit(OpCodes.Ldarg, argumentIndex);
+        //            if (parameterType.GetElementType().IsValueType)
+        //            {
+        //                il.Emit(OpCodes.Initobj, parameterType.GetElementType());
+        //            }
+        //            else
+        //            {
+        //                il.Emit(OpCodes.Ldnull);
+        //                il.Emit(OpCodes.Stind_Ref);
+        //            }
+        //        }
+        //        else
+        //        {
+        //            if (parameterType.IsValueType)
+        //            {
+        //                il.Emit(OpCodes.Ldarga, argumentIndex);
+        //                il.Emit(OpCodes.Initobj, parameterType);
+        //            }
+        //            else
+        //            {
+        //                il.Emit(OpCodes.Ldnull);
+        //                il.Emit(OpCodes.Starg, argumentIndex);
+        //            }
 
-                }
-            }
-        }
+        //        }
+        //    }
+        //}
 
         /// <summary>
         /// Write aspect initialization.
@@ -269,53 +272,71 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static void WriteAspectInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
+            int offset,
             TypeDefinition aspectType,
-            FieldReference aspectCacheField,
-            ILProcessor il)
+            FieldReference aspectCacheField)
         {
             // NOTE: Aspect type can't be generic since its declared by an attribute
             MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
             MethodReference ctor = mwc.SafeImport(ctorDef);
-            
-            Instruction jtNotNull = CreateNop();
-            il.Emit(OpCodes.Ldsfld, aspectCacheField);
-            il.Emit(OpCodes.Brtrue, jtNotNull);
-            il.Emit(OpCodes.Newobj, ctor);
-            il.Emit(OpCodes.Stsfld, aspectCacheField);
-            il.Append(jtNotNull);
+
+            Ins jtNotNull = CreateNop();
+
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Ldsfld, aspectCacheField),
+                Ins.Create(OpCodes.Brtrue, jtNotNull),
+                Ins.Create(OpCodes.Newobj, ctor),
+                Ins.Create(OpCodes.Stsfld, aspectCacheField),
+                jtNotNull
+            };
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
 
         protected static void WriteCallAdvice(
             ModuleWeavingContext mwc,
+            MethodDefinition method,
+            int offset,
             string name,
             TypeDefinition aspectType,
-            ILProcessor il,
             FieldReference aspectField,
             VariableDefinition iaVariable)
         {
             MethodDefinition adviceDef = aspectType.Methods.Single(m => m.Name == name);
             MethodReference advice = mwc.SafeImport(adviceDef);
 
-            il.Emit(OpCodes.Ldsfld, aspectField);
-            il.Emit(OpCodes.Ldloc, iaVariable);
-            il.Emit(OpCodes.Callvirt, advice);
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Ldsfld, aspectField),
+                Ins.Create(OpCodes.Ldloc, iaVariable),
+                Ins.Create(OpCodes.Callvirt, advice)
+            };
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
 
         /// <summary>
         /// 
         /// </summary>
-        protected static void WriteBindingInit(ILProcessor il, TypeDefinition bindingType)
+        protected static void WriteBindingInit(MethodDefinition method, int offset, TypeDefinition bindingType)
         {
             // Initialize the binding instance
             FieldReference instanceField = bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName);
             MethodReference constructor = bindingType.Methods.Single(f => f.IsConstructor && !f.IsStatic);
 
-            Instruction notNullLabel = CreateNop();
-            il.Emit(OpCodes.Ldsfld, instanceField);
-            il.Emit(OpCodes.Brtrue, notNullLabel);
-            il.Emit(OpCodes.Newobj, constructor);
-            il.Emit(OpCodes.Stsfld, instanceField);
-            il.Append(notNullLabel);
+            Ins notNullLabel = CreateNop();
+
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Ldsfld, instanceField),
+                Ins.Create(OpCodes.Brtrue, notNullLabel),
+                Ins.Create(OpCodes.Newobj, constructor),
+                Ins.Create(OpCodes.Stsfld, instanceField),
+                notNullLabel
+            };
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
 
         protected static void CreateAspectCacheField(
@@ -329,6 +350,7 @@ namespace Ramp.Aspects.Fody.Weavers
 
             // Find existing so property aspects do not generate two cache fields
             var aspectFieldDef = new FieldDefinition(cacheFieldName, fattrs, mwc.SafeImport(aspectType));
+            AddCompilerGeneratedAttribute(mwc, aspectFieldDef);
             declaringType.Fields.Add(aspectFieldDef);
 
             aspectCacheField = aspectFieldDef;
@@ -365,17 +387,27 @@ namespace Ramp.Aspects.Fody.Weavers
 
             var method = new MethodDefinition(".ctor", attrs, mwc.Module.TypeSystem.Void);
 
-            Collection<Instruction> i = method.Body.Instructions;
-            i.Add(Instruction.Create(OpCodes.Ldarg_0));
-            i.Add(Instruction.Create(OpCodes.Call, baseCtor));
-            i.Add(Instruction.Create(OpCodes.Ret));
+            Collection<Ins> i = method.Body.Instructions;
+            i.Add(Ins.Create(OpCodes.Ldarg_0));
+            i.Add(Ins.Create(OpCodes.Call, baseCtor));
+            i.Add(Ins.Create(OpCodes.Ret));
 
             return method;
         }
 
-        protected static Instruction CreateNop()
+        protected static Ins CreateNop()
         {
-            return Instruction.Create(OpCodes.Nop);
+            return Ins.Create(OpCodes.Nop);
+        }
+
+        protected static void AddCompilerGeneratedAttribute(ModuleWeavingContext mwc, ICustomAttributeProvider definition)
+        {
+            if (definition.CustomAttributes.Any(a => a.AttributeType.IsSame(mwc.Framework.CompilerGeneratedAttribute)))
+                return;
+
+            MethodReference ctor = mwc.SafeImport(mwc.Framework.CompilerGeneratedAttribute_ctor);
+            
+            definition.CustomAttributes.Add(new CustomAttribute(ctor));
         }
     }
 }

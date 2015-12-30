@@ -127,6 +127,89 @@ namespace Ramp.Aspects.Fody.TestTarget
             return b - a;
         }
 
+        [TestBoundary]
+        internal async Task<int> TestAsyncMethodCompareSimple(int a, int b, string c)
+        {
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(3);
+            Console.WriteLine("Call OnResume");
+
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(4);
+            Console.WriteLine("Call OnResume");
+
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(5);
+            Console.WriteLine("Call OnResume");
+
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(6);
+            Console.WriteLine("Call OnResume");
+
+            return a;
+        }
+
+        [TestBoundary]
+        internal async Task TestAsyncMethodCompareSimpleVoid(int a, int b, string c)
+        {
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(3);
+            Console.WriteLine("Call OnResume");
+
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(4);
+            Console.WriteLine("Call OnResume");
+
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(5);
+            Console.WriteLine("Call OnResume");
+
+            Console.WriteLine("Call OnYield");
+            a += await GetNum(6);
+            Console.WriteLine("Call OnResume");
+        }
+
+        internal Task<int> GetNum(int a)
+        {
+            return Task.FromResult(a + 1);
+        }
+
+        internal async Task<int> TestAsyncMethodCompare(int a, int b, string c)
+        {
+            Console.WriteLine("Call OnEntry");
+            try
+            {
+                Console.WriteLine("Call OnYield");
+                await Task.Delay(3);
+                Console.WriteLine("Call OnResume");
+
+                Console.WriteLine("Call OnYield");
+                await Task.Delay(4);
+                Console.WriteLine("Call OnResume");
+
+                Console.WriteLine("Call OnYield");
+                await Task.Delay(5);
+                Console.WriteLine("Call OnResume");
+
+                Console.WriteLine("Call OnYield");
+                await Task.Delay(6);
+                Console.WriteLine("Call OnResume");
+
+                int returnValue = 3;
+                Console.WriteLine("Call OnSuccess");
+                return returnValue;
+            }
+            catch (Exception ex) when (FilterFunc(a, ex))
+            {
+                Console.WriteLine("Call OnException");
+                throw;
+            }
+            finally
+            {
+                Console.WriteLine("Call OnExit");
+            }
+        }
+
         internal IEnumerable<int> TestGeneratorMethod(int a, int b, string c)
         {
             yield return a;

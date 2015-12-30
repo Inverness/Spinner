@@ -3,7 +3,8 @@ using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Ramp.Aspects.Fody.Utilities;
+using Mono.Collections.Generic;
+using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
@@ -61,49 +62,48 @@ namespace Ramp.Aspects.Fody.Weavers
             method.Body.Variables.Clear();
             method.Body.ExceptionHandlers.Clear();
 
-            ILProcessor il = method.Body.GetILProcessor();
+            Collection<Ins> insc = method.Body.Instructions;
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(mwc, method, il, out argumentsVariable);
+            WriteArgumentContainerInit(mwc, method, insc.Count, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(mwc, method, il, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(mwc, method, insc.Count, argumentsVariable, true);
             
-            WriteAspectInit(mwc, method, aspectType, aspectField, il);
+            WriteAspectInit(mwc, method, insc.Count, aspectType, aspectField);
 
-            WriteBindingInit(il, bindingType);
+            WriteBindingInit(method, insc.Count, bindingType);
             
             FieldReference valueField;
             VariableDefinition iaVariable;
-            WritePiaInit(mwc, method, property, il, argumentsVariable, bindingType, out iaVariable, out valueField);
+            WritePiaInit(mwc, method, insc.Count, property, argumentsVariable, bindingType, out iaVariable, out valueField);
             
             if (method.IsSetter)
             {
                 Debug.Assert(method.Parameters.Count >= 1);
-                int last = method.Parameters.Count - 1 + (method.IsStatic ? 0 : 1);
 
-                il.Emit(OpCodes.Ldloc, iaVariable);
-                il.Emit(OpCodes.Ldarg, last);
-                il.Emit(OpCodes.Stfld, valueField);
+                insc.Add(Ins.Create(OpCodes.Ldloc, iaVariable));
+                insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters.Last()));
+                insc.Add(Ins.Create(OpCodes.Stfld, valueField));
             }
 
             string adviceName = method.IsGetter ? OnGetValueAdviceName : OnSetValueAdviceName;
-            WriteCallAdvice(mwc, adviceName, aspectType, il, aspectField, iaVariable);
+            WriteCallAdvice(mwc, method, insc.Count, adviceName, aspectType, aspectField, iaVariable);
 
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(mwc, method, il, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);
             
             if (method.IsGetter)
             {
-                il.Emit(OpCodes.Ldloc, iaVariable);
-                il.Emit(OpCodes.Ldfld, valueField);
+                insc.Add(Ins.Create(OpCodes.Ldloc, iaVariable));
+                insc.Add(Ins.Create(OpCodes.Ldfld, valueField));
             }
 
-            il.Emit(OpCodes.Ret);
+            insc.Add(Ins.Create(OpCodes.Ret));
 
             // Fix labels and optimize
             
-            il.Body.OptimizeMacros();
-            il.Body.RemoveNops();
+            method.Body.OptimizeMacros();
+            method.Body.RemoveNops();
         }
 
         protected static void CreatePropertyBindingClass(
@@ -126,6 +126,8 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 DeclaringType = property.DeclaringType
             };
+
+            AddCompilerGeneratedAttribute(mwc, bindingTypeDef);
 
             property.DeclaringType.NestedTypes.Add(bindingTypeDef);
 
@@ -314,8 +316,8 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static void WritePiaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
+            int offset,
             PropertyDefinition property,
-            ILProcessor il,
             VariableDefinition argumentsVariable,
             TypeDefinition bindingType,
             out VariableDefinition iaVariable,
@@ -331,35 +333,34 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldDefinition valueFieldDef = mwc.Library.BoundPropertyInterceptionArgsT1_TypedValue;
             valueField = mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
-            iaVariable = il.Body.AddVariableDefinition(piaType);
+            iaVariable = method.Body.AddVariableDefinition(piaType);
+
+            var insc = new Collection<Ins>();
 
             if (method.IsStatic)
             {
-                il.Emit(OpCodes.Ldnull);
+                insc.Add(Ins.Create(OpCodes.Ldnull));
             }
             else
             {
-                il.Emit(OpCodes.Ldarg_0);
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
                 if (method.DeclaringType.IsValueType)
                 {
-                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
-                    il.Emit(OpCodes.Box, method.DeclaringType);
+                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
+                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
                 }
             }
 
-            if (argumentsVariable == null)
-            {
-                il.Emit(OpCodes.Ldnull);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldloc, argumentsVariable);
-            }
-            
-            il.Emit(OpCodes.Ldsfld, bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName));
+            insc.Add(argumentsVariable == null
+                ? Ins.Create(OpCodes.Ldnull)
+                : Ins.Create(OpCodes.Ldloc, argumentsVariable));
 
-            il.Emit(OpCodes.Newobj, constructor);
-            il.Emit(OpCodes.Stloc, iaVariable);
+            insc.Add(Ins.Create(OpCodes.Ldsfld, bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName)));
+
+            insc.Add(Ins.Create(OpCodes.Newobj, constructor));
+            insc.Add(Ins.Create(OpCodes.Stloc, iaVariable));
+
+            method.Body.Instructions.InsertRange(offset, insc);
         }
     }
 }
