@@ -39,8 +39,8 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldReference aspectField;
             CreateAspectCacheField(mwc, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
 
-            TypeDefinition stateMachineType;
-            StateMachineKind stateMachineKind = GetStateMachineKind(mwc, method, out stateMachineType);
+            MethodDefinition moveNextMethod;
+            StateMachineKind stateMachineKind = GetStateMachineInfo(mwc, method, out moveNextMethod);
             
             // Decide the effective return type
             TypeDefinition effectiveReturnType;
@@ -50,42 +50,67 @@ namespace Ramp.Aspects.Fody.Weavers
                     effectiveReturnType = method.ReturnType == mwc.Module.TypeSystem.Void
                         ? null
                         : method.ReturnType.Resolve();
+
+                    WeaveMethod(mwc,
+                                method,
+                                aspectType,
+                                aspectIndex,
+                                features,
+                                aspectField,
+                                effectiveReturnType);
+
+                    method.Body.OptimizeMacros();
+                    method.Body.RemoveNops();
+                    method.Body.UpdateOffsets();
                     break;
                 case StateMachineKind.Iterator:
-                    effectiveReturnType = null;
+                    WeaveIteratorMethod(mwc,
+                                        method,
+                                        aspectType,
+                                        aspectIndex,
+                                        features,
+                                        aspectField,
+                                        null,
+                                        moveNextMethod);
                     break;
                 case StateMachineKind.Async:
                     effectiveReturnType = method.ReturnType.IsGenericInstance
                         ? ((GenericInstanceType) method.ReturnType).GenericArguments.Single().Resolve()
                         : null;
+
+                    moveNextMethod.Body.SimplifyMacros();
+
+                    WeaveAsyncMethod(mwc,
+                                     method,
+                                     aspectType,
+                                     aspectIndex,
+                                     features,
+                                     aspectField,
+                                     effectiveReturnType,
+                                     moveNextMethod);
+
+                    //moveNextMethod.Body.RemoveNops();
+                    moveNextMethod.Body.OptimizeMacros();
+                    moveNextMethod.Body.UpdateOffsets();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+        }
 
-            if (stateMachineKind == StateMachineKind.Async)
-            {
-                int onEntryIndex;
-                int tryIndex;
-                int[] yieldIndices;
-                int[] resumeIndices;
+        protected static void WeaveMethod(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            TypeDefinition aspectType,
+            int aspectIndex,
+            Features features,
+            FieldReference aspectField,
+            TypeDefinition effectiveReturnType
+            )
 
-                MethodDefinition moveNext = stateMachineType.Methods.Single(m => m.Name == "MoveNext");
-
-                FindAsyncStateMachineInsertionPoints(method,
-                                                     moveNext,
-                                                     out onEntryIndex,
-                                                     out tryIndex,
-                                                     out yieldIndices,
-                                                     out resumeIndices);
-                return;
-            }
-            
-            if (stateMachineKind != StateMachineKind.None)
-                throw new NotImplementedException("state machines not yet supported");
-
-            var originalBody = new Collection<Ins>(method.Body.Instructions);
+        {
             var insc = method.Body.Instructions;
+            var originalInsc = new Collection<Ins>(insc);
             insc.Clear();
 
             VariableDefinition returnValueVar = null;
@@ -105,17 +130,83 @@ namespace Ramp.Aspects.Fody.Weavers
             WriteMeaInit(mwc, method, argumentsVar, insc.Count, out meaVar);
 
             // Write OnEntry call
-            WriteOnEntryCall(mwc, method, aspectType, features, returnValueVar, aspectField, meaVar, insc.Count);
+            WriteOnEntryCall(mwc, method, insc.Count, aspectType, features, returnValueVar, aspectField, meaVar);
 
             // Re-add original body
-            int tryStartIndex = method.Body.Instructions.Count;
-            method.Body.Instructions.AddRange(originalBody);
+            int tryStartIndex = insc.Count;
+            insc.AddRange(originalInsc);
 
             // Wrap the body, including the OnEntry() call, in an exception handler
             WriteExceptionHandler(mwc, method, aspectType, features, returnValueVar, aspectField, meaVar, insc.Count, tryStartIndex);
+        }
 
-            method.Body.OptimizeMacros();
-            method.Body.RemoveNops();
+        protected static void WeaveAsyncMethod(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            TypeDefinition aspectType,
+            int aspectIndex,
+            Features features,
+            FieldReference aspectField,
+            TypeDefinition effectiveReturnType,
+            MethodDefinition stateMachine
+            )
+        {
+            int onEntryIndex;
+            int tryIndex;
+            int[] yieldIndices;
+            int[] resumeIndices;
+            
+            FindAsyncStateMachineInsertionPoints(method,
+                                                 stateMachine,
+                                                 out onEntryIndex,
+                                                 out tryIndex,
+                                                 out yieldIndices,
+                                                 out resumeIndices);
+
+
+            VariableDefinition returnValueVar = null;
+            if (effectiveReturnType != null)
+                returnValueVar = method.Body.AddVariableDefinition(effectiveReturnType);
+
+            var insc = stateMachine.Body.Instructions;
+            int roffset = insc.Count - onEntryIndex;
+
+            WriteAspectInit(mwc, stateMachine, insc.Count - roffset, aspectType, aspectField);
+
+            VariableDefinition arguments = null;
+            if ((features & Features.GetArguments) != 0)
+            {
+                WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - roffset, out arguments);
+                WriteSmCopyArgumentsToContainer(mwc, method, stateMachine, insc.Count - roffset, arguments, true);
+            }
+
+            FieldDefinition mea;
+            WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - roffset, out mea);
+
+            // Write OnEntry call
+            WriteSmOnEntryCall(mwc,
+                               method,
+                               stateMachine,
+                               insc.Count - roffset,
+                               aspectType,
+                               features,
+                               returnValueVar,
+                               aspectField,
+                               mea);
+
+        }
+
+        protected static void WeaveIteratorMethod(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            TypeDefinition aspectType,
+            int aspectIndex,
+            Features features,
+            FieldReference aspectField,
+            TypeDefinition effectiveReturnType,
+            MethodDefinition moveNextMethod
+            )
+        {
         }
 
         protected static void FindAsyncStateMachineInsertionPoints(
@@ -229,7 +320,10 @@ namespace Ramp.Aspects.Fody.Weavers
 
         protected static void WriteMeaInit(
             ModuleWeavingContext mwc,
-            MethodDefinition method, VariableDefinition argumentsVar, int offset, out VariableDefinition meaVar)
+            MethodDefinition method,
+            VariableDefinition argumentsVar,
+            int offset,
+            out VariableDefinition meaVar)
         {
             TypeReference meaType = mwc.SafeImport(mwc.Library.MethodExecutionArgs);
             MethodReference meaCtor = mwc.SafeImport(mwc.Library.MethodExecutionArgs_ctor);
@@ -264,10 +358,69 @@ namespace Ramp.Aspects.Fody.Weavers
             insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
             insc.Add(Ins.Create(OpCodes.Stloc, meaVar));
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteOnEntryCall(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspectType, Features features, VariableDefinition returnValueHolder, FieldReference aspectField, VariableDefinition meaVar, int offset)
+        protected static void WriteSmMeaInit(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            MethodDefinition stateMachine,
+            VariableDefinition arguments,
+            int offset,
+            out FieldDefinition mea)
+        {
+            TypeReference meaType = mwc.SafeImport(mwc.Library.MethodExecutionArgs);
+            MethodReference meaCtor = mwc.SafeImport(mwc.Library.MethodExecutionArgs_ctor);
+
+            mea = new FieldDefinition("<>z__mea", FieldAttributes.Private, meaType);
+            stateMachine.DeclaringType.Fields.Add(mea);
+
+            FieldReference thisField = stateMachine.DeclaringType.Fields.First(f => f.Name == StateMachineThisFieldName);
+
+            var insc = new Collection<Ins>();
+
+            insc.Add(Ins.Create(OpCodes.Ldarg_0)); // for stfld
+
+            if (method.IsStatic)
+            {
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+            }
+            else
+            {
+                insc.Add(Ins.Create(OpCodes.Dup));
+                insc.Add(Ins.Create(OpCodes.Ldfld, thisField));
+                if (method.DeclaringType.IsValueType)
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
+                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
+                }
+            }
+
+            if (arguments == null)
+            {
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+            }
+            else
+            {
+                insc.Add(Ins.Create(OpCodes.Ldloc, arguments));
+            }
+
+            insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
+
+            insc.Add(Ins.Create(OpCodes.Stfld, mea));
+
+            stateMachine.Body.InsertInstructions(offset, insc);
+        }
+
+        protected static void WriteOnEntryCall(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            int offset,
+            TypeDefinition aspectType,
+            Features features,
+            VariableDefinition returnValueHolder,
+            FieldReference aspectField,
+            VariableDefinition meaVar)
         {
             if ((features & Features.OnEntry) == 0)
                 return;
@@ -282,10 +435,47 @@ namespace Ramp.Aspects.Fody.Weavers
                 Ins.Create(OpCodes.Callvirt, onEntry)
             };
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteExceptionHandler(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspectType, Features features, VariableDefinition returnValueHolder, FieldReference aspectField, VariableDefinition meaVar, int offset, int tryStartIndex)
+        protected static void WriteSmOnEntryCall(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            MethodDefinition stateMachine,
+            int offset,
+            TypeDefinition aspectType,
+            Features features,
+            VariableDefinition returnValueHolder,
+            FieldReference aspectField,
+            FieldReference meaVar)
+        {
+            if ((features & Features.OnEntry) == 0)
+                return;
+
+            MethodDefinition onEntryDef = aspectType.GetInheritedMethods().First(m => m.Name == OnEntryAdviceName);
+            MethodReference onEntry = mwc.SafeImport(onEntryDef);
+
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Ldsfld, aspectField),
+                Ins.Create(OpCodes.Ldarg_0),
+                Ins.Create(OpCodes.Ldfld, meaVar),
+                Ins.Create(OpCodes.Callvirt, onEntry)
+            };
+
+            stateMachine.Body.InsertInstructions(offset, insc);
+        }
+
+        protected static void WriteExceptionHandler(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            TypeDefinition aspectType,
+            Features features,
+            VariableDefinition returnValueHolder,
+            FieldReference aspectField,
+            VariableDefinition meaVar,
+            int offset,
+            int tryStartIndex)
         {
             bool withException = (features & Features.OnException) != 0;
             bool withExit = (features & Features.OnExit) != 0;
@@ -296,30 +486,32 @@ namespace Ramp.Aspects.Fody.Weavers
 
             Ins labelNewReturn = CreateNop();
             Ins labelSuccess = CreateNop();
-            Collection<Ins> body = method.Body.Instructions;
+            Collection<Ins> bodyInsc = method.Body.Instructions;
 
             // Replace returns with a break or leave 
-            int last = body.Count - 1;
-            for (int i = tryStartIndex; i < body.Count; i++)
+            int last = bodyInsc.Count - 1;
+            for (int i = tryStartIndex; i < bodyInsc.Count; i++)
             {
-                Ins ins = body[i];
+                Ins ins = bodyInsc[i];
 
                 if (ins.OpCode == OpCodes.Ret)
                 {
-                    var insNewBreak = withSuccess ? Ins.Create(OpCodes.Br, labelSuccess) : Ins.Create(OpCodes.Leave, labelNewReturn);
+                    var insNewBreak = withSuccess
+                        ? Ins.Create(OpCodes.Br, labelSuccess)
+                        : Ins.Create(OpCodes.Leave, labelNewReturn);
 
                     if (returnValueHolder != null)
                     {
                         var insStoreReturnValue = Ins.Create(OpCodes.Stloc, returnValueHolder);
 
-                        body.ReplaceOperands(ins, insStoreReturnValue);
-                        body[i] = insStoreReturnValue;
+                        method.Body.ReplaceBranchTargets(ins, insStoreReturnValue);
+                        bodyInsc[i] = insStoreReturnValue;
 
                         // Do not write a jump to the very next instruction
                         if (withSuccess && i == last)
                             break;
 
-                        body.Insert(++i, insNewBreak);
+                        bodyInsc.Insert(++i, insNewBreak);
                         last++;
                     }
                     else
@@ -329,13 +521,13 @@ namespace Ramp.Aspects.Fody.Weavers
                             // Replace with Nop since there is not another operand to replace it with
                             var insNop = CreateNop();
 
-                            body.ReplaceOperands(ins, insNop);
-                            body[i] = insNop;
+                            method.Body.ReplaceBranchTargets(ins, insNop);
+                            bodyInsc[i] = insNop;
                         }
                         else
                         {
-                            body.ReplaceOperands(ins, insNewBreak);
-                            body[i] = insNewBreak;
+                            method.Body.ReplaceBranchTargets(ins, insNewBreak);
+                            bodyInsc[i] = insNewBreak;
                         }
                     }
                 }
@@ -347,7 +539,8 @@ namespace Ramp.Aspects.Fody.Weavers
 
             if (withSuccess)
             {
-                MethodDefinition onSuccessDef = aspectType.GetInheritedMethods().First(m => m.Name == OnSuccessAdviceName);
+                MethodDefinition onSuccessDef =
+                    aspectType.GetInheritedMethods().First(m => m.Name == OnSuccessAdviceName);
                 MethodReference onSuccess = mwc.SafeImport(onSuccessDef);
 
                 insc.Add(labelSuccess);
@@ -372,9 +565,11 @@ namespace Ramp.Aspects.Fody.Weavers
 
             if (withException)
             {
-                MethodDefinition filterExceptionDef = aspectType.GetInheritedMethods().First(m => m.Name == FilterExceptionAdviceName);
+                MethodDefinition filterExceptionDef =
+                    aspectType.GetInheritedMethods().First(m => m.Name == FilterExceptionAdviceName);
                 MethodReference filterExcetion = mwc.SafeImport(filterExceptionDef);
-                MethodDefinition onExceptionDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExceptionAdviceName);
+                MethodDefinition onExceptionDef =
+                    aspectType.GetInheritedMethods().First(m => m.Name == OnExceptionAdviceName);
                 MethodReference onException = mwc.SafeImport(onExceptionDef);
                 exceptionType = mwc.SafeImport(mwc.Framework.Exception);
 
@@ -494,8 +689,8 @@ namespace Ramp.Aspects.Fody.Weavers
             if (returnValueHolder != null)
                 insc.Add(Ins.Create(OpCodes.Ldloc, returnValueHolder));
             insc.Add(Ins.Create(OpCodes.Ret));
-
-            method.Body.Instructions.InsertRange(offset, insc);
+            
+            method.Body.InsertInstructions(offset, insc);
 
             if (withException)
             {
@@ -503,11 +698,11 @@ namespace Ramp.Aspects.Fody.Weavers
 
                 var catchHandler = new ExceptionHandler(ExceptionHandlerType.Filter)
                 {
-                    TryStart = body[tryStartIndex],
-                    TryEnd = body[offset + ehTryCatchEnd],
-                    FilterStart = body[offset + ehFilterStart],
-                    HandlerStart = body[offset + ehCatchStart],
-                    HandlerEnd = body[offset + ehCatchEnd],
+                    TryStart = bodyInsc[tryStartIndex],
+                    TryEnd = bodyInsc[offset + ehTryCatchEnd],
+                    FilterStart = bodyInsc[offset + ehFilterStart],
+                    HandlerStart = bodyInsc[offset + ehCatchStart],
+                    HandlerEnd = bodyInsc[offset + ehCatchEnd],
                     CatchType = exceptionType
                 };
 
@@ -518,10 +713,10 @@ namespace Ramp.Aspects.Fody.Weavers
             {
                 var finallyHandler = new ExceptionHandler(ExceptionHandlerType.Finally)
                 {
-                    TryStart = body[tryStartIndex],
-                    TryEnd = body[offset + ehTryFinallyEnd],
-                    HandlerStart = body[offset + ehFinallyStart],
-                    HandlerEnd = body[offset + ehFinallyEnd]
+                    TryStart = bodyInsc[tryStartIndex],
+                    TryEnd = bodyInsc[offset + ehTryFinallyEnd],
+                    HandlerStart = bodyInsc[offset + ehFinallyStart],
+                    HandlerEnd = bodyInsc[offset + ehFinallyEnd]
                 };
 
                 method.Body.ExceptionHandlers.Add(finallyHandler);
@@ -531,27 +726,35 @@ namespace Ramp.Aspects.Fody.Weavers
         /// <summary>
         /// Discover whether a method is an async state machine creator and the nested type that implements it.
         /// </summary>
-        protected static StateMachineKind GetStateMachineKind(ModuleWeavingContext mwc, MethodDefinition method, out TypeDefinition type)
+        protected static StateMachineKind GetStateMachineInfo(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            out MethodDefinition moveNextMethod)
         {
-            TypeDefinition asmType = mwc.Framework.AsyncStateMachineAttribute;
-            TypeDefinition ismType = mwc.Framework.IteratorStateMachineAttribute;
-
-            foreach (CustomAttribute a in method.CustomAttributes)
+            if (method.HasCustomAttributes)
             {
-                TypeReference atype = a.AttributeType;
-                if (atype.Name == asmType.Name && atype.Namespace == asmType.Namespace)
+                TypeDefinition asmType = mwc.Framework.AsyncStateMachineAttribute;
+                TypeDefinition ismType = mwc.Framework.IteratorStateMachineAttribute;
+
+                foreach (CustomAttribute a in method.CustomAttributes)
                 {
-                    type = (TypeDefinition) a.ConstructorArguments.First().Value;
-                    return StateMachineKind.Async;
-                }
-                if (atype.Name == ismType.Name && atype.Namespace == ismType.Namespace)
-                {
-                    type = (TypeDefinition) a.ConstructorArguments.First().Value;
-                    return StateMachineKind.Iterator;
+                    TypeReference atype = a.AttributeType;
+                    if (atype.Name == asmType.Name && atype.Namespace == asmType.Namespace)
+                    {
+                        var type = (TypeDefinition) a.ConstructorArguments.First().Value;
+                        moveNextMethod = type.Methods.Single(m => m.Name == "MoveNext");
+                        return StateMachineKind.Async;
+                    }
+                    if (atype.Name == ismType.Name && atype.Namespace == ismType.Namespace)
+                    {
+                        var type = (TypeDefinition) a.ConstructorArguments.First().Value;
+                        moveNextMethod = type.Methods.Single(m => m.Name == "MoveNext");
+                        return StateMachineKind.Iterator;
+                    }
                 }
             }
 
-            type = null;
+            moveNextMethod = null;
             return StateMachineKind.None;
         }
 

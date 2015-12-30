@@ -63,16 +63,86 @@ namespace Ramp.Aspects.Fody
         }
 
         /// <summary>
-        /// Replaces all occurances of an instruction as an operand.
+        /// Replaces all occurances of an instruction as an operand and in exception handlers.
         /// </summary>
         /// <param name="self"></param>
         /// <param name="oldValue"></param>
         /// <param name="newValue"></param>
-        internal static void ReplaceOperands(this Collection<Instruction> self, Instruction oldValue, Instruction newValue)
+        internal static void ReplaceBranchTargets(this MethodBody self, Instruction oldValue, Instruction newValue)
         {
-            foreach (Instruction instruction in self)
-                if (ReferenceEquals(instruction.Operand, oldValue))
-                    instruction.Operand = newValue;
+            foreach (Instruction ins in self.Instructions)
+            {
+                OperandType ot = ins.OpCode.OperandType;
+                if (ot == OperandType.InlineBrTarget || ot == OperandType.ShortInlineBrTarget)
+                {
+                    if (ReferenceEquals(ins.Operand, oldValue))
+                        ins.Operand = newValue;
+                }
+                else if (ot == OperandType.InlineSwitch)
+                {
+                    var operand = (Instruction[]) ins.Operand;
+                    for (int i = 0; i < operand.Length; i++)
+                        if (ReferenceEquals(operand[i], oldValue))
+                            operand[i] = newValue;
+                }
+            }
+
+            if (!self.HasExceptionHandlers)
+                return;
+
+            // Update exception handlers since they point to instructions
+
+            foreach (ExceptionHandler eh in self.ExceptionHandlers)
+            {
+                if (eh.TryStart == oldValue)
+                    eh.TryStart = newValue;
+                if (eh.TryEnd == oldValue)
+                    eh.TryEnd = newValue;
+                if (eh.HandlerStart == oldValue)
+                    eh.HandlerStart = newValue;
+                if (eh.HandlerEnd == oldValue)
+                    eh.HandlerEnd = newValue;
+                if (eh.FilterStart == oldValue)
+                    eh.FilterStart = newValue;
+            }
+        }
+
+        internal static void UpdateOffsets(this MethodBody self)
+        {
+            int offset = 0;
+            foreach (Instruction ins in self.Instructions)
+            {
+                ins.Offset = offset;
+                offset += ins.GetSize();
+            }
+        }
+
+        internal static void InsertInstructions(this MethodBody self, int index, params Instruction[] instructions)
+        {
+            InsertInstructions(self, index, (IEnumerable<Instruction>) instructions);
+        }
+
+        /// <summary>
+        /// Inserts instructions while fixing branch targets for the insertion index
+        /// </summary>
+        internal static void InsertInstructions(this MethodBody self, int index, IEnumerable<Instruction> instructions)
+        {
+            Collection<Instruction> insc = self.Instructions;
+
+            if (index == insc.Count)
+            {
+                insc.AddRange(instructions);
+            }
+            else
+            {
+                Instruction oldIns = insc[index];
+
+                insc.InsertRange(index, instructions);
+
+                Instruction newIns = insc[index];
+
+                self.ReplaceBranchTargets(oldIns, newIns);
+            }
         }
 
         internal static VariableDefinition AddVariableDefinition(this MethodBody self, TypeReference type)

@@ -8,12 +8,33 @@ using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Ramp.Aspects.Fody.Weavers
 {
+    internal struct VariableInfo
+    {
+        public readonly VariableDefinition LocalVariable;
+        public readonly FieldReference StateMachineField;
+
+        public VariableInfo(VariableDefinition local)
+        {
+            LocalVariable = local;
+            StateMachineField = null;
+        }
+
+        public VariableInfo(FieldReference smfield)
+        {
+            LocalVariable = null;
+            StateMachineField = smfield;
+        }
+
+        public bool IsStateMachineField => StateMachineField != null;
+    }
+
     /// <summary>
     /// Base class for aspect weavers
     /// </summary>
     internal class AspectWeaver
     {
         protected const string BindingInstanceFieldName = "Instance";
+        protected const string StateMachineThisFieldName = "<>4__this";
 
         /// <summary>
         /// Gets an effective parameter count by excluding the value parameter of a property setter.
@@ -87,14 +108,47 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
-            argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
-
             MethodDefinition constructorDef = mwc.Library.Arguments_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            
+            argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
 
             var insc = method.Body.Instructions;
             insc.Insert(offset, Ins.Create(OpCodes.Newobj, constructor));
             insc.Insert(offset + 1, Ins.Create(OpCodes.Stloc, argumentsVariable));
+        }
+
+        protected static void WriteSmArgumentContainerInit(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            MethodDefinition stateMachine,
+            int offset,
+            out VariableDefinition arguments)
+        {
+            int effectiveParameterCount = GetEffectiveParameterCount(method);
+
+            if (effectiveParameterCount == 0)
+            {
+                arguments = null;
+                return;
+            }
+
+            GenericInstanceType argumentsType;
+            FieldReference[] argumentFields;
+            GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
+
+            MethodDefinition constructorDef = mwc.Library.Arguments_ctor[effectiveParameterCount];
+            MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+
+            arguments = stateMachine.Body.AddVariableDefinition(argumentsType);
+
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Newobj, constructor),
+                Ins.Create(OpCodes.Stloc, arguments)
+            };
+
+            stateMachine.Body.InsertInstructions(offset, insc);
         }
 
         protected static void GetArgumentContainerInfo(
@@ -174,7 +228,43 @@ namespace Ramp.Aspects.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
             }
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
+        }
+
+        protected static void WriteSmCopyArgumentsToContainer(
+            ModuleWeavingContext rc,
+            MethodDefinition method,
+            MethodDefinition stateMachine,
+            int offset,
+            VariableDefinition arguments,
+            bool excludeOut)
+        {
+            int effectiveParameterCount = GetEffectiveParameterCount(method);
+            if (effectiveParameterCount == 0)
+                return;
+
+            GenericInstanceType argumentContainerType;
+            FieldReference[] argumentContainerFields;
+            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
+
+            var insc = new Collection<Ins>();
+
+            for (int i = 0; i < effectiveParameterCount; i++)
+            {
+                if (method.Parameters[i].IsOut && excludeOut)
+                    continue;
+
+                ParameterDefinition p = method.Parameters[i];
+                FieldReference af = stateMachine.DeclaringType.Fields.First(f => f.Name == p.Name &&
+                                                                                 f.FieldType.IsSame(p.ParameterType));
+
+                insc.Add(Ins.Create(OpCodes.Ldloc, arguments));
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, af));
+                insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
+            }
+
+            stateMachine.Body.InsertInstructions(offset, insc);
         }
 
         /// <summary>
@@ -220,7 +310,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 }
             }
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
 
         ///// <summary>
@@ -267,7 +357,7 @@ namespace Ramp.Aspects.Fody.Weavers
         //}
 
         /// <summary>
-        /// Write aspect initialization.
+        /// Write aspect initialization, works for both normal methods and state machines.
         /// </summary>
         protected static void WriteAspectInit(
             ModuleWeavingContext mwc,
@@ -291,7 +381,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 jtNotNull
             };
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
 
         protected static void WriteCallAdvice(
@@ -313,7 +403,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 Ins.Create(OpCodes.Callvirt, advice)
             };
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
 
         /// <summary>
@@ -336,7 +426,7 @@ namespace Ramp.Aspects.Fody.Weavers
                 notNullLabel
             };
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
 
         protected static void CreateAspectCacheField(

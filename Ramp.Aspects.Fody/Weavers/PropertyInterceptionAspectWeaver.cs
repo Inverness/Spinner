@@ -360,7 +360,7 @@ namespace Ramp.Aspects.Fody.Weavers
             insc.Add(Ins.Create(OpCodes.Newobj, constructor));
             insc.Add(Ins.Create(OpCodes.Stloc, iaVariable));
 
-            method.Body.Instructions.InsertRange(offset, insc);
+            method.Body.InsertInstructions(offset, insc);
         }
     }
 }
