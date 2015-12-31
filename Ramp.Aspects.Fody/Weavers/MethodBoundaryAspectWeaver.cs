@@ -232,41 +232,46 @@ namespace Ramp.Aspects.Fody.Weavers
             MethodDefinition stateMachine
             )
         {
-            int onEntryIndex;
-            int tryIndex;
-            Collection<Ins> yields;
-            Collection<Ins> resumes;
-            HashSet<Ins> awaitLeaves;
-
-            FindAsyncStateMachineInsertionPoints(method,
-                                                 stateMachine,
-                                                 out onEntryIndex,
-                                                 out tryIndex,
-                                                 out yields,
-                                                 out resumes,
-                                                 out awaitLeaves);
+            bool withEntry = (features & Features.OnEntry) != 0;
+            bool withException = (features & Features.OnException) != 0;
+            bool withExit = (features & Features.OnExit) != 0;
+            bool withSuccess = (features & Features.OnSuccess) != 0;
+            bool withYield = (features & Features.OnYield) != 0;
+            bool withResume = (features & Features.OnResume) != 0;
 
             // The last exception handler is used for setting the returning task state.
             // This is needed to identify insertion points.
             ExceptionHandler taskExceptionHandler = stateMachine.Body.ExceptionHandlers.Last();
             
-            var insc = stateMachine.Body.Instructions;
+            Collection<Ins> insc = stateMachine.Body.Instructions;
 
-            // Start the try block in the same place as the state machine. This prevents the need to mess with existing
-            // breaks.
+            // Find the start of the body, which will be the first instruction after the first set of branch
+            // instructions
+            int tryStartIndex = insc.IndexOf(taskExceptionHandler.TryStart);
+            int firstBranch = Seek(insc, tryStartIndex, IsBranching);
+            int bodyBegin = Seek(insc, firstBranch, i => !IsBranching(i));
+
+            // Find the instruction to leave the body and set the task result. This will be the instruction right
+            // before the TryEnd.
+            int tryEndIndex = insc.IndexOf(taskExceptionHandler.TryEnd);
+            int bodyLeave = tryEndIndex - 1;
+            Debug.Assert(insc[bodyLeave].OpCode == OpCodes.Leave);
+
+            // Start the try block in the same place as the state machine. This prevents the need to mess with
+            // existing breaks
             int tryStartOffset = insc.IndexOf(taskExceptionHandler.TryStart);
 
             // The offset from the end to where initialization code will go.
-            int initEndOffset = insc.Count - onEntryIndex;
+            int initEndOffset = insc.Count - bodyBegin;
 
             // Offset from the end to the return leave instruction
-            int leaveEndOffset = insc.Count - insc.IndexOf(taskExceptionHandler.TryEnd) + 1;
+            int leaveEndOffset = insc.Count - bodyLeave;
 
-            // Find the variable used to set the task result.
+            // Find the variable used to set the task result. No need to create our own.
             VariableDefinition resultVar = null;
             if (effectiveReturnType != null)
             {
-                int resultStore = SeekInstructionR(insc, insc.Count - leaveEndOffset, IsStoreLocal);
+                int resultStore = SeekR(insc, insc.Count - leaveEndOffset, i => i.OpCode == OpCodes.Stloc);
                 resultVar = (VariableDefinition) insc[resultStore].Operand;
             }
 
@@ -282,25 +287,67 @@ namespace Ramp.Aspects.Fody.Weavers
             FieldDefinition mea;
             WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - initEndOffset, out mea);
 
-            // Write OnEntry call
-            WriteSmOnEntryCall(mwc,
-                               method,
-                               stateMachine,
-                               insc.Count - initEndOffset,
-                               aspectType,
-                               features,
-                               resultVar,
-                               aspectField,
-                               mea);
+            if (withEntry)
+            {
+                // Write OnEntry call
+                WriteSmOnEntryCall(mwc,
+                                   method,
+                                   stateMachine,
+                                   insc.Count - initEndOffset,
+                                   aspectType,
+                                   features,
+                                   resultVar,
+                                   aspectField,
+                                   mea);
+            }
 
-            bool withException = (features & Features.OnException) != 0;
-            bool withExit = (features & Features.OnExit) != 0;
-            bool withSuccess = (features & Features.OnSuccess) != 0;
+            // Search through the body for places to insert OnYield() and OnResume() calls
+            if (withYield || withResume)
+            {
+                int awaitSearchStart = insc.Count - initEndOffset;
+                int awaitSearchEnd = insc.Count - leaveEndOffset;
+                VariableDefinition awaitableStorage = null;
+
+                while (awaitSearchStart < awaitSearchEnd)
+                {
+                    int awaitable;
+                    int callYield;
+                    int callResume;
+                    bool found = GetAwaitInfo(stateMachine,
+                                              awaitSearchStart,
+                                              awaitSearchEnd,
+                                              out awaitable,
+                                              out callYield,
+                                              out callResume);
+
+                    if (!found)
+                        break;
+
+                    awaitSearchStart = callResume + 1;
+
+                    if (awaitableStorage == null)
+                        awaitableStorage = stateMachine.Body.AddVariableDefinition(stateMachine.Module.TypeSystem.Object);
+
+                    WriteYieldAndResume(mwc,
+                               stateMachine,
+                               awaitable,
+                               callYield,
+                               callResume,
+                               aspectType,
+                               aspectField,
+                               mea,
+                               awaitableStorage);
+                }
+            }
+
+            // Everything following this point is written after the body but inside the async exception handler.
 
             if (withException || withExit || withSuccess)
             {
                 Ins labelSuccess = CreateNop();
 
+                // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
+                // They will be replaced by breaks to labelSuccess.
                 RewriteSmLeaves(stateMachine,
                                 tryStartOffset,
                                 insc.Count - leaveEndOffset - 1,
@@ -355,6 +402,8 @@ namespace Ramp.Aspects.Fody.Weavers
                 }
 
                 // Insert the try block leave right before the exception handlers
+                // This is done last to ensure that insertions for the exception and exit handlers do not break
+                // any offsets.
                 if (withException || withExit)
                     stateMachine.Body.InsertInstructions(leaveInsertPoint, Ins.Create(OpCodes.Leave, insc[insc.Count - leaveEndOffset]));
                 
@@ -377,131 +426,59 @@ namespace Ramp.Aspects.Fody.Weavers
         {
         }
 
-        protected static void FindAsyncStateMachineInsertionPoints(
-            MethodDefinition method,
-            MethodDefinition moveNextMethod,
-            out int bodyStartIndex,
-            out int bodyLeaveIndex,
-            out Collection<Ins> yields,
-            out Collection<Ins> resumes,
-            out HashSet<Ins> awaitLeaves 
-            )
+        protected static bool GetAwaitInfo(
+            MethodDefinition stateMachine,
+            int start,
+            int end,
+            out int awaitable,
+            out int callYield,
+            out int callResume)
         {
-            Collection<Ins> inslist = moveNextMethod.Body.Instructions;
-            ExceptionHandler outerExceptionHandler = moveNextMethod.Body.ExceptionHandlers.Last();
+            Collection<Ins> insc = stateMachine.Body.Instructions;
 
-            int tryStartIndex = inslist.IndexOf(outerExceptionHandler.TryStart);
-            int tryEndIndex = inslist.IndexOf(outerExceptionHandler.TryEnd);
-
-            // Find the start of the body, which will be the first instruction after the first set of branch
-            // instructions
-            int firstBranch = SeekInstruction(inslist, tryStartIndex, IsBranching);
-            bodyStartIndex = SeekInstruction(inslist, firstBranch, i => !IsBranching(i));
-
-            bodyLeaveIndex = tryEndIndex - 1;
-            Debug.Assert(IsLeave(inslist[bodyLeaveIndex]));
+            awaitable = -1;
+            callYield = -1;
+            callResume = -1;
 
             // Identify yield and resume points by looking for calls to a get_IsCompleted property and a GetResult
             // method. These can be defined on any type due to how awaitables work. IsCompleted is required to be
             // a property, not a field.
-            yields = new Collection<Ins>();
-            resumes = new Collection<Ins>();
-            awaitLeaves = new HashSet<Ins>();
-
-            TypeDefinition awaitableType = null;
-            int yieldIndex = -1;
-            for (int i = bodyStartIndex; i < bodyLeaveIndex; i++)
+            TypeDefinition awaiterType = null;
+            int count = 0;
+            for (int i = start; i < end; i++)
             {
-                if (inslist[i].OpCode != OpCodes.Call)
+                count++;
+                Ins ins = insc[i];
+
+                if (ins.OpCode != OpCodes.Call && ins.OpCode != OpCodes.Callvirt)
                     continue;
 
-                var mr = (MethodReference) inslist[i].Operand;
+                var mr = (MethodReference) ins.Operand;
 
-                if (yieldIndex == -1 && mr.Name == "get_IsCompleted")
+                if (awaitable == -1 && mr.Name == "GetAwaiter")
                 {
-                    // Expect a brtrue after the call
-                    Debug.Assert(IsBranching(inslist[i + 1]) && !IsBranching(inslist[i + 2]));
-
-                    awaitableType = mr.DeclaringType.Resolve();
-                    yieldIndex = i + 2;
-
-                    for (int r = yieldIndex; r < bodyLeaveIndex; r++)
-                    {
-                        if (inslist[r].OpCode == OpCodes.Leave || inslist[r].OpCode == OpCodes.Leave_S)
-                        {
-                            awaitLeaves.Add(inslist[r]);
-                            break;
-                        }
-                    }
+                    awaitable = i;
                 }
-                else if (yieldIndex != -1 && mr.Name == "GetResult" && mr.DeclaringType.Resolve() == awaitableType)
+                else if (awaitable != -1 && callYield == -1 && mr.Name == "get_IsCompleted")
+                {
+                    // Yield points will be after the branch instruction that acts on the IsCompleted result.
+                    // This way OnYield() is only called if an await is actually necessary.
+
+                    Debug.Assert(IsBranching(insc[i + 1]) && !IsBranching(insc[i + 2]));
+
+                    callYield = i + 2;
+
+                    awaiterType = mr.DeclaringType.Resolve();
+                }
+                else if (callYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.Resolve() == awaiterType)
                 {
                     // resume after the store local
-                    int resumeIndex = mr.ReturnType == mr.Module.TypeSystem.Void ? i + 1 : i + 2;
-
-                    yields.Add(inslist[yieldIndex]);
-                    resumes.Add(inslist[resumeIndex]);
-
-                    yieldIndex = -1;
+                    callResume = mr.ReturnType == mr.Module.TypeSystem.Void ? i + 1 : i + 2;
+                    return true;
                 }
             }
-        }
 
-        protected static bool IsStoreLocal(Ins ins)
-        {
-            return IsStoreLocal(ins.OpCode);
-        }
-
-        protected static bool IsStoreLocal(OpCode op)
-        {
-            return op == OpCodes.Stloc ||
-                   op == OpCodes.Stloc_0 ||
-                   op == OpCodes.Stloc_1 ||
-                   op == OpCodes.Stloc_2 ||
-                   op == OpCodes.Stloc_3 ||
-                   op == OpCodes.Stloc_S;
-        }
-
-        protected static bool IsBranching(Ins ins)
-        {
-            OperandType ot = ins.OpCode.OperandType;
-
-            return ot == OperandType.InlineSwitch ||
-                   ot == OperandType.InlineBrTarget ||
-                   ot == OperandType.ShortInlineBrTarget;
-        }
-
-        protected static bool IsLeave(Ins ins)
-        {
-            return ins.OpCode == OpCodes.Leave || ins.OpCode == OpCodes.Leave_S;
-        }
-
-        protected static int SeekInstruction(Collection<Ins> list, int start, Func<Ins, bool> check)
-        {
-            for (int i = start; i < list.Count; i++)
-            {
-                if (check(list[i]))
-                    return i;
-            }
-            return -1;
-        }
-
-        protected static int SeekInstructionR(Collection<Ins> list, int start, Func<Ins, bool> check)
-        {
-            for (int i = start; i > -1; i--)
-            {
-                if (check(list[i]))
-                    return i;
-            }
-            return -1;
-        }
-
-        protected static void ExpectInstruction(Collection<Ins> list, int index, OpCode opcode)
-        {
-            if (index >= list.Count)
-                throw new InvalidOperationException("end of instruction list");
-            if (list[index].OpCode != opcode)
-                throw new InvalidOperationException("unexpected instruction");
+            return false;
         }
 
         protected static void WriteMeaInit(
@@ -705,6 +682,7 @@ namespace Ramp.Aspects.Fody.Weavers
             // Assumes macros have been simplified
             MethodBody body = method.Body;
 
+            // This is the target for leave instructions that will go on to set the task result.
             Ins leaveTarget = body.ExceptionHandlers.Last().HandlerEnd;
 
             for (int i = startIndex; i <= endIndex; i++)
@@ -935,13 +913,125 @@ namespace Ramp.Aspects.Fody.Weavers
             targetMethod.Body.ExceptionHandlers.Add(finallyHandler);
         }
 
+        protected static void WriteYieldAndResume(
+            ModuleWeavingContext mwc,
+            MethodDefinition stateMachine,
+            int getAwaiterOffset,
+            int yieldOffset,
+            int resumeOffset,
+            TypeDefinition aspectType,
+            FieldReference aspectField,
+            FieldReference meaField,
+            VariableDefinition awaitableVar
+            )
+        {
+            var insc = new Collection<Ins>();
+            int offset = 0;
+
+            if (yieldOffset != -1)
+            {
+                // HACK: Assumes the awaitable is a reference type, not a value type.
+
+                TypeReference awaitableType = GetExpressionType(stateMachine.Body, getAwaiterOffset - 1);
+                if (awaitableType == null)
+                    throw new InvalidOperationException("unable to determine expression type");
+
+                insc.Add(Ins.Create(OpCodes.Dup));
+                if (awaitableType.IsValueType)
+                    insc.Add(Ins.Create(OpCodes.Box, awaitableType));
+                insc.Add(Ins.Create(OpCodes.Stloc, awaitableVar));
+
+                offset += stateMachine.Body.InsertInstructions(getAwaiterOffset, insc);
+                insc.Clear();
+
+                MethodDefinition onYieldDef = aspectType.GetInheritedMethods().First(m => m.Name == OnYieldAdviceName);
+                MethodReference onYield = mwc.SafeImport(onYieldDef);
+
+                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+                if (meaField != null)
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                    insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
+                }
+                else
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldnull));
+                }
+                insc.Add(Ins.Create(OpCodes.Callvirt, onYield));
+
+                offset += stateMachine.Body.InsertInstructions(yieldOffset + offset, insc);
+                insc.Clear();
+            }
+
+            if (resumeOffset != -1)
+            {
+                MethodDefinition onResumeDef = aspectType.GetInheritedMethods().First(m => m.Name == OnResumeAdviceName);
+                MethodReference onResume = mwc.SafeImport(onResumeDef);
+
+                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+                if (meaField != null)
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                    insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
+                }
+                else
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldnull));
+                }
+                insc.Add(Ins.Create(OpCodes.Callvirt, onResume));
+
+                stateMachine.Body.InsertInstructions(resumeOffset + offset, insc);
+                insc.Clear();
+            }
+        }
+
+        protected static TypeReference GetExpressionType(MethodBody body, int index)
+        {
+            TypeSystem typeSystem = body.Method.Module.TypeSystem;
+            Ins ins = body.Instructions[index];
+
+            while (ins != null)
+            {
+                Debug.Assert(ins.OpCode.OpCodeType != OpCodeType.Macro, "body must be simplified");
+
+                if (ins.OpCode == OpCodes.Dup)
+                {
+                    ins = body.Instructions[index - 1];
+                    continue;
+                }
+
+                switch (ins.OpCode.OperandType)
+                {
+                    case OperandType.InlineField:
+                        return ((FieldReference) ins.Operand).FieldType;
+                    case OperandType.InlineI:
+                        return typeSystem.Int32;
+                    case OperandType.InlineI8:
+                        return typeSystem.Int64;
+                    case OperandType.InlineMethod:
+                        return ((MethodReference) ins.Operand).ReturnType;
+                    case OperandType.InlineR:
+                        return ins.OpCode == OpCodes.Ldc_R4 ? typeSystem.Single : typeSystem.Double;
+                    case OperandType.InlineString:
+                        return typeSystem.String;
+                    case OperandType.InlineType:
+                        return (TypeReference) ins.Operand;
+                    case OperandType.InlineVar:
+                        return ((VariableDefinition) ins.Operand).VariableType;
+                    case OperandType.InlineArg:
+                        return ((ParameterDefinition) ins.Operand).ParameterType.GetElementType();
+                }
+
+                break;
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Discover whether a method is an async state machine creator and the nested type that implements it.
         /// </summary>
-        protected static StateMachineKind GetStateMachineInfo(
-            ModuleWeavingContext mwc,
-            MethodDefinition method,
-            out MethodDefinition moveNextMethod)
+        protected static StateMachineKind GetStateMachineInfo(ModuleWeavingContext mwc, MethodDefinition method, out MethodDefinition moveNextMethod)
         {
             if (method.HasCustomAttributes)
             {
@@ -992,6 +1082,39 @@ namespace Ramp.Aspects.Fody.Weavers
             }
 
             return Features.None;
+        }
+
+        protected static bool IsBranching(Ins ins)
+        {
+            OperandType ot = ins.OpCode.OperandType;
+
+            return ot == OperandType.InlineSwitch || ot == OperandType.InlineBrTarget || ot == OperandType.ShortInlineBrTarget;
+        }
+
+        protected static bool IsCall(Ins ins)
+        {
+            OpCode op = ins.OpCode;
+            return op == OpCodes.Call || op == OpCodes.Callvirt;
+        }
+
+        protected static int Seek(Collection<Ins> list, int start, Func<Ins, bool> check)
+        {
+            for (int i = start; i < list.Count; i++)
+            {
+                if (check(list[i]))
+                    return i;
+            }
+            return -1;
+        }
+
+        protected static int SeekR(Collection<Ins> list, int start, Func<Ins, bool> check)
+        {
+            for (int i = start; i > -1; i--)
+            {
+                if (check(list[i]))
+                    return i;
+            }
+            return -1;
         }
     }
 }

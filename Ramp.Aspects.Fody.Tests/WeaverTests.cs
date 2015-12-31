@@ -47,17 +47,9 @@ namespace Ramp.Aspects.Fody.Tests
             string newAssemblyPath = assemblyPath.Replace(".dll", ".w.dll");
             string newPdbPath = pdbPath.Replace(".pdb", ".w.pdb");
 
-            if (File.Exists(newAssemblyPath))
-                File.Delete(newAssemblyPath);
-            if (File.Exists(newPdbPath))
-                File.Delete(newPdbPath);
-
-            File.Copy(assemblyPath, newAssemblyPath, false);
-            File.Copy(pdbPath, newPdbPath, false);
-
             var readerParameters = new ReaderParameters {ReadSymbols = true};
 
-            ModuleDefinition moduleDefinition = ModuleDefinition.ReadModule(newAssemblyPath, readerParameters);
+            ModuleDefinition moduleDefinition = ModuleDefinition.ReadModule(assemblyPath, readerParameters);
 
             var weaver = new ModuleWeaver
             {

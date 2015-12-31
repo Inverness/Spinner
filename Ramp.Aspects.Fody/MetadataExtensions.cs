@@ -128,15 +128,15 @@ namespace Ramp.Aspects.Fody
             return ins != null ? self.Instructions.IndexOf(ins) : self.Instructions.Count;
         }
 
-        internal static void InsertInstructions(this MethodBody self, int index, params Instruction[] instructions)
+        internal static int InsertInstructions(this MethodBody self, int index, params Instruction[] instructions)
         {
-            InsertInstructions(self, index, (IEnumerable<Instruction>) instructions);
+            return InsertInstructions(self, index, (IEnumerable<Instruction>) instructions);
         }
 
-        internal static void InsertInstructions(this MethodBody self, Instruction before, IEnumerable<Instruction> instructions)
+        internal static int InsertInstructions(this MethodBody self, Instruction before, IEnumerable<Instruction> instructions)
         {
             int index = before != null ? self.Instructions.IndexOf(before) : self.Instructions.Count;
-            InsertInstructions(self, index, instructions);
+            return InsertInstructions(self, index, instructions);
         }
 
         /// <summary>
