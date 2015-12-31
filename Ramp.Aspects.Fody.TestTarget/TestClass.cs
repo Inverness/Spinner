@@ -138,6 +138,9 @@ namespace Ramp.Aspects.Fody.TestTarget
             a += await GetNum(4);
             Console.WriteLine("Call OnResume");
 
+            if (a > 5)
+                return a;
+
             Console.WriteLine("Call OnYield");
             a += await GetNum(5);
             Console.WriteLine("Call OnResume");

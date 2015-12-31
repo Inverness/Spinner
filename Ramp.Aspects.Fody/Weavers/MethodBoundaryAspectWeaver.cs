@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -51,6 +52,8 @@ namespace Ramp.Aspects.Fody.Weavers
                         ? null
                         : method.ReturnType.Resolve();
 
+                    method.Body.SimplifyMacros();
+
                     WeaveMethod(mwc,
                                 method,
                                 aspectType,
@@ -59,8 +62,8 @@ namespace Ramp.Aspects.Fody.Weavers
                                 aspectField,
                                 effectiveReturnType);
 
-                    method.Body.OptimizeMacros();
                     method.Body.RemoveNops();
+                    method.Body.OptimizeMacros();
                     method.Body.UpdateOffsets();
                     break;
                 case StateMachineKind.Iterator:
@@ -89,7 +92,7 @@ namespace Ramp.Aspects.Fody.Weavers
                                      effectiveReturnType,
                                      moveNextMethod);
 
-                    //moveNextMethod.Body.RemoveNops();
+                    moveNextMethod.Body.RemoveNops();
                     moveNextMethod.Body.OptimizeMacros();
                     moveNextMethod.Body.UpdateOffsets();
                     break;
@@ -136,8 +139,86 @@ namespace Ramp.Aspects.Fody.Weavers
             int tryStartIndex = insc.Count;
             insc.AddRange(originalInsc);
 
-            // Wrap the body, including the OnEntry() call, in an exception handler
-            WriteExceptionHandler(mwc, method, aspectType, features, returnValueVar, aspectField, meaVar, insc.Count, tryStartIndex);
+            bool withException = (features & Features.OnException) != 0;
+            bool withExit = (features & Features.OnExit) != 0;
+            bool withSuccess = (features & Features.OnSuccess) != 0;
+
+            if (withException || withExit || withSuccess)
+            {
+                Ins labelNewReturn = CreateNop();
+                Ins labelSuccess = CreateNop();
+
+                RewriteReturns(method,
+                               tryStartIndex,
+                               method.Body.Instructions.Count - 1,
+                               returnValueVar,
+                               labelSuccess,
+                               withSuccess);
+
+                insc.Add(labelSuccess);
+
+                // Write success block
+
+                if (withSuccess)
+                {
+                    WriteSuccessHandler(mwc,
+                                        method,
+                                        aspectType,
+                                        aspectField,
+                                        meaVar,
+                                        null,
+                                        returnValueVar,
+                                        insc.Count);
+                }
+
+                if (withException || withExit)
+                    insc.Add(Ins.Create(OpCodes.Leave, labelNewReturn));
+
+                // Write exception filter and handler
+
+                if (withException)
+                {
+                    WriteCatchExceptionHandler(mwc,
+                                               method,
+                                               null,
+                                               insc.Count,
+                                               aspectType,
+                                               aspectField,
+                                               meaVar,
+                                               null,
+                                               tryStartIndex,
+                                               labelNewReturn);
+                }
+
+                // End of try block for the finally handler
+
+                if (withExit)
+                {
+                    WriteFinallyExceptionHandler(mwc,
+                                                 method,
+                                                 null,
+                                                 insc.Count,
+                                                 aspectType,
+                                                 aspectField,
+                                                 meaVar,
+                                                 null,
+                                                 tryStartIndex,
+                                                 labelNewReturn);
+                }
+
+                // End finally block
+
+                var insc2 = new Collection<Ins>();
+
+                insc2.Add(labelNewReturn);
+
+                // Return the previously stored result
+                if (returnValueVar != null)
+                    insc2.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
+                insc2.Add(Ins.Create(OpCodes.Ret));
+
+                method.Body.InsertInstructions(null, insc2);
+            }
         }
 
         protected static void WeaveAsyncMethod(
@@ -153,47 +234,134 @@ namespace Ramp.Aspects.Fody.Weavers
         {
             int onEntryIndex;
             int tryIndex;
-            int[] yieldIndices;
-            int[] resumeIndices;
-            
+            Collection<Ins> yields;
+            Collection<Ins> resumes;
+            HashSet<Ins> awaitLeaves;
+
             FindAsyncStateMachineInsertionPoints(method,
                                                  stateMachine,
                                                  out onEntryIndex,
                                                  out tryIndex,
-                                                 out yieldIndices,
-                                                 out resumeIndices);
+                                                 out yields,
+                                                 out resumes,
+                                                 out awaitLeaves);
 
-
-            VariableDefinition returnValueVar = null;
-            if (effectiveReturnType != null)
-                returnValueVar = method.Body.AddVariableDefinition(effectiveReturnType);
-
+            // The last exception handler is used for setting the returning task state.
+            // This is needed to identify insertion points.
+            ExceptionHandler taskExceptionHandler = stateMachine.Body.ExceptionHandlers.Last();
+            
             var insc = stateMachine.Body.Instructions;
-            int roffset = insc.Count - onEntryIndex;
 
-            WriteAspectInit(mwc, stateMachine, insc.Count - roffset, aspectType, aspectField);
+            // Start the try block in the same place as the state machine. This prevents the need to mess with existing
+            // breaks.
+            int tryStartOffset = insc.IndexOf(taskExceptionHandler.TryStart);
+
+            // The offset from the end to where initialization code will go.
+            int initEndOffset = insc.Count - onEntryIndex;
+
+            // Offset from the end to the return leave instruction
+            int leaveEndOffset = insc.Count - insc.IndexOf(taskExceptionHandler.TryEnd) + 1;
+
+            // Find the variable used to set the task result.
+            VariableDefinition resultVar = null;
+            if (effectiveReturnType != null)
+            {
+                int resultStore = SeekInstructionR(insc, insc.Count - leaveEndOffset, IsStoreLocal);
+                resultVar = (VariableDefinition) insc[resultStore].Operand;
+            }
+
+            WriteAspectInit(mwc, stateMachine, insc.Count - initEndOffset, aspectType, aspectField);
 
             VariableDefinition arguments = null;
             if ((features & Features.GetArguments) != 0)
             {
-                WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - roffset, out arguments);
-                WriteSmCopyArgumentsToContainer(mwc, method, stateMachine, insc.Count - roffset, arguments, true);
+                WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - initEndOffset, out arguments);
+                WriteSmCopyArgumentsToContainer(mwc, method, stateMachine, insc.Count - initEndOffset, arguments, true);
             }
 
             FieldDefinition mea;
-            WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - roffset, out mea);
+            WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - initEndOffset, out mea);
 
             // Write OnEntry call
             WriteSmOnEntryCall(mwc,
                                method,
                                stateMachine,
-                               insc.Count - roffset,
+                               insc.Count - initEndOffset,
                                aspectType,
                                features,
-                               returnValueVar,
+                               resultVar,
                                aspectField,
                                mea);
 
+            bool withException = (features & Features.OnException) != 0;
+            bool withExit = (features & Features.OnExit) != 0;
+            bool withSuccess = (features & Features.OnSuccess) != 0;
+
+            if (withException || withExit || withSuccess)
+            {
+                Ins labelSuccess = CreateNop();
+
+                RewriteSmLeaves(stateMachine,
+                                tryStartOffset,
+                                insc.Count - leaveEndOffset - 1,
+                                labelSuccess,
+                                false);
+
+                insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
+
+                // Write success block
+
+                if (withSuccess)
+                {
+                    WriteSuccessHandler(mwc,
+                                        stateMachine,
+                                        aspectType,
+                                        aspectField,
+                                        null,
+                                        mea,
+                                        resultVar,
+                                        insc.Count - leaveEndOffset);
+                }
+
+                // Mark where the leave instruction needs to be inserted before the exception handler
+                int leaveInsertPoint = insc.Count - leaveEndOffset;
+
+                if (withException)
+                {
+                    WriteCatchExceptionHandler(mwc,
+                                               method,
+                                               stateMachine,
+                                               insc.Count - leaveEndOffset,
+                                               aspectType,
+                                               aspectField,
+                                               null,
+                                               mea,
+                                               tryStartOffset,
+                                               insc[insc.Count - leaveEndOffset]);
+                }
+
+                if (withExit)
+                {
+                    WriteFinallyExceptionHandler(mwc,
+                                                 method,
+                                                 stateMachine,
+                                                 insc.Count - leaveEndOffset,
+                                                 aspectType,
+                                                 aspectField,
+                                                 null,
+                                                 mea,
+                                                 tryStartOffset,
+                                                 insc[insc.Count - leaveEndOffset]);
+                }
+
+                // Insert the try block leave right before the exception handlers
+                if (withException || withExit)
+                    stateMachine.Body.InsertInstructions(leaveInsertPoint, Ins.Create(OpCodes.Leave, insc[insc.Count - leaveEndOffset]));
+                
+                // Ensure the task EH is last
+                stateMachine.Body.ExceptionHandlers.Remove(taskExceptionHandler);
+                stateMachine.Body.ExceptionHandlers.Add(taskExceptionHandler);
+            }
         }
 
         protected static void WeaveIteratorMethod(
@@ -214,8 +382,9 @@ namespace Ramp.Aspects.Fody.Weavers
             MethodDefinition moveNextMethod,
             out int bodyStartIndex,
             out int bodyLeaveIndex,
-            out int[] yieldIndices,
-            out int[] resumeIndices
+            out Collection<Ins> yields,
+            out Collection<Ins> resumes,
+            out HashSet<Ins> awaitLeaves 
             )
         {
             Collection<Ins> inslist = moveNextMethod.Body.Instructions;
@@ -235,8 +404,9 @@ namespace Ramp.Aspects.Fody.Weavers
             // Identify yield and resume points by looking for calls to a get_IsCompleted property and a GetResult
             // method. These can be defined on any type due to how awaitables work. IsCompleted is required to be
             // a property, not a field.
-            var yieldIndicesList = new Collection<int>();
-            var resumeIndicesList = new Collection<int>();
+            yields = new Collection<Ins>();
+            resumes = new Collection<Ins>();
+            awaitLeaves = new HashSet<Ins>();
 
             TypeDefinition awaitableType = null;
             int yieldIndex = -1;
@@ -254,21 +424,27 @@ namespace Ramp.Aspects.Fody.Weavers
 
                     awaitableType = mr.DeclaringType.Resolve();
                     yieldIndex = i + 2;
+
+                    for (int r = yieldIndex; r < bodyLeaveIndex; r++)
+                    {
+                        if (inslist[r].OpCode == OpCodes.Leave || inslist[r].OpCode == OpCodes.Leave_S)
+                        {
+                            awaitLeaves.Add(inslist[r]);
+                            break;
+                        }
+                    }
                 }
                 else if (yieldIndex != -1 && mr.Name == "GetResult" && mr.DeclaringType.Resolve() == awaitableType)
                 {
                     // resume after the store local
                     int resumeIndex = mr.ReturnType == mr.Module.TypeSystem.Void ? i + 1 : i + 2;
 
-                    yieldIndicesList.Add(yieldIndex);
-                    resumeIndicesList.Add(resumeIndex);
+                    yields.Add(inslist[yieldIndex]);
+                    resumes.Add(inslist[resumeIndex]);
 
                     yieldIndex = -1;
                 }
             }
-
-            yieldIndices = yieldIndicesList.ToArray();
-            resumeIndices = resumeIndicesList.ToArray();
         }
 
         protected static bool IsStoreLocal(Ins ins)
@@ -303,6 +479,16 @@ namespace Ramp.Aspects.Fody.Weavers
         protected static int SeekInstruction(Collection<Ins> list, int start, Func<Ins, bool> check)
         {
             for (int i = start; i < list.Count; i++)
+            {
+                if (check(list[i]))
+                    return i;
+            }
+            return -1;
+        }
+
+        protected static int SeekInstructionR(Collection<Ins> list, int start, Func<Ins, bool> check)
+        {
+            for (int i = start; i > -1; i--)
             {
                 if (check(list[i]))
                     return i;
@@ -466,261 +652,287 @@ namespace Ramp.Aspects.Fody.Weavers
             stateMachine.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteExceptionHandler(
+        protected static void RewriteReturns(
+            MethodDefinition method,
+            int startIndex,
+            int endIndex,
+            VariableDefinition returnValueHolder,
+            Ins brTarget,
+            bool skipLast)
+        {
+            var insc = method.Body.Instructions;
+
+            // Find the jump target for leaves that are normal returns
+
+            // Replace returns with a break or leave 
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                Ins ins = insc[i];
+                
+                if (ins.OpCode != OpCodes.Ret)
+                    continue;
+
+                if (returnValueHolder != null)
+                {
+                    Ins insStoreReturnValue = Ins.Create(OpCodes.Stloc, returnValueHolder);
+
+                    method.Body.ReplaceInstruction(i, insStoreReturnValue);
+
+                    // Do not write a jump to the very next instruction
+                    if (i == endIndex && skipLast)
+                        break;
+
+                    insc.Insert(++i, Ins.Create(OpCodes.Br, brTarget));
+                    endIndex++;
+                }
+                else
+                {
+                    // Need to replace with Nop if last so branch targets aren't broken.
+                    Ins newIns = i == endIndex && skipLast ? CreateNop() : Ins.Create(OpCodes.Br, brTarget);
+
+                    method.Body.ReplaceInstruction(i, newIns);
+                }
+            }
+        }
+
+        protected static void RewriteSmLeaves(
+            MethodDefinition method,
+            int startIndex,
+            int endIndex,
+            Ins brTarget,
+            bool skipLast)
+        {
+            // Assumes macros have been simplified
+            MethodBody body = method.Body;
+
+            Ins leaveTarget = body.ExceptionHandlers.Last().HandlerEnd;
+
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                Ins ins = body.Instructions[i];
+
+                if (!ReferenceEquals(ins.Operand, leaveTarget))
+                    continue;
+                Debug.Assert(ins.OpCode == OpCodes.Leave);
+
+                // Need to replace with Nop if last so branch targets aren't broken.
+                Ins newIns = i == endIndex && skipLast ? CreateNop() : Ins.Create(OpCodes.Br, brTarget);
+
+                body.ReplaceInstruction(i, newIns);
+            }
+        }
+
+        protected static void WriteSuccessHandler(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
-            Features features,
-            VariableDefinition returnValueHolder,
             FieldReference aspectField,
             VariableDefinition meaVar,
-            int offset,
-            int tryStartIndex)
+            FieldReference meaField,
+            VariableDefinition resultVar,
+            int offset)
         {
-            bool withException = (features & Features.OnException) != 0;
-            bool withExit = (features & Features.OnExit) != 0;
-            bool withSuccess = (features & Features.OnSuccess) != 0;
+            MethodDefinition onSuccessDef = aspectType.GetInheritedMethods().First(m => m.Name == OnSuccessAdviceName);
+            MethodReference onSuccess = mwc.SafeImport(onSuccessDef);
 
-            if (!(withException || withExit || withSuccess))
-                return;
+            var insc = new Collection<Ins>();
+            
+            insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
 
-            Ins labelNewReturn = CreateNop();
-            Ins labelSuccess = CreateNop();
-            Collection<Ins> bodyInsc = method.Body.Instructions;
-
-            // Replace returns with a break or leave 
-            int last = bodyInsc.Count - 1;
-            for (int i = tryStartIndex; i < bodyInsc.Count; i++)
+            if (meaField != null)
             {
-                Ins ins = bodyInsc[i];
-
-                if (ins.OpCode == OpCodes.Ret)
-                {
-                    var insNewBreak = withSuccess
-                        ? Ins.Create(OpCodes.Br, labelSuccess)
-                        : Ins.Create(OpCodes.Leave, labelNewReturn);
-
-                    if (returnValueHolder != null)
-                    {
-                        var insStoreReturnValue = Ins.Create(OpCodes.Stloc, returnValueHolder);
-
-                        method.Body.ReplaceBranchTargets(ins, insStoreReturnValue);
-                        bodyInsc[i] = insStoreReturnValue;
-
-                        // Do not write a jump to the very next instruction
-                        if (withSuccess && i == last)
-                            break;
-
-                        bodyInsc.Insert(++i, insNewBreak);
-                        last++;
-                    }
-                    else
-                    {
-                        if (withSuccess && i == last)
-                        {
-                            // Replace with Nop since there is not another operand to replace it with
-                            var insNop = CreateNop();
-
-                            method.Body.ReplaceBranchTargets(ins, insNop);
-                            bodyInsc[i] = insNop;
-                        }
-                        else
-                        {
-                            method.Body.ReplaceBranchTargets(ins, insNewBreak);
-                            bodyInsc[i] = insNewBreak;
-                        }
-                    }
-                }
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
             }
+            else if (meaVar != null)
+            {
+                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+            }
+            else
+            {
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+            }
+
+            insc.Add(Ins.Create(OpCodes.Callvirt, onSuccess));
+
+            method.Body.InsertInstructions(offset, insc);
+        }
+
+        protected static void WriteCatchExceptionHandler(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            MethodDefinition stateMachineOpt,
+            int offset,
+            TypeDefinition aspectType,
+            FieldReference aspectField,
+            VariableDefinition meaVar,
+            FieldReference meaField,
+            int tryStart,
+            Ins leaveTarget)
+        {
+            var insc = new Collection<Ins>();
+
+            MethodDefinition filterExceptionDef =
+                aspectType.GetInheritedMethods().First(m => m.Name == FilterExceptionAdviceName);
+            MethodReference filterExcetion = mwc.SafeImport(filterExceptionDef);
+            MethodDefinition onExceptionDef =
+                aspectType.GetInheritedMethods().First(m => m.Name == OnExceptionAdviceName);
+            MethodReference onException = mwc.SafeImport(onExceptionDef);
+            var exceptionType = mwc.SafeImport(mwc.Framework.Exception);
+
+            MethodDefinition targetMethod = stateMachineOpt ?? method;
+
+            VariableDefinition exceptionHolder = targetMethod.Body.AddVariableDefinition(exceptionType);
+
+            Ins labelFilterTrue = CreateNop();
+            Ins labelFilterEnd = CreateNop();
+
+            int ehTryCatchEnd = insc.Count;
+            int ehFilterStart = insc.Count;
+
+            // Check if its actually Exception. Non-Exception types can be thrown by native code.
+            insc.Add(Ins.Create(OpCodes.Isinst, exceptionType));
+            insc.Add(Ins.Create(OpCodes.Dup));
+            insc.Add(Ins.Create(OpCodes.Brtrue, labelFilterTrue));
+
+            // Not an Exception, load 0 as endfilter argument
+            insc.Add(Ins.Create(OpCodes.Pop));
+            insc.Add(Ins.Create(OpCodes.Ldc_I4_0));
+            insc.Add(Ins.Create(OpCodes.Br, labelFilterEnd));
+
+            // Call FilterException()
+            insc.Add(labelFilterTrue);
+            insc.Add(Ins.Create(OpCodes.Stloc, exceptionHolder));
+            insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+            if (meaField != null)
+            {
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
+            }
+            else if (meaVar != null)
+                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+            else
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+            insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
+            insc.Add(Ins.Create(OpCodes.Callvirt, filterExcetion));
+
+            // Compare FilterException result with 0 to get the endfilter argument
+            insc.Add(Ins.Create(OpCodes.Ldc_I4_0));
+            insc.Add(Ins.Create(OpCodes.Cgt_Un));
+            insc.Add(labelFilterEnd);
+            insc.Add(Ins.Create(OpCodes.Endfilter));
+
+            int ehCatchStart = insc.Count;
+
+            insc.Add(Ins.Create(OpCodes.Pop)); // Exception already stored
+
+            // Call OnException()
+            if (meaVar != null)
+            {
+                MethodReference getException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.GetMethod);
+                MethodReference setException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.SetMethod);
+
+                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+                insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
+                insc.Add(Ins.Create(OpCodes.Callvirt, setException));
+
+                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+                insc.Add(Ins.Create(OpCodes.Callvirt, onException));
+
+                Ins labelCaught = CreateNop();
+
+                // If the Exception property was set to null, return normally, otherwise rethrow
+                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+                insc.Add(Ins.Create(OpCodes.Callvirt, getException));
+                insc.Add(Ins.Create(OpCodes.Dup));
+                insc.Add(Ins.Create(OpCodes.Brfalse, labelCaught));
+
+                insc.Add(Ins.Create(OpCodes.Rethrow));
+
+                insc.Add(labelCaught);
+                insc.Add(Ins.Create(OpCodes.Pop));
+            }
+            else
+            {
+                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+                insc.Add(Ins.Create(OpCodes.Callvirt, onException));
+            }
+            insc.Add(Ins.Create(OpCodes.Leave, leaveTarget));
+
+            int ehCatchEnd = insc.Count;
+
+            insc.Add(Ins.Create(OpCodes.Nop));
+
+            targetMethod.Body.InsertInstructions(offset, insc);
+
+            targetMethod.Body.ExceptionHandlers.Add(new ExceptionHandler(ExceptionHandlerType.Filter)
+            {
+                TryStart = targetMethod.Body.Instructions[tryStart],
+                TryEnd = insc[ehTryCatchEnd],
+                FilterStart = insc[ehFilterStart],
+                HandlerStart = insc[ehCatchStart],
+                HandlerEnd = insc[ehCatchEnd],
+                CatchType = exceptionType
+            });
+        }
+
+        protected static void WriteFinallyExceptionHandler(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            MethodDefinition stateMachineOpt,
+            int offset,
+            TypeDefinition aspectType,
+            FieldReference aspectField,
+            VariableDefinition meaVar,
+            FieldReference meaField,
+            int tryStart,
+            Ins leaveTarget)
+        {
+            MethodDefinition onExitDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExitAdviceName);
+            MethodReference onExit = mwc.SafeImport(onExitDef);
+
+            MethodDefinition targetMethod = stateMachineOpt ?? method;
 
             var insc = new Collection<Ins>();
 
-            // Write success block
+            insc.Add(Ins.Create(OpCodes.Leave, leaveTarget));
 
-            if (withSuccess)
+            int ehTryFinallyEnd = insc.Count;
+
+            // Begin finally block
+
+            int ehFinallyStart = insc.Count;
+
+            // Call OnExit()
+            insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+            if (meaField != null)
             {
-                MethodDefinition onSuccessDef =
-                    aspectType.GetInheritedMethods().First(m => m.Name == OnSuccessAdviceName);
-                MethodReference onSuccess = mwc.SafeImport(onSuccessDef);
-
-                insc.Add(labelSuccess);
-                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-                if (meaVar != null)
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                else
-                    insc.Add(Ins.Create(OpCodes.Ldnull));
-                insc.Add(Ins.Create(OpCodes.Callvirt, onSuccess));
-
-                if (withException || withExit)
-                    insc.Add(Ins.Create(OpCodes.Leave, labelNewReturn));
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
             }
+            else if (meaVar != null)
+                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+            else
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+            insc.Add(Ins.Create(OpCodes.Callvirt, onExit));
+            insc.Add(Ins.Create(OpCodes.Endfinally));
 
-            // Write exception filter and handler
+            int ehFinallyEnd = insc.Count;
+            insc.Add(Ins.Create(OpCodes.Nop));
 
-            TypeReference exceptionType = null;
-            int ehTryCatchEnd = -1;
-            int ehFilterStart = -1;
-            int ehCatchStart = -1;
-            int ehCatchEnd = -1;
+            targetMethod.Body.InsertInstructions(offset, insc);
 
-            if (withException)
+            var finallyHandler = new ExceptionHandler(ExceptionHandlerType.Finally)
             {
-                MethodDefinition filterExceptionDef =
-                    aspectType.GetInheritedMethods().First(m => m.Name == FilterExceptionAdviceName);
-                MethodReference filterExcetion = mwc.SafeImport(filterExceptionDef);
-                MethodDefinition onExceptionDef =
-                    aspectType.GetInheritedMethods().First(m => m.Name == OnExceptionAdviceName);
-                MethodReference onException = mwc.SafeImport(onExceptionDef);
-                exceptionType = mwc.SafeImport(mwc.Framework.Exception);
+                TryStart = targetMethod.Body.Instructions[tryStart],
+                TryEnd = insc[ehTryFinallyEnd],
+                HandlerStart = insc[ehFinallyStart],
+                HandlerEnd = insc[ehFinallyEnd]
+            };
 
-                VariableDefinition exceptionHolder = method.Body.AddVariableDefinition(exceptionType);
-
-                Ins labelFilterTrue = CreateNop();
-                Ins labelFilterEnd = CreateNop();
-
-                ehTryCatchEnd = insc.Count;
-                ehFilterStart = insc.Count;
-
-                // Check if its actually Exception. Non-Exception types can be thrown by native code.
-                insc.Add(Ins.Create(OpCodes.Isinst, exceptionType));
-                insc.Add(Ins.Create(OpCodes.Dup));
-                insc.Add(Ins.Create(OpCodes.Brtrue, labelFilterTrue));
-
-                // Not an Exception, load 0 as endfilter argument
-                insc.Add(Ins.Create(OpCodes.Pop));
-                insc.Add(Ins.Create(OpCodes.Ldc_I4_0));
-                insc.Add(Ins.Create(OpCodes.Br, labelFilterEnd));
-
-                // Call FilterException()
-                insc.Add(labelFilterTrue);
-                insc.Add(Ins.Create(OpCodes.Stloc, exceptionHolder));
-                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-                if (meaVar != null)
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                else
-                    insc.Add(Ins.Create(OpCodes.Ldnull));
-                insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
-                insc.Add(Ins.Create(OpCodes.Callvirt, filterExcetion));
-
-                // Compare FilterException result with 0 to get the endfilter argument
-                insc.Add(Ins.Create(OpCodes.Ldc_I4_0));
-                insc.Add(Ins.Create(OpCodes.Cgt_Un));
-                insc.Add(labelFilterEnd);
-                insc.Add(Ins.Create(OpCodes.Endfilter));
-
-                ehCatchStart = insc.Count;
-
-                insc.Add(Ins.Create(OpCodes.Pop)); // Exception already stored
-
-                // Call OnException()
-                if (meaVar != null)
-                {
-                    MethodReference getException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.GetMethod);
-                    MethodReference setException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.SetMethod);
-
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                    insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
-                    insc.Add(Ins.Create(OpCodes.Callvirt, setException));
-
-                    insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                    insc.Add(Ins.Create(OpCodes.Callvirt, onException));
-
-                    Ins labelCaught = CreateNop();
-
-                    // If the Exception property was set to null, return normally, otherwise rethrow
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                    insc.Add(Ins.Create(OpCodes.Callvirt, getException));
-                    insc.Add(Ins.Create(OpCodes.Dup));
-                    insc.Add(Ins.Create(OpCodes.Brfalse, labelCaught));
-
-                    insc.Add(Ins.Create(OpCodes.Rethrow));
-
-                    insc.Add(labelCaught);
-                    insc.Add(Ins.Create(OpCodes.Pop));
-                }
-                else
-                {
-                    insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-                    insc.Add(Ins.Create(OpCodes.Ldnull));
-                    insc.Add(Ins.Create(OpCodes.Callvirt, onException));
-                }
-                insc.Add(Ins.Create(OpCodes.Leave, labelNewReturn));
-
-                ehCatchEnd = insc.Count;
-            }
-
-            // End of try block for the finally handler
-
-            int ehFinallyEnd = -1;
-            int ehFinallyStart = -1;
-            int ehTryFinallyEnd = -1;
-
-            if (withExit)
-            {
-                MethodDefinition onExitDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExitAdviceName);
-                MethodReference onExit = mwc.SafeImport(onExitDef);
-
-                insc.Add(Ins.Create(OpCodes.Leave, labelNewReturn));
-
-                ehTryFinallyEnd = insc.Count;
-
-                // Begin finally block
-
-                ehFinallyStart = insc.Count;
-
-                // Call OnExit()
-                insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
-                if (meaVar != null)
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                else
-                    insc.Add(Ins.Create(OpCodes.Ldnull));
-                insc.Add(Ins.Create(OpCodes.Callvirt, onExit));
-                insc.Add(Ins.Create(OpCodes.Endfinally));
-
-                ehFinallyEnd = insc.Count;
-            }
-
-            // End finally block
-
-            insc.Add(labelNewReturn);
-
-            // Return the previously stored result
-            if (returnValueHolder != null)
-                insc.Add(Ins.Create(OpCodes.Ldloc, returnValueHolder));
-            insc.Add(Ins.Create(OpCodes.Ret));
-            
-            method.Body.InsertInstructions(offset, insc);
-
-            if (withException)
-            {
-                // NOTE TryEnd and HandlerEnd point to the instruction AFTER the 'leave'
-
-                var catchHandler = new ExceptionHandler(ExceptionHandlerType.Filter)
-                {
-                    TryStart = bodyInsc[tryStartIndex],
-                    TryEnd = bodyInsc[offset + ehTryCatchEnd],
-                    FilterStart = bodyInsc[offset + ehFilterStart],
-                    HandlerStart = bodyInsc[offset + ehCatchStart],
-                    HandlerEnd = bodyInsc[offset + ehCatchEnd],
-                    CatchType = exceptionType
-                };
-
-                method.Body.ExceptionHandlers.Add(catchHandler);
-            }
-
-            if (withExit)
-            {
-                var finallyHandler = new ExceptionHandler(ExceptionHandlerType.Finally)
-                {
-                    TryStart = bodyInsc[tryStartIndex],
-                    TryEnd = bodyInsc[offset + ehTryFinallyEnd],
-                    HandlerStart = bodyInsc[offset + ehFinallyStart],
-                    HandlerEnd = bodyInsc[offset + ehFinallyEnd]
-                };
-
-                method.Body.ExceptionHandlers.Add(finallyHandler);
-            }
+            targetMethod.Body.ExceptionHandlers.Add(finallyHandler);
         }
 
         /// <summary>

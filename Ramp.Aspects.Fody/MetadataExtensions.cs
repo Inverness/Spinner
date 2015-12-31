@@ -68,10 +68,15 @@ namespace Ramp.Aspects.Fody
         /// <param name="self"></param>
         /// <param name="oldValue"></param>
         /// <param name="newValue"></param>
-        internal static void ReplaceBranchTargets(this MethodBody self, Instruction oldValue, Instruction newValue)
+        internal static void ReplaceBranchTargets(this MethodBody self, Instruction oldValue, Instruction newValue, int excludeStart, int excludeCount)
         {
-            foreach (Instruction ins in self.Instructions)
+            int excludeEnd = excludeStart + excludeCount;
+            for (int i = 0; i < self.Instructions.Count; i++)
             {
+                if (i >= excludeStart && i < excludeEnd)
+                    continue;
+
+                Instruction ins = self.Instructions[i];
                 OperandType ot = ins.OpCode.OperandType;
                 if (ot == OperandType.InlineBrTarget || ot == OperandType.ShortInlineBrTarget)
                 {
@@ -81,9 +86,9 @@ namespace Ramp.Aspects.Fody
                 else if (ot == OperandType.InlineSwitch)
                 {
                     var operand = (Instruction[]) ins.Operand;
-                    for (int i = 0; i < operand.Length; i++)
-                        if (ReferenceEquals(operand[i], oldValue))
-                            operand[i] = newValue;
+                    for (int s = 0; s < operand.Length; s++)
+                        if (ReferenceEquals(operand[s], oldValue))
+                            operand[s] = newValue;
                 }
             }
 
@@ -94,15 +99,16 @@ namespace Ramp.Aspects.Fody
 
             foreach (ExceptionHandler eh in self.ExceptionHandlers)
             {
-                if (eh.TryStart == oldValue)
+                int index;
+                if (eh.TryStart == oldValue && ((index = self.Instructions.IndexOf(eh.TryStart)) < excludeStart || index > excludeEnd))
                     eh.TryStart = newValue;
-                if (eh.TryEnd == oldValue)
+                if (eh.TryEnd == oldValue && ((index = self.Instructions.IndexOf(eh.TryEnd)) < excludeStart || index > excludeEnd))
                     eh.TryEnd = newValue;
-                if (eh.HandlerStart == oldValue)
+                if (eh.HandlerStart == oldValue && ((index = self.Instructions.IndexOf(eh.HandlerStart)) < excludeStart || index > excludeEnd))
                     eh.HandlerStart = newValue;
-                if (eh.HandlerEnd == oldValue)
+                if (eh.HandlerEnd == oldValue && ((index = self.Instructions.IndexOf(eh.HandlerEnd)) < excludeStart || index > excludeEnd))
                     eh.HandlerEnd = newValue;
-                if (eh.FilterStart == oldValue)
+                if (eh.FilterStart == oldValue && ((index = self.Instructions.IndexOf(eh.FilterStart)) < excludeStart || index > excludeEnd))
                     eh.FilterStart = newValue;
             }
         }
@@ -117,32 +123,50 @@ namespace Ramp.Aspects.Fody
             }
         }
 
+        internal static int IndexOfOrEnd(this MethodBody self, Instruction ins)
+        {
+            return ins != null ? self.Instructions.IndexOf(ins) : self.Instructions.Count;
+        }
+
         internal static void InsertInstructions(this MethodBody self, int index, params Instruction[] instructions)
         {
             InsertInstructions(self, index, (IEnumerable<Instruction>) instructions);
         }
 
+        internal static void InsertInstructions(this MethodBody self, Instruction before, IEnumerable<Instruction> instructions)
+        {
+            int index = before != null ? self.Instructions.IndexOf(before) : self.Instructions.Count;
+            InsertInstructions(self, index, instructions);
+        }
+
         /// <summary>
         /// Inserts instructions while fixing branch targets for the insertion index
         /// </summary>
-        internal static void InsertInstructions(this MethodBody self, int index, IEnumerable<Instruction> instructions)
+        internal static int InsertInstructions(this MethodBody self, int index,  IEnumerable<Instruction> instructions)
         {
             Collection<Instruction> insc = self.Instructions;
 
             if (index == insc.Count)
-            {
-                insc.AddRange(instructions);
-            }
-            else
-            {
-                Instruction oldIns = insc[index];
+                return insc.AddRange(instructions);
 
-                insc.InsertRange(index, instructions);
+            Instruction oldIns = insc[index];
 
-                Instruction newIns = insc[index];
+            int count = insc.InsertRange(index, instructions);
 
-                self.ReplaceBranchTargets(oldIns, newIns);
-            }
+            Instruction newIns = insc[index];
+
+            self.ReplaceBranchTargets(oldIns, newIns, index, count);
+
+            return count;
+        }
+
+        internal static void ReplaceInstruction(this MethodBody self, int index, Instruction ins)
+        {
+            Instruction oldIns = self.Instructions[index];
+
+            self.Instructions[index] = ins;
+
+            self.ReplaceBranchTargets(oldIns, ins, index, 1);
         }
 
         internal static VariableDefinition AddVariableDefinition(this MethodBody self, TypeReference type)
