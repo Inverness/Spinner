@@ -305,17 +305,16 @@ namespace Spinner.Fody.Weavers
             if (withYield || withResume)
             {
                 int awaitSearchStart = insc.Count - initEndOffset;
-                int awaitSearchEnd = insc.Count - leaveEndOffset;
                 VariableDefinition awaitableStorage = null;
 
-                while (awaitSearchStart < awaitSearchEnd)
+                while (awaitSearchStart < insc.Count - leaveEndOffset)
                 {
                     int awaitable;
                     int callYield;
                     int callResume;
                     bool found = GetAwaitInfo(stateMachine,
                                               awaitSearchStart,
-                                              awaitSearchEnd,
+                                              insc.Count - leaveEndOffset,
                                               out awaitable,
                                               out callYield,
                                               out callResume);
