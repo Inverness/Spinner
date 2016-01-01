@@ -8,12 +8,12 @@ using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
 {
-    internal class PropertyInterceptionAspectWeaver : AspectWeaver
+    internal sealed class PropertyInterceptionAspectWeaver : AspectWeaver
     {
-        protected const string GetValueMethodName = "GetValue";
-        protected const string SetValueMethodName = "SetValue";
-        protected const string OnGetValueAdviceName = "OnGetValue";
-        protected const string OnSetValueAdviceName = "OnSetValue";
+        private const string GetValueMethodName = "GetValue";
+        private const string SetValueMethodName = "SetValue";
+        private const string OnGetValueAdviceName = "OnGetValue";
+        private const string OnSetValueAdviceName = "OnSetValue";
 
         internal static void Weave(
             ModuleWeavingContext mwc,
@@ -106,7 +106,7 @@ namespace Spinner.Fody.Weavers
             method.Body.RemoveNops();
         }
 
-        protected static void CreatePropertyBindingClass(
+        private static void CreatePropertyBindingClass(
             ModuleWeavingContext mwc,
             PropertyDefinition property,
             string bindingClassName,
@@ -116,7 +116,7 @@ namespace Spinner.Fody.Weavers
         {
             ModuleDefinition module = property.Module;
             
-            TypeReference baseType = mwc.SafeImport(mwc.Library.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
+            TypeReference baseType = mwc.SafeImport(mwc.Spinner.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
 
             var tattrs = TypeAttributes.NestedPrivate |
                          TypeAttributes.Class |
@@ -155,7 +155,7 @@ namespace Spinner.Fody.Weavers
                 bindingTypeDef.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Library.ArgumentsBase);
+                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.ArgumentsBase);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -243,7 +243,7 @@ namespace Spinner.Fody.Weavers
                 bindingTypeDef.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Library.ArgumentsBase);
+                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.ArgumentsBase);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -313,7 +313,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Writes the PropertyInterceptionArgs initialization.
         /// </summary>
-        protected static void WritePiaInit(
+        private static void WritePiaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             int offset,
@@ -323,14 +323,14 @@ namespace Spinner.Fody.Weavers
             out VariableDefinition iaVariable,
             out FieldReference valueField)
         {
-            TypeDefinition piaTypeDef = mwc.Library.BoundPropertyInterceptionArgsT1;
+            TypeDefinition piaTypeDef = mwc.Spinner.BoundPropertyInterceptionArgsT1;
             GenericInstanceType genericPiaType = mwc.SafeImport(piaTypeDef).MakeGenericInstanceType(property.PropertyType);
             TypeReference piaType = genericPiaType;
 
-            MethodDefinition constructorDef = mwc.Library.BoundPropertyInterceptionArgsT1_ctor;
+            MethodDefinition constructorDef = mwc.Spinner.BoundPropertyInterceptionArgsT1_ctor;
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
 
-            FieldDefinition valueFieldDef = mwc.Library.BoundPropertyInterceptionArgsT1_TypedValue;
+            FieldDefinition valueFieldDef = mwc.Spinner.BoundPropertyInterceptionArgsT1_TypedValue;
             valueField = mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
             iaVariable = method.Body.AddVariableDefinition(piaType);

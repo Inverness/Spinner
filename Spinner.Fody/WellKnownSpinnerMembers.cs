@@ -4,9 +4,9 @@ using Mono.Cecil;
 namespace Spinner.Fody
 {
     /// <summary>
-    /// Cache well known aspect library definitions for use by weavers.
+    /// Cache well known aspect library definitions for use by weavers. These are not imported by default.
     /// </summary>
-    internal class WellKnownLibraryMembers
+    internal class WellKnownSpinnerMembers
     {
         internal const int MaxArguments = Spinner.Arguments.MaxItems;
 
@@ -14,8 +14,6 @@ namespace Spinner.Fody
         private const string IntNs = "Spinner.Internal";
         
         // ReSharper disable InconsistentNaming
-        internal readonly TypeDefinition ArgumentsBase;
-        internal readonly TypeDefinition[] Arguments;
         internal readonly TypeDefinition MethodExecutionArgs;
         internal readonly MethodDefinition MethodExecutionArgs_ctor;
         internal readonly PropertyDefinition MethodExecutionArgs_Exception;
@@ -35,20 +33,14 @@ namespace Spinner.Fody
         internal readonly FieldDefinition BoundPropertyInterceptionArgsT1_TypedValue;
         internal readonly TypeDefinition Features;
         internal readonly TypeDefinition FeaturesAttribute;
-
-
+        internal readonly TypeDefinition ArgumentsBase;
+        internal readonly TypeDefinition[] Arguments;
         internal readonly MethodDefinition[] Arguments_ctor;
         internal readonly FieldDefinition[][] Arguments_Item;
         // ReSharper restore InconsistentNaming
 
-        internal WellKnownLibraryMembers(ModuleDefinition module)
+        internal WellKnownSpinnerMembers(ModuleDefinition module)
         {
-            ArgumentsBase = module.GetType(Ns, "Arguments");
-
-            Arguments = new TypeDefinition[MaxArguments + 1];
-            for (int i = 1; i <= MaxArguments; i++)
-                Arguments[i] = module.GetType(IntNs, "Arguments`" + i);
-
             MethodExecutionArgs = module.GetType(Ns, "MethodExecutionArgs");
             MethodExecutionArgs_ctor = MethodExecutionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
             MethodExecutionArgs_Exception = MethodExecutionArgs.Properties.First(m => m.Name == "Exception");
@@ -73,6 +65,12 @@ namespace Spinner.Fody
             BoundPropertyInterceptionArgsT1 = module.GetType(IntNs, "BoundPropertyInterceptionArgs`1");
             BoundPropertyInterceptionArgsT1_ctor = BoundPropertyInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundPropertyInterceptionArgsT1_TypedValue = BoundPropertyInterceptionArgsT1.Fields.First(f => f.Name == "TypedValue");
+
+            ArgumentsBase = module.GetType(Ns, "Arguments");
+
+            Arguments = new TypeDefinition[MaxArguments + 1];
+            for (int i = 1; i <= MaxArguments; i++)
+                Arguments[i] = module.GetType(IntNs, "Arguments`" + i);
 
             Arguments_ctor = new MethodDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)

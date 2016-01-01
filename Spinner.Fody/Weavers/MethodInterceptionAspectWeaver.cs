@@ -10,10 +10,10 @@ namespace Spinner.Fody.Weavers
     /// <summary>
     /// Applies the method interception aspect to a method.
     /// </summary>
-    internal class MethodInterceptionAspectWeaver : AspectWeaver
+    internal sealed class MethodInterceptionAspectWeaver : AspectWeaver
     {
-        protected const string InvokeMethodName = "Invoke";
-        protected const string OnInvokeAdviceName = "OnInvoke";
+        private const string InvokeMethodName = "Invoke";
+        private const string OnInvokeAdviceName = "OnInvoke";
 
         internal static void Weave(
             ModuleWeavingContext mwc,
@@ -79,7 +79,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Writes the MethodInterceptionArgs initialization.
         /// </summary>
-        protected static void WriteMiaInit(
+        private static void WriteMiaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             int offset,
@@ -95,24 +95,24 @@ namespace Spinner.Fody.Weavers
             
             if (method.ReturnType == module.TypeSystem.Void)
             {
-                TypeDefinition miaTypeDef = mwc.Library.BoundMethodInterceptionArgs;
+                TypeDefinition miaTypeDef = mwc.Spinner.BoundMethodInterceptionArgs;
                 miaType = mwc.SafeImport(miaTypeDef);
 
-                MethodDefinition constructorDef = mwc.Library.BoundMethodInterceptionArgs_ctor;
+                MethodDefinition constructorDef = mwc.Spinner.BoundMethodInterceptionArgs_ctor;
                 constructor = mwc.SafeImport(constructorDef);
 
                 returnValueField = null;
             }
             else
             {
-                TypeDefinition miaTypeDef = mwc.Library.BoundMethodInterceptionArgsT1;
+                TypeDefinition miaTypeDef = mwc.Spinner.BoundMethodInterceptionArgsT1;
                 GenericInstanceType genericMiaType = mwc.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
                 miaType = genericMiaType;
 
-                MethodDefinition constructorDef = mwc.Library.BoundMethodInterceptionArgsT1_ctor;
+                MethodDefinition constructorDef = mwc.Spinner.BoundMethodInterceptionArgsT1_ctor;
                 constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
 
-                FieldDefinition returnValueFieldDef = mwc.Library.BoundMethodInterceptionArgsT1_TypedReturnValue;
+                FieldDefinition returnValueFieldDef = mwc.Spinner.BoundMethodInterceptionArgsT1_TypedReturnValue;
                 returnValueField = mwc.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
@@ -148,7 +148,7 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void CreateMethodBindingClass(
+        private static void CreateMethodBindingClass(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             string bindingClassName,
@@ -161,11 +161,11 @@ namespace Spinner.Fody.Weavers
 
             if (method.ReturnType == module.TypeSystem.Void)
             {
-                baseType = mwc.SafeImport(mwc.Library.MethodBinding);
+                baseType = mwc.SafeImport(mwc.Spinner.MethodBinding);
             }
             else
             {
-                baseType = mwc.SafeImport(mwc.Library.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
+                baseType = mwc.SafeImport(mwc.Spinner.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
             }
 
             var tattrs = TypeAttributes.NestedPrivate |
@@ -205,7 +205,7 @@ namespace Spinner.Fody.Weavers
             bindingTypeDef.Methods.Add(invokeMethod);
 
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Library.ArgumentsBase);
+            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.ArgumentsBase);
 
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));

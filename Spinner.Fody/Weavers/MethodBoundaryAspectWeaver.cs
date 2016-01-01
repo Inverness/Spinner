@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -17,15 +16,15 @@ namespace Spinner.Fody.Weavers
         Async
     }
 
-    internal class MethodBoundaryAspectWeaver : AspectWeaver
+    internal sealed class MethodBoundaryAspectWeaver : AspectWeaver
     {
-        protected const string OnEntryAdviceName = "OnEntry";
-        protected const string OnExitAdviceName = "OnExit";
-        protected const string OnExceptionAdviceName = "OnException";
-        protected const string OnSuccessAdviceName = "OnSuccess";
-        protected const string OnYieldAdviceName = "OnYield";
-        protected const string OnResumeAdviceName = "OnResume";
-        protected const string FilterExceptionAdviceName = "FilterException";
+        private const string OnEntryAdviceName = "OnEntry";
+        private const string OnExitAdviceName = "OnExit";
+        private const string OnExceptionAdviceName = "OnException";
+        private const string OnSuccessAdviceName = "OnSuccess";
+        private const string OnYieldAdviceName = "OnYield";
+        private const string OnResumeAdviceName = "OnResume";
+        private const string FilterExceptionAdviceName = "FilterException";
 
         internal static void Weave(
             ModuleWeavingContext mwc,
@@ -62,9 +61,10 @@ namespace Spinner.Fody.Weavers
                                 aspectField,
                                 effectiveReturnType);
 
+                    // TODO: Check if removing nop's has implications for debug builds.
                     method.Body.RemoveNops();
                     method.Body.OptimizeMacros();
-                    method.Body.UpdateOffsets();
+                    //method.Body.UpdateOffsets();
                     break;
                 case StateMachineKind.Iterator:
                     WeaveIteratorMethod(mwc,
@@ -94,14 +94,14 @@ namespace Spinner.Fody.Weavers
 
                     moveNextMethod.Body.RemoveNops();
                     moveNextMethod.Body.OptimizeMacros();
-                    moveNextMethod.Body.UpdateOffsets();
+                    //moveNextMethod.Body.UpdateOffsets();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
 
-        protected static void WeaveMethod(
+        private static void WeaveMethod(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
@@ -221,7 +221,7 @@ namespace Spinner.Fody.Weavers
             }
         }
 
-        protected static void WeaveAsyncMethod(
+        private static void WeaveAsyncMethod(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
@@ -413,7 +413,7 @@ namespace Spinner.Fody.Weavers
             }
         }
 
-        protected static void WeaveIteratorMethod(
+        private static void WeaveIteratorMethod(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
@@ -426,7 +426,7 @@ namespace Spinner.Fody.Weavers
         {
         }
 
-        protected static bool GetAwaitInfo(
+        private static bool GetAwaitInfo(
             MethodDefinition stateMachine,
             int start,
             int end,
@@ -481,15 +481,15 @@ namespace Spinner.Fody.Weavers
             return false;
         }
 
-        protected static void WriteMeaInit(
+        private static void WriteMeaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             VariableDefinition argumentsVar,
             int offset,
             out VariableDefinition meaVar)
         {
-            TypeReference meaType = mwc.SafeImport(mwc.Library.MethodExecutionArgs);
-            MethodReference meaCtor = mwc.SafeImport(mwc.Library.MethodExecutionArgs_ctor);
+            TypeReference meaType = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs);
+            MethodReference meaCtor = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_ctor);
 
             meaVar = method.Body.AddVariableDefinition(meaType);
 
@@ -524,7 +524,7 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteSmMeaInit(
+        private static void WriteSmMeaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachine,
@@ -532,8 +532,8 @@ namespace Spinner.Fody.Weavers
             int offset,
             out FieldDefinition mea)
         {
-            TypeReference meaType = mwc.SafeImport(mwc.Library.MethodExecutionArgs);
-            MethodReference meaCtor = mwc.SafeImport(mwc.Library.MethodExecutionArgs_ctor);
+            TypeReference meaType = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs);
+            MethodReference meaCtor = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_ctor);
 
             mea = new FieldDefinition("<>z__mea", FieldAttributes.Private, meaType);
             stateMachine.DeclaringType.Fields.Add(mea);
@@ -575,7 +575,7 @@ namespace Spinner.Fody.Weavers
             stateMachine.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteOnEntryCall(
+        private static void WriteOnEntryCall(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             int offset,
@@ -601,7 +601,7 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteSmOnEntryCall(
+        private static void WriteSmOnEntryCall(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachine,
@@ -629,7 +629,7 @@ namespace Spinner.Fody.Weavers
             stateMachine.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void RewriteReturns(
+        private static void RewriteReturns(
             MethodDefinition method,
             int startIndex,
             int endIndex,
@@ -672,7 +672,7 @@ namespace Spinner.Fody.Weavers
             }
         }
 
-        protected static void RewriteSmLeaves(
+        private static void RewriteSmLeaves(
             MethodDefinition method,
             int startIndex,
             int endIndex,
@@ -700,7 +700,7 @@ namespace Spinner.Fody.Weavers
             }
         }
 
-        protected static void WriteSuccessHandler(
+        private static void WriteSuccessHandler(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
@@ -736,7 +736,7 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteCatchExceptionHandler(
+        private static void WriteCatchExceptionHandler(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachineOpt,
@@ -807,8 +807,8 @@ namespace Spinner.Fody.Weavers
             // Call OnException()
             if (meaVar != null)
             {
-                MethodReference getException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.GetMethod);
-                MethodReference setException = mwc.SafeImport(mwc.Library.MethodExecutionArgs_Exception.SetMethod);
+                MethodReference getException = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_Exception.GetMethod);
+                MethodReference setException = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
                 insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
                 insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
@@ -856,7 +856,7 @@ namespace Spinner.Fody.Weavers
             });
         }
 
-        protected static void WriteFinallyExceptionHandler(
+        private static void WriteFinallyExceptionHandler(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachineOpt,
@@ -913,7 +913,7 @@ namespace Spinner.Fody.Weavers
             targetMethod.Body.ExceptionHandlers.Add(finallyHandler);
         }
 
-        protected static void WriteYieldAndResume(
+        private static void WriteYieldAndResume(
             ModuleWeavingContext mwc,
             MethodDefinition stateMachine,
             int getAwaiterOffset,
@@ -985,7 +985,7 @@ namespace Spinner.Fody.Weavers
             }
         }
 
-        protected static TypeReference GetExpressionType(MethodBody body, int index)
+        private static TypeReference GetExpressionType(MethodBody body, int index)
         {
             TypeSystem typeSystem = body.Method.Module.TypeSystem;
             Ins ins = body.Instructions[index];
@@ -1031,7 +1031,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Discover whether a method is an async state machine creator and the nested type that implements it.
         /// </summary>
-        protected static StateMachineKind GetStateMachineInfo(ModuleWeavingContext mwc, MethodDefinition method, out MethodDefinition moveNextMethod)
+        private static StateMachineKind GetStateMachineInfo(ModuleWeavingContext mwc, MethodDefinition method, out MethodDefinition moveNextMethod)
         {
             if (method.HasCustomAttributes)
             {
@@ -1060,9 +1060,9 @@ namespace Spinner.Fody.Weavers
             return StateMachineKind.None;
         }
 
-        protected static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
+        private static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
         {
-            TypeDefinition featuresAttributeType = mwc.Library.FeaturesAttribute;
+            TypeDefinition featuresAttributeType = mwc.Spinner.FeaturesAttribute;
 
             TypeDefinition currentType = aspectType;
             while (currentType != null)
@@ -1084,20 +1084,20 @@ namespace Spinner.Fody.Weavers
             return Features.None;
         }
 
-        protected static bool IsBranching(Ins ins)
+        private static bool IsBranching(Ins ins)
         {
             OperandType ot = ins.OpCode.OperandType;
 
             return ot == OperandType.InlineSwitch || ot == OperandType.InlineBrTarget || ot == OperandType.ShortInlineBrTarget;
         }
 
-        protected static bool IsCall(Ins ins)
+        private static bool IsCall(Ins ins)
         {
             OpCode op = ins.OpCode;
             return op == OpCodes.Call || op == OpCodes.Callvirt;
         }
 
-        protected static int Seek(Collection<Ins> list, int start, Func<Ins, bool> check)
+        private static int Seek(Collection<Ins> list, int start, Func<Ins, bool> check)
         {
             for (int i = start; i < list.Count; i++)
             {
@@ -1107,7 +1107,7 @@ namespace Spinner.Fody.Weavers
             return -1;
         }
 
-        protected static int SeekR(Collection<Ins> list, int start, Func<Ins, bool> check)
+        private static int SeekR(Collection<Ins> list, int start, Func<Ins, bool> check)
         {
             for (int i = start; i > -1; i--)
             {

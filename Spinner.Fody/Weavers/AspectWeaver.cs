@@ -8,26 +8,6 @@ using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
 {
-    internal struct VariableInfo
-    {
-        public readonly VariableDefinition LocalVariable;
-        public readonly FieldReference StateMachineField;
-
-        public VariableInfo(VariableDefinition local)
-        {
-            LocalVariable = local;
-            StateMachineField = null;
-        }
-
-        public VariableInfo(FieldReference smfield)
-        {
-            LocalVariable = null;
-            StateMachineField = smfield;
-        }
-
-        public bool IsStateMachineField => StateMachineField != null;
-    }
-
     /// <summary>
     /// Base class for aspect weavers
     /// </summary>
@@ -108,7 +88,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = mwc.Library.Arguments_ctor[effectiveParameterCount];
+            MethodDefinition constructorDef = mwc.Spinner.Arguments_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
             
             argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
@@ -137,7 +117,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = mwc.Library.Arguments_ctor[effectiveParameterCount];
+            MethodDefinition constructorDef = mwc.Spinner.Arguments_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
             arguments = stateMachine.Body.AddVariableDefinition(argumentsType);
@@ -179,14 +159,14 @@ namespace Spinner.Fody.Weavers
                 baseParameterTypes[i] = pt;
             }
 
-            TypeDefinition typeDef = mwc.Library.Arguments[effectiveParameterCount];
+            TypeDefinition typeDef = mwc.Spinner.Arguments[effectiveParameterCount];
             type = mwc.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
             for (int i = 0; i < effectiveParameterCount; i++)
             {
-                FieldDefinition fieldDef = mwc.Library.Arguments_Item[effectiveParameterCount][i];
+                FieldDefinition fieldDef = mwc.Spinner.Arguments_Item[effectiveParameterCount][i];
                 FieldReference field = mwc.SafeImport(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;

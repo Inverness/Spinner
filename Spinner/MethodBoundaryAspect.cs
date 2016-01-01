@@ -3,7 +3,7 @@ using System;
 namespace Spinner
 {
     /// <summary>
-    ///     The base class for method boundary aspects.
+    /// A default implementation of IMethodBoundaryAspect.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property | AttributeTargets.Event, AllowMultiple = true, Inherited = false)]
     public abstract class MethodBoundaryAspect : Aspect, IMethodBoundaryAspect
