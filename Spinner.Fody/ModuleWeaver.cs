@@ -23,11 +23,8 @@ namespace Spinner.Fody
         public Action<string> LogError { get; set; }
 
         // Definition for IMethodInterceptionAspect
-        private TypeDefinition _methodInterceptionAspectTypeDef;
-        private TypeDefinition _propertyInterceptionAspectTypeDef;
-        private TypeDefinition _methodBoundaryAspectTypeDef;
         private int _aspectIndexCounter;
-        private ModuleWeavingContext _moduleWeavingContext;
+        private ModuleWeavingContext _mwc;
 
         public ModuleWeaver()
         {
@@ -39,108 +36,154 @@ namespace Spinner.Fody
 
         public void Execute()
         {
-            AssemblyNameReference aspectsModuleName = ModuleDefinition.AssemblyReferences.First(a => a.Name == "Spinner");
-            AssemblyDefinition aspectsAssembly = ModuleDefinition.AssemblyResolver.Resolve(aspectsModuleName);
+            LogInfo($"Beginning aspect weaving for {ModuleDefinition.Assembly.FullName}");
 
-            var aspectLibraryModule = aspectsAssembly.MainModule;
-            _methodBoundaryAspectTypeDef = aspectLibraryModule.GetType("Spinner.IMethodBoundaryAspect");
-            _methodInterceptionAspectTypeDef = aspectLibraryModule.GetType("Spinner.IMethodInterceptionAspect");
-            _propertyInterceptionAspectTypeDef = aspectLibraryModule.GetType("Spinner.IPropertyInterceptionAspect");
-            _moduleWeavingContext = new ModuleWeavingContext(ModuleDefinition, aspectLibraryModule);
+            AssemblyNameReference spinnerName = ModuleDefinition.AssemblyReferences.FirstOrDefault(a => a.Name == "Spinner");
 
-            var typeList = new List<TypeDefinition>(ModuleDefinition.GetAllTypes());
+            if (spinnerName == null)
+            {
+                LogWarning("No reference to Spinner assembly detected. Doing nothing.");
+                return;
+            }
 
-            // Execute type weavings in parallel. Module weaving context provides thread-safe imports.
+            _mwc = new ModuleWeavingContext(ModuleDefinition,
+                                            ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
+
+            // Execute type weavings in parallel. The ModuleWeavingContext provides thread-safe imports.
             // Weaving does not require any other module-level changes.
-            ParallelLoopResult parallelLoopResult = Parallel.ForEach(typeList, WeaveType);
-            Debug.Assert(parallelLoopResult.IsCompleted, "parallelLoopResult.IsCompleted");
+
+            // Tasks are only created when there is actual work to be done for a type.
+            Task[] tasks = ModuleDefinition.GetAllTypes()
+                                           .ToList()
+                                           .Select(CreateWeaveAction)
+                                           .Where(a => a != null)
+                                           .Select(Task.Run)
+                                           .ToArray();
+
+            if (tasks.Length != 0)
+            {
+                Task.WhenAll(tasks).Wait();
+                LogInfo($"Finished aspect weaving for {tasks.Length} types.");
+            }
+            else
+            {
+                LogWarning("No types found with aspects.");
+            }
         }
 
-        private void WeaveType(TypeDefinition type)
+        private Action CreateWeaveAction(TypeDefinition type)
         {
             List<Tuple<IMemberDefinition, TypeDefinition, int>> aspects = null;
 
-            foreach (MethodDefinition method in type.Methods)
+            // Use HasX properties to avoid on-demand allocation of the collections.
+
+            if (type.HasMethods)
             {
-                foreach (CustomAttribute a in method.CustomAttributes)
+                foreach (MethodDefinition method in type.Methods)
                 {
-                    TypeDefinition attributeType = a.AttributeType.Resolve();
-
-                    if (IsAspectAttribute(attributeType, _methodBoundaryAspectTypeDef))
+                    if (method.HasCustomAttributes)
                     {
-                        Debug.Assert(method.HasBody);
+                        foreach (CustomAttribute a in method.CustomAttributes)
+                        {
+                            TypeDefinition attributeType = a.AttributeType.Resolve();
 
-                        if (aspects == null)
-                            aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                        aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 0));
-                    }
-                    else if (IsAspectAttribute(attributeType, _methodInterceptionAspectTypeDef))
-                    {
-                        Debug.Assert(method.HasBody);
+                            if (IsAspectAttribute(attributeType, _mwc.Spinner.IMethodBoundaryAspect))
+                            {
+                                Debug.Assert(method.HasBody);
 
-                        if (aspects == null)
-                            aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                        aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 1));
-                    }
-                }
-            }
+                                if (aspects == null)
+                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                                aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 0));
 
-            foreach (PropertyDefinition property in type.Properties)
-            {
-                foreach (CustomAttribute a in property.CustomAttributes)
-                {
-                    TypeDefinition attributeType = a.AttributeType.Resolve();
+                                LogDebug($"Found aspect {attributeType.Name} for {method}");
+                            }
+                            else if (IsAspectAttribute(attributeType, _mwc.Spinner.IMethodInterceptionAspect))
+                            {
+                                Debug.Assert(method.HasBody);
 
-                    if (IsAspectAttribute(attributeType, _propertyInterceptionAspectTypeDef))
-                    {
-                        Debug.Assert(property.GetMethod != null || property.SetMethod != null);
-                        
-                        if (aspects == null)
-                            aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                        aspects.Add(Tuple.Create((IMemberDefinition) property, attributeType, 2));
+                                if (aspects == null)
+                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                                aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 1));
+
+                                LogDebug($"Found aspect {attributeType.Name} for {method}");
+                            }
+                        }
                     }
                 }
             }
 
-            if (aspects == null) return;
-
-            foreach (Tuple<IMemberDefinition, TypeDefinition, int> a in aspects)
+            if (type.HasProperties)
             {
-                int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
-
-                switch (a.Item3)
+                foreach (PropertyDefinition property in type.Properties)
                 {
-                    case 0:
-                        MethodBoundaryAspectWeaver.Weave(_moduleWeavingContext,
-                                                         (MethodDefinition) a.Item1,
-                                                         a.Item2,
-                                                         aspectIndex);
-                        break;
-                    case 1:
-                        MethodInterceptionAspectWeaver.Weave(_moduleWeavingContext,
+                    if (property.HasCustomAttributes)
+                    {
+                        foreach (CustomAttribute a in property.CustomAttributes)
+                        {
+                            TypeDefinition attributeType = a.AttributeType.Resolve();
+
+                            if (IsAspectAttribute(attributeType, _mwc.Spinner.IPropertyInterceptionAspect))
+                            {
+                                Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+
+                                if (aspects == null)
+                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                                aspects.Add(Tuple.Create((IMemberDefinition) property, attributeType, 2));
+
+                                LogDebug($"Found aspect {attributeType.Name} for {property}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (aspects == null)
+                return null;
+
+            Action taskAction = () =>
+            {
+                LogInfo($"Weaving {aspects.Count} aspects for {type}");
+
+                foreach (Tuple<IMemberDefinition, TypeDefinition, int> a in aspects)
+                {
+                    int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+
+                    switch (a.Item3)
+                    {
+                        case 0:
+                            MethodBoundaryAspectWeaver.Weave(_mwc,
                                                              (MethodDefinition) a.Item1,
                                                              a.Item2,
                                                              aspectIndex);
-                        break;
-                    case 2:
-                        PropertyInterceptionAspectWeaver.Weave(_moduleWeavingContext,
-                                                               (PropertyDefinition) a.Item1,
-                                                               a.Item2,
-                                                               aspectIndex);
-                        break;
+                            break;
+                        case 1:
+                            MethodInterceptionAspectWeaver.Weave(_mwc,
+                                                                 (MethodDefinition) a.Item1,
+                                                                 a.Item2,
+                                                                 aspectIndex);
+                            break;
+                        case 2:
+                            PropertyInterceptionAspectWeaver.Weave(_mwc,
+                                                                   (PropertyDefinition) a.Item1,
+                                                                   a.Item2,
+                                                                   aspectIndex);
+                            break;
 
+                    }
                 }
-            }
+            };
+
+            return taskAction;
         }
 
-        private static bool IsAspectAttribute(TypeDefinition attributeTypeDef, TypeDefinition aspectTypeDef)
+        private static bool IsAspectAttribute(TypeDefinition attributeType, TypeDefinition aspectType)
         {
-            TypeDefinition current = attributeTypeDef;
+            TypeDefinition current = attributeType;
             do
             {
-                foreach (TypeReference ir in current.Interfaces)
+                for (int i = 0; i < current.Interfaces.Count; i++)
                 {
-                    if (ir.Resolve() == aspectTypeDef)
+                    if (current.Interfaces[i].Resolve() == aspectType)
                         return true;
                 }
 

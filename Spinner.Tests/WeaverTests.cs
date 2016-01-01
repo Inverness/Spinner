@@ -115,6 +115,8 @@ namespace Spinner.Fody.Tests
                     _output.WriteLine(e.Data);
             };
 
+            _output.WriteLine("---- Running PEVerify ----");
+
             proc.Start();
             proc.BeginOutputReadLine();
 
@@ -130,6 +132,8 @@ namespace Spinner.Fody.Tests
                     throw new TimeoutException("PEVerify timed out");
                 }
             }
+
+            _output.WriteLine("--------------------------");
         }
 
         [Fact(DisplayName = "Weave Only", Skip = "NA")]

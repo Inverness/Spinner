@@ -14,6 +14,9 @@ namespace Spinner.Fody
         private const string IntNs = "Spinner.Internal";
         
         // ReSharper disable InconsistentNaming
+        internal readonly TypeDefinition IMethodBoundaryAspect;
+        internal readonly TypeDefinition IMethodInterceptionAspect;
+        internal readonly TypeDefinition IPropertyInterceptionAspect;
         internal readonly TypeDefinition MethodExecutionArgs;
         internal readonly MethodDefinition MethodExecutionArgs_ctor;
         internal readonly PropertyDefinition MethodExecutionArgs_Exception;
@@ -41,6 +44,10 @@ namespace Spinner.Fody
 
         internal WellKnownSpinnerMembers(ModuleDefinition module)
         {
+            IMethodBoundaryAspect = module.GetType(Ns, "IMethodBoundaryAspect");
+            IMethodInterceptionAspect = module.GetType(Ns, "IMethodInterceptionAspect");
+            IPropertyInterceptionAspect = module.GetType(Ns, "IPropertyInterceptionAspect");
+
             MethodExecutionArgs = module.GetType(Ns, "MethodExecutionArgs");
             MethodExecutionArgs_ctor = MethodExecutionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
             MethodExecutionArgs_Exception = MethodExecutionArgs.Properties.First(m => m.Name == "Exception");
