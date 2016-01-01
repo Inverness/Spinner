@@ -54,7 +54,9 @@ namespace Spinner.Fody.Tests
             var weaver = new ModuleWeaver
             {
                 ModuleDefinition = moduleDefinition,
+#if DEBUG
                 LogDebug = s => _output.WriteLine("Debug: " + s),
+#endif
                 LogInfo = s => _output.WriteLine(s),
                 LogWarning = s => _output.WriteLine("WARNING: " + s),
                 LogError = s => _output.WriteLine("ERROR: " + s)
