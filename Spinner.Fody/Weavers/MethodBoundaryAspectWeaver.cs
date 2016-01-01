@@ -447,7 +447,7 @@ namespace Spinner.Fody.Weavers
             // Identify yield and resume points by looking for calls to a get_IsCompleted property and a GetResult
             // method. These can be defined on any type due to how awaitables work. IsCompleted is required to be
             // a property, not a field.
-            TypeDefinition awaiterType = null;
+            TypeReference awaiterType = null;
             int count = 0;
             for (int i = start; i < end; i++)
             {
@@ -472,9 +472,9 @@ namespace Spinner.Fody.Weavers
 
                     callYield = i + 2;
 
-                    awaiterType = mr.DeclaringType.Resolve();
+                    awaiterType = mr.DeclaringType;
                 }
-                else if (callYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.Resolve() == awaiterType)
+                else if (callYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.IsSame(awaiterType))
                 {
                     if (mr.ReturnType == mr.Module.TypeSystem.Void)
                     {
@@ -482,14 +482,49 @@ namespace Spinner.Fody.Weavers
                     }
                     else
                     {
-                        resultVar = (VariableDefinition) insc[i + 1].Operand;
-                        callResume = i + 2;
+                        // Release builds initialize the awaiter before storing the GetResult() result, so the
+                        // stloc can not be assumed to be the next instruction.
+                        int n;
+                        for (n = i + 1; n < end; n++)
+                        {
+                            if (insc[n].OpCode == OpCodes.Stloc)
+                            {
+                                resultVar = (VariableDefinition) insc[n].Operand;
+                                break;
+                            }
+                        }
+
+                        callResume = n + 1;
                     }
                     return true;
                 }
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Resolves a generic parameter type or return type for a method.
+        /// </summary>
+        private static TypeReference ResolveMethodGenericParameter(
+            TypeReference parameter,
+            MethodReference method)
+        {
+            if (!parameter.IsGenericParameter)
+                return parameter;
+
+            var gp = (GenericParameter) parameter;
+
+            if (gp.Type == GenericParameterType.Type)
+            {
+                Debug.Assert(method.DeclaringType.IsGenericInstance, "method declaring type is not a generic instance");
+                return ((GenericInstanceType) method.DeclaringType).GenericArguments[gp.Position];
+            }
+            else
+            {
+                Debug.Assert(method.IsGenericInstance, "method is not a generic instance");
+                return ((GenericInstanceMethod) method).GenericArguments[gp.Position];
+            }
         }
 
         private static void WriteMeaInit(
@@ -565,7 +600,7 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Ldfld, thisField));
                 if (method.DeclaringType.IsValueType)
                 {
-                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
+                    //insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
                     insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
                 }
             }

@@ -56,6 +56,12 @@ namespace Spinner.Fody
 
         internal static bool IsSame(this TypeReference self, TypeReference other)
         {
+            if (ReferenceEquals(self, other))
+                return true;
+
+            Debug.Assert(self.IsGenericParameter == other.IsGenericParameter,
+                         "comparing generic parameter to non-generic paramter");
+
             return self.Name == other.Name && self.Namespace == other.Namespace;
         }
     }

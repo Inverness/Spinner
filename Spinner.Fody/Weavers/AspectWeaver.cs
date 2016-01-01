@@ -235,8 +235,14 @@ namespace Spinner.Fody.Weavers
                     continue;
 
                 ParameterDefinition p = method.Parameters[i];
-                FieldReference af = stateMachine.DeclaringType.Fields.First(f => f.Name == p.Name &&
-                                                                                 f.FieldType.IsSame(p.ParameterType));
+
+                FieldReference af =
+                    stateMachine.DeclaringType.Fields.FirstOrDefault(f => f.Name == p.Name &&
+                                                                          f.FieldType.IsSame(p.ParameterType));
+
+                // Release builds will optimize out unused fields
+                if (af == null)
+                    continue;
 
                 insc.Add(Ins.Create(OpCodes.Ldloc, arguments));
                 insc.Add(Ins.Create(OpCodes.Ldarg_0));
