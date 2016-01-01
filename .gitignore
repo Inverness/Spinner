@@ -214,3 +214,5 @@ ModelManifest.xml
 # User stuff
 old/
 Other/
+*.nuget.props
+*.nuget.targets
