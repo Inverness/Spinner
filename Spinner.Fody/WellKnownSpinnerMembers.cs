@@ -17,6 +17,8 @@ namespace Spinner.Fody
         internal readonly TypeDefinition IMethodBoundaryAspect;
         internal readonly TypeDefinition IMethodInterceptionAspect;
         internal readonly TypeDefinition IPropertyInterceptionAspect;
+        internal readonly TypeDefinition MethodArgs;
+        internal readonly PropertyDefinition MethodArgs_Method;
         internal readonly TypeDefinition MethodExecutionArgs;
         internal readonly MethodDefinition MethodExecutionArgs_ctor;
         internal readonly PropertyDefinition MethodExecutionArgs_Exception;
@@ -31,6 +33,8 @@ namespace Spinner.Fody
         internal readonly TypeDefinition MethodBinding;
         internal readonly TypeDefinition MethodBindingT1;
         internal readonly TypeDefinition PropertyBindingT1;
+        internal readonly TypeDefinition PropertyInterceptionArgs;
+        internal readonly PropertyDefinition PropertyInterceptionArgs_Property;
         internal readonly TypeDefinition BoundPropertyInterceptionArgsT1;
         internal readonly MethodDefinition BoundPropertyInterceptionArgsT1_ctor;
         internal readonly FieldDefinition BoundPropertyInterceptionArgsT1_TypedValue;
@@ -48,6 +52,9 @@ namespace Spinner.Fody
             IMethodInterceptionAspect = module.GetType(Ns, "IMethodInterceptionAspect");
             IPropertyInterceptionAspect = module.GetType(Ns, "IPropertyInterceptionAspect");
 
+            MethodArgs = module.GetType(Ns, "MethodArgs");
+            MethodArgs_Method = MethodArgs.Properties.First(p => p.Name == "Method");
+
             MethodExecutionArgs = module.GetType(Ns, "MethodExecutionArgs");
             MethodExecutionArgs_ctor = MethodExecutionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
             MethodExecutionArgs_Exception = MethodExecutionArgs.Properties.First(m => m.Name == "Exception");
@@ -61,6 +68,9 @@ namespace Spinner.Fody
 
             Features = module.GetType(Ns, "Features");
             FeaturesAttribute = module.GetType(Ns, "FeaturesAttribute");
+
+            PropertyInterceptionArgs = module.GetType(Ns, "PropertyInterceptionArgs");
+            PropertyInterceptionArgs_Property = PropertyInterceptionArgs.Properties.First(p => p.Name == "Property");
 
             BoundMethodInterceptionArgs = module.GetType(IntNs, "BoundMethodInterceptionArgs");
             BoundMethodInterceptionArgs_ctor = BoundMethodInterceptionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);

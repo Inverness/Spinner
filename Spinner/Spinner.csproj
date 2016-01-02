@@ -59,6 +59,7 @@
     <Compile Include="Internal\PropertyBinding.cs" />
     <Compile Include="IPropertyBinding.cs" />
     <Compile Include="IPropertyInterceptionAspect.cs" />
+    <Compile Include="MethodArgs.cs" />
     <Compile Include="MethodBoundaryAspect.cs" />
     <Compile Include="MethodExecutionArgs.cs" />
     <Compile Include="MethodInterceptionArgs.cs" />

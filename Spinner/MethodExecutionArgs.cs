@@ -1,26 +1,18 @@
 using System;
 using System.Diagnostics;
-using System.Reflection;
 
 namespace Spinner
 {
     /// <summary>
     ///     Arguments provided to a method boundary aspect about the method being executed.
     /// </summary>
-    public sealed class MethodExecutionArgs : AdviceArgs
+    public sealed class MethodExecutionArgs : MethodArgs
     {
         [DebuggerStepThrough]
         public MethodExecutionArgs(object instance, Arguments arguments)
-            : base(instance)
+            : base(instance, arguments)
         {
-            Arguments = arguments;
         }
-
-        /// <summary>
-        ///     Gets the arguments list for the method invocation. This will be null if the Arguments feature
-        ///     has not been specified.
-        /// </summary>
-        public Arguments Arguments { get; set; }
 
         /// <summary>
         ///     Gets or sets the current flow behavior. This will only be valid if flow control has been enabled
@@ -48,10 +40,5 @@ namespace Spinner
         ///     Gets the current exception.
         /// </summary>
         public Exception Exception { get; set; }
-
-        /// <summary>
-        ///     Gets the method the aspect was applied to.
-        /// </summary>
-        public MethodInfo Method { get; set; }
     }
 }

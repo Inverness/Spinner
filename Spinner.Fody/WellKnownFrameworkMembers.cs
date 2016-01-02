@@ -9,6 +9,7 @@ namespace Spinner.Fody
     internal class WellKnownFrameworkMembers
     {
         private const string NsSystem = "System";
+        private const string NsReflection = "System.Reflection";
         private const string NsCompilerServices = "System.Runtime.CompilerServices";
 
         // ReSharper disable InconsistentNaming
@@ -17,6 +18,9 @@ namespace Spinner.Fody
         internal readonly TypeDefinition IteratorStateMachineAttribute;
         internal readonly TypeDefinition CompilerGeneratedAttribute;
         internal readonly MethodDefinition CompilerGeneratedAttribute_ctor;
+        internal readonly TypeDefinition MethodBase;
+        internal readonly MethodDefinition MethodBase_GetMethodFromHandle;
+        internal readonly TypeDefinition MethodInfo;
         // ReSharper restore InconsistentNaming
 
         internal WellKnownFrameworkMembers(ModuleDefinition currentModule)
@@ -33,6 +37,9 @@ namespace Spinner.Fody
             IteratorStateMachineAttribute = module.GetType(NsCompilerServices, nameof(IteratorStateMachineAttribute));
             CompilerGeneratedAttribute = module.GetType(NsCompilerServices, nameof(CompilerGeneratedAttribute));
             CompilerGeneratedAttribute_ctor = CompilerGeneratedAttribute.Methods.First(m => m.IsConstructor && !m.IsStatic && !m.HasParameters);
+            MethodBase = module.GetType(NsReflection, "MethodBase");
+            MethodBase_GetMethodFromHandle = MethodBase.Methods.First(m => m.Name == "GetMethodFromHandle" && m.Parameters.Count == 1);
+            MethodInfo = module.GetType(NsReflection, "MethodInfo");
         }
     }
 }

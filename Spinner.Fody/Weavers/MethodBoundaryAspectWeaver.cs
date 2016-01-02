@@ -132,6 +132,9 @@ namespace Spinner.Fody.Weavers
             VariableDefinition meaVar;
             WriteMeaInit(mwc, method, argumentsVar, insc.Count, out meaVar);
 
+            if ((features & Features.Method) != 0)
+                WriteSetMethodInfo(mwc, method, null, insc.Count, meaVar, null);
+
             // Write OnEntry call
             WriteOnEntryCall(mwc, method, insc.Count, aspectType, features, returnValueVar, aspectField, meaVar);
 

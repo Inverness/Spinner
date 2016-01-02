@@ -415,6 +415,40 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
+        protected static void WriteSetMethodInfo(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            MethodDefinition stateMachineOpt,
+            int offset,
+            VariableDefinition maVarOpt,
+            FieldReference maFieldOpt)
+        {
+            MethodDefinition target = stateMachineOpt ?? method;
+            MethodReference getMethodFromHandle = mwc.SafeImport(mwc.Framework.MethodBase_GetMethodFromHandle);
+            MethodReference setMethod = mwc.SafeImport(mwc.Spinner.MethodArgs_Method.SetMethod);
+            TypeReference methodInfo = mwc.SafeImport(mwc.Framework.MethodInfo);
+
+            var insc = new Collection<Ins>();
+
+            if (maFieldOpt != null)
+            {
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, maFieldOpt));
+            }
+            else
+            {
+                insc.Add(Ins.Create(OpCodes.Ldloc, maVarOpt));
+            }
+
+            insc.Add(Ins.Create(OpCodes.Ldtoken, method));
+            insc.Add(Ins.Create(OpCodes.Call, getMethodFromHandle));
+            insc.Add(Ins.Create(OpCodes.Castclass, methodInfo));
+
+            insc.Add(Ins.Create(OpCodes.Callvirt, setMethod));
+
+            target.Body.InsertInstructions(offset, insc);
+        }
+
         protected static void CreateAspectCacheField(
             ModuleWeavingContext mwc,
             TypeDefinition declaringType,
