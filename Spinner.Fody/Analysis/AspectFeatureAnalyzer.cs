@@ -14,30 +14,51 @@ namespace Spinner.Fody.Analysis
     /// </summary>
     internal static class AspectFeatureAnalyzer
     {
-        private const int ShortestAspectInterfaceNameLength = 21;
-        private const string AspectInterfaceSuffix = "Aspect";
+        // Constants used to optimize various parts of analysis.
+        private const string GeneratedNamePrefix = "<";
+        private const int AspectInterfaceNameMinimumLength = 21;
+        private const string AspectInterfaceNameSuffix = "Aspect";
         private const string AdviceArgsNamespace = "Spinner";
+        private const string AdviceNamePrefix = "On";
 
+        /// <summary>
+        /// Analyzes a type and adds AnalyzedFeatureAttribute to the type and its methods where necessary.
+        /// </summary>
         internal static void Analyze(ModuleWeavingContext mwc, TypeDefinition type)
         {
+            // Aspects can only be types that are valid as attributes.
+            if (!type.IsClass || type.IsValueType || type.IsAbstract || type.IsSpecialName || !type.HasMethods ||
+                type.Name.StartsWith(GeneratedNamePrefix, StringComparison.Ordinal))
+                return;
+
+            // Identify the fundamental aspect kind and inheritance list
             AspectKind? ak = null;
             List<TypeDefinition> types = null;
-            FindAspectImplementations(mwc, type, ref ak, ref types);
+            GetAspectKindAndTypes(mwc, type, ref ak, ref types);
 
+            // The type might not actually be an aspect.
             if (!ak.HasValue)
                 return;
 
-            // base class is first
-            Debug.Assert(types != null && types.Last() == type);
+            Debug.Assert(types.Last() == type);
+
+            // Method and type feature flags are inherited
+            var inheritedMethodFeatures = new Dictionary<MethodDefinition, Features>();
+            var inheritedTypeFeatures = Features.None;
 
             foreach (TypeDefinition t in types)
             {
-                if (mwc.Spinner.IsEmptyAdviceBase(t))
+                if (mwc.Spinner.IsEmptyAdviceBase(t) || !t.HasMethods)
                     continue;
 
                 foreach (MethodDefinition m in t.Methods)
                 {
+                    // Skip what can't be an advice implementation.
                     if (m.IsStatic || !m.IsPublic || m.IsConstructor || !m.HasParameters || !m.HasBody)
+                        continue;
+
+                    // All advice method names start with "On"
+                    if (!m.Name.StartsWith(AdviceNamePrefix, StringComparison.Ordinal))
                         continue;
 
                     // If this method is not in the current module it might have already been analyzed.
@@ -57,52 +78,38 @@ namespace Spinner.Fody.Analysis
                             continue;
                     }
 
-                    Features? f = AnalyzeAdvice(mwc, m, ak.Value);
+                    // Get the base definition from the aspect interface that is being implemented or overridden.
+                    Features typeFeatures;
+                    MethodDefinition baseDefinition = GetBaseDefinition(mwc, m, ak.Value, out typeFeatures);
+                    if (baseDefinition == null)
+                        continue;
 
-                    if (f.HasValue)
-                        AddAnalyzedFeaturesAttribute(mwc, m, f.Value);
+                    inheritedTypeFeatures |= typeFeatures;
+
+                    // Inherit features from base classes.
+                    Features methodFeatures;
+                    inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
+                    
+                    methodFeatures |= AnalyzeAdvice(mwc, m);
+                    inheritedTypeFeatures |= methodFeatures;
+
+                    inheritedMethodFeatures[baseDefinition] = methodFeatures;
+                    
+                    AddAnalyzedFeaturesAttribute(mwc, m, methodFeatures);
                 }
+                
+                AddAnalyzedFeaturesAttribute(mwc, t, inheritedTypeFeatures);
             }
-        }
-
-        private static void AddAnalyzedFeaturesAttribute(ModuleWeavingContext mwc, MethodDefinition method, Features features)
-        {
-            var attr = new CustomAttribute(mwc.SafeImport(mwc.Spinner.AnalyzedFeaturesAttribute_ctor));
-            attr.ConstructorArguments.Add(new CustomAttributeArgument(mwc.Spinner.Features, (uint) features));
-            method.CustomAttributes.Add(attr);
         }
 
         /// <summary>
         /// Analyze an advice's body to see what features it uses.
         /// </summary>
-        private static Features? AnalyzeAdvice(
-            ModuleWeavingContext mwc,
-            MethodDefinition method,
-            AspectKind ak)
+        private static Features AnalyzeAdvice(ModuleWeavingContext mwc, MethodDefinition method)
         {
             Debug.Assert(!method.IsStatic && method.HasParameters);
 
-            TypeDefinition argsDef = method.Parameters[0].ParameterType.Resolve();
-
-            switch (ak)
-            {
-                case AspectKind.MethodBoundary:
-                    if (argsDef != mwc.Spinner.MethodExecutionArgs)
-                        return null;
-                    break;
-                case AspectKind.MethodInterception:
-                    if (argsDef != mwc.Spinner.MethodInterceptionArgs)
-                        return null;
-                    break;
-                case AspectKind.PropertyInterception:
-                    if (argsDef != mwc.Spinner.PropertyInterceptionArgs)
-                        return null;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(ak), ak, null);
-            }
-
-            Features f = Features.None;
+            Features features = Features.None;
 
             foreach (Instruction ins in method.Body.Instructions)
             {
@@ -117,33 +124,33 @@ namespace Spinner.Fody.Analysis
 
                 Features mf;
                 if (mwc.MethodFeatures.TryGetValue(mr.Resolve(), out mf))
-                    f |= mf;
+                    features |= mf;
             }
 
-            return f;
+            return features;
         }
 
         /// <summary>
-        /// Finds types from the inheritence chain that implement an aspect.
+        /// Determines the kind of aspect the type implements and the list of inherited classes containing advices.
         /// </summary>
-        private static void FindAspectImplementations(
+        private static void GetAspectKindAndTypes(
             ModuleWeavingContext mwc,
             TypeDefinition type,
             ref AspectKind? ak,
-            ref List<TypeDefinition> results)
+            ref List<TypeDefinition> types)
         {
             TypeDefinition baseType = type.BaseType?.Resolve();
             if (baseType != null && !mwc.Spinner.IsEmptyAdviceBase(type) && baseType != mwc.Framework.Attribute)
-                FindAspectImplementations(mwc, baseType, ref ak, ref results);
+                GetAspectKindAndTypes(mwc, baseType, ref ak, ref types);
 
             if (!ak.HasValue)
                 ak = GetAspectKind(mwc, type);
 
             if (ak.HasValue)
             {
-                if (results == null)
-                    results = new List<TypeDefinition>();
-                results.Add(type);
+                if (types == null)
+                    types = new List<TypeDefinition>();
+                types.Add(type);
             }
         }
 
@@ -162,8 +169,9 @@ namespace Spinner.Fody.Analysis
             {
                 TypeReference iref = interfaces[i];
 
-                // Quick check without having to resolve.
-                if (iref.Name.Length < ShortestAspectInterfaceNameLength || !iref.Name.EndsWith(AspectInterfaceSuffix))
+                // Before resolving, try examining the name.
+                if (iref.Name.Length < AspectInterfaceNameMinimumLength ||
+                    !iref.Name.EndsWith(AspectInterfaceNameSuffix, StringComparison.Ordinal))
                     continue;
 
                 TypeDefinition idef = iref.Resolve();
@@ -177,6 +185,56 @@ namespace Spinner.Fody.Analysis
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Add the AnalyzedFeaturesAttribute() to a target type or method.
+        /// </summary>
+        private static void AddAnalyzedFeaturesAttribute(
+            ModuleWeavingContext mwc,
+            ICustomAttributeProvider target,
+            Features features)
+        {
+            var attr = new CustomAttribute(mwc.SafeImport(mwc.Spinner.AnalyzedFeaturesAttribute_ctor));
+            attr.ConstructorArguments.Add(new CustomAttributeArgument(mwc.Spinner.Features, (uint) features));
+            target.CustomAttributes.Add(attr);
+        }
+
+        /// <summary>
+        /// Get base definition from one of the aspect interfaces that is being implemented.
+        /// </summary>
+        private static MethodDefinition GetBaseDefinition(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            AspectKind ak,
+            out Features typeFeature)
+        {
+            Collection<MethodDefinition> baseMethods;
+
+            switch (ak)
+            {
+                case AspectKind.MethodBoundary:
+                    baseMethods = mwc.Spinner.IMethodBoundaryAspect.Methods;
+                    break;
+                case AspectKind.MethodInterception:
+                    baseMethods = mwc.Spinner.IMethodInterceptionAspect.Methods;
+                    break;
+                case AspectKind.PropertyInterception:
+                    baseMethods = mwc.Spinner.IPropertyInterceptionAspect.Methods;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(ak), ak, null);
+            }
+
+            MethodDefinition baseMethod = MetadataResolver.GetMethod(baseMethods, method);
+            if (baseMethod == null)
+            {
+                typeFeature = Features.None;
+                return null;
+            }
+
+            typeFeature = mwc.TypeFeatures[baseMethod];
+            return baseMethod;
         }
     }
 }

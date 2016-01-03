@@ -5,7 +5,7 @@ using Spinner.Internal;
 
 namespace Spinner.TestTarget
 {
-    [Features(Features.All)]
+    //[Features(Features.All)]
     public class TestIntercept : MethodInterceptionAspect
     {
         public override void OnInvoke(MethodInterceptionArgs args)
@@ -16,7 +16,7 @@ namespace Spinner.TestTarget
         }
     }
 
-    [Features(Features.All)]
+    //[Features(Features.All)]
     public class TestIntercept2 : MethodInterceptionAspect
     {
         public override void OnInvoke(MethodInterceptionArgs args)
@@ -27,7 +27,7 @@ namespace Spinner.TestTarget
         }
     }
 
-    [Features(Features.All)]
+    //[Features(Features.All)]
     public class TestPropIntercept : PropertyInterceptionAspect
     {
         public override void OnGetValue(PropertyInterceptionArgs args)
@@ -43,7 +43,7 @@ namespace Spinner.TestTarget
         }
     }
 
-    [Features(Features.All)]
+    //[Features(Features.All)]
     public class TestBoundary : MethodBoundaryAspect
     {
         public override void OnEntry(MethodExecutionArgs args)

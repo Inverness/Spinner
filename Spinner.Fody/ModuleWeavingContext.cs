@@ -13,8 +13,9 @@ namespace Spinner.Fody
         internal readonly WellKnownSpinnerMembers Spinner;
         internal readonly WellKnownFrameworkMembers Framework;
 
-        private readonly Dictionary<MethodDefinition, Features> _methodFeatures; 
-        
+        private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
+        private readonly Dictionary<MethodDefinition, Features> _typeFeatures;
+
         internal ModuleWeavingContext(ModuleDefinition module, ModuleDefinition libraryModule)
         {
             Module = module;
@@ -39,9 +40,30 @@ namespace Spinner.Fody
                 {Spinner.AdviceArgs_Tag.GetMethod, Features.Tag},
                 {Spinner.AdviceArgs_Tag.SetMethod, Features.Tag},
             };
+
+            _typeFeatures = new Dictionary<MethodDefinition, Features>
+            {
+                {Spinner.IMethodBoundaryAspect_OnEntry, Features.OnEntry},
+                {Spinner.IMethodBoundaryAspect_OnExit, Features.OnExit},
+                {Spinner.IMethodBoundaryAspect_OnSuccess, Features.OnSuccess},
+                {Spinner.IMethodBoundaryAspect_OnException, Features.OnException},
+                {Spinner.IMethodBoundaryAspect_OnYield, Features.OnYield},
+                {Spinner.IMethodBoundaryAspect_OnResume, Features.OnResume},
+                {Spinner.IMethodInterceptionAspect_OnInvoke, Features.None},
+                {Spinner.IPropertyInterceptionAspect_OnGetValue, Features.None},
+                {Spinner.IPropertyInterceptionAspect_OnSetValue, Features.None}
+            };
         }
 
-        internal IReadOnlyDictionary<MethodDefinition, Features> MethodFeatures => _methodFeatures; 
+        /// <summary>
+        /// Gets a dictionary that maps method definitions to what feature their use in IL indicates.
+        /// </summary>
+        internal IReadOnlyDictionary<MethodDefinition, Features> MethodFeatures => _methodFeatures;
+
+        /// <summary>
+        /// Gets a dictionary that maps aspect interface method definitions to the type feature they indicate support of.
+        /// </summary>
+        internal IReadOnlyDictionary<MethodDefinition, Features> TypeFeatures => _typeFeatures; 
 
         internal TypeReference SafeImport(Type type)
         {

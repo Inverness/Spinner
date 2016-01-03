@@ -515,9 +515,15 @@ namespace Spinner.Fody.Weavers
             definition.CustomAttributes.Add(new CustomAttribute(ctor));
         }
 
+        /// <summary>
+        /// Get the features declared for a type. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
+        /// </summary>
         protected static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
         {
-            TypeDefinition featuresAttributeType = mwc.Spinner.FeaturesAttribute;
+            TypeDefinition attrType = mwc.Spinner.FeaturesAttribute;
+            TypeDefinition analyzedAttrType = mwc.Spinner.AnalyzedFeaturesAttribute;
+
+            Features? features = null;
 
             TypeDefinition current = aspectType;
             while (current != null)
@@ -526,22 +532,38 @@ namespace Spinner.Fody.Weavers
                 {
                     foreach (CustomAttribute a in current.CustomAttributes)
                     {
-                        if (a.AttributeType.Name == featuresAttributeType.Name && a.AttributeType.Namespace == featuresAttributeType.Namespace)
+                        if (a.AttributeType.IsSame(analyzedAttrType))
                         {
                             return (Features) (uint) a.ConstructorArguments.First().Value;
+                        }
+
+                        if (a.AttributeType.IsSame(attrType))
+                        {
+                            features = (Features) (uint) a.ConstructorArguments.First().Value;
+                            // Continue in case AnalyzedFeaturesAttribute is found.
                         }
                     }
                 }
 
-                current = current.BaseType.Resolve();
+                // No need to examine base type if found here
+                if (features.HasValue)
+                    return features.Value;
+
+                current = current.BaseType?.Resolve();
             }
 
             return Features.None;
         }
 
+        /// <summary>
+        /// Get the features declared for an advice. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
+        /// </summary>
         protected static Features GetFeatures(ModuleWeavingContext mwc, MethodDefinition advice)
         {
-            TypeDefinition featuresAttributeType = mwc.Spinner.FeaturesAttribute;
+            TypeDefinition attrType = mwc.Spinner.FeaturesAttribute;
+            TypeDefinition analyzedAttrType = mwc.Spinner.AnalyzedFeaturesAttribute;
+            
+            Features? features = null;
 
             MethodDefinition current = advice;
             while (current != null)
@@ -550,12 +572,21 @@ namespace Spinner.Fody.Weavers
                 {
                     foreach (CustomAttribute a in current.CustomAttributes)
                     {
-                        if (a.AttributeType.IsSame(featuresAttributeType))
+                        if (a.AttributeType.IsSame(analyzedAttrType))
                         {
                             return (Features) (uint) a.ConstructorArguments.First().Value;
                         }
+
+                        if (a.AttributeType.IsSame(attrType))
+                        {
+                            features = (Features) (uint) a.ConstructorArguments.First().Value;
+                            // Continue in case AnalyzedFeaturesAttribute is found on same type.
+                        }
                     }
                 }
+
+                if (features.HasValue)
+                    return features.Value;
 
                 current = current.HasOverrides ? current.Overrides.Single().Resolve() : null;
             }

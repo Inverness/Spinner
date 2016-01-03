@@ -18,8 +18,17 @@ namespace Spinner.Fody
         internal readonly ModuleDefinition Module;
         internal readonly TypeDefinition IAspect;
         internal readonly TypeDefinition IMethodBoundaryAspect;
+        internal readonly MethodDefinition IMethodBoundaryAspect_OnEntry;
+        internal readonly MethodDefinition IMethodBoundaryAspect_OnExit;
+        internal readonly MethodDefinition IMethodBoundaryAspect_OnSuccess;
+        internal readonly MethodDefinition IMethodBoundaryAspect_OnException;
+        internal readonly MethodDefinition IMethodBoundaryAspect_OnYield;
+        internal readonly MethodDefinition IMethodBoundaryAspect_OnResume;
         internal readonly TypeDefinition IMethodInterceptionAspect;
+        internal readonly MethodDefinition IMethodInterceptionAspect_OnInvoke;
         internal readonly TypeDefinition IPropertyInterceptionAspect;
+        internal readonly MethodDefinition IPropertyInterceptionAspect_OnGetValue;
+        internal readonly MethodDefinition IPropertyInterceptionAspect_OnSetValue;
         internal readonly TypeDefinition MethodBoundaryAspect;
         internal readonly TypeDefinition MethodInterceptionAspect;
         internal readonly TypeDefinition PropertyInterceptionAspect;
@@ -70,9 +79,21 @@ namespace Spinner.Fody
             Module = module;
 
             IAspect = module.GetType(Ns, "IAspect");
+
             IMethodBoundaryAspect = module.GetType(Ns, "IMethodBoundaryAspect");
+            IMethodBoundaryAspect_OnEntry = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnEntry");
+            IMethodBoundaryAspect_OnExit = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnExit");
+            IMethodBoundaryAspect_OnSuccess = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnSuccess");
+            IMethodBoundaryAspect_OnException = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnException");
+            IMethodBoundaryAspect_OnYield = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnYield");
+            IMethodBoundaryAspect_OnResume = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnResume");
+
             IMethodInterceptionAspect = module.GetType(Ns, "IMethodInterceptionAspect");
+            IMethodInterceptionAspect_OnInvoke = IMethodInterceptionAspect.Methods.First(m => m.Name == "OnInvoke");
+
             IPropertyInterceptionAspect = module.GetType(Ns, "IPropertyInterceptionAspect");
+            IPropertyInterceptionAspect_OnGetValue = IPropertyInterceptionAspect.Methods.First(m => m.Name == "OnGetValue");
+            IPropertyInterceptionAspect_OnSetValue = IPropertyInterceptionAspect.Methods.First(m => m.Name == "OnSetValue");
 
             MethodBoundaryAspect = module.GetType(Ns, "MethodBoundaryAspect");
             MethodInterceptionAspect = module.GetType(Ns, "MethodInterceptionAspect");

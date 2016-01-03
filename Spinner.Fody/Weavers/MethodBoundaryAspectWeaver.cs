@@ -39,10 +39,10 @@ namespace Spinner.Fody.Weavers
             FieldReference aspectField;
             CreateAspectCacheField(mwc, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
 
-            MethodDefinition moveNextMethod;
-            StateMachineKind stateMachineKind = GetStateMachineInfo(mwc, method, out moveNextMethod);
+            // State machines are very different and have their own weaving methods.
+            MethodDefinition stateMachine;
+            StateMachineKind stateMachineKind = GetStateMachineInfo(mwc, method, out stateMachine);
             
-            // Decide the effective return type
             TypeDefinition effectiveReturnType;
             switch (stateMachineKind)
             {
@@ -56,32 +56,26 @@ namespace Spinner.Fody.Weavers
                     WeaveMethod(mwc,
                                 method,
                                 aspectType,
-                                aspectIndex,
                                 features,
                                 aspectField,
                                 effectiveReturnType);
 
-                    // TODO: Check if removing nop's has implications for debug builds.
+                    // Nops are used heavily for labeling and generating code.
+                    // TODO: Check if removing nop's has implications for debug build EnC.
                     method.Body.RemoveNops();
                     method.Body.OptimizeMacros();
-                    //method.Body.UpdateOffsets();
                     break;
+
                 case StateMachineKind.Iterator:
-                    WeaveIteratorMethod(mwc,
-                                        method,
-                                        aspectType,
-                                        aspectIndex,
-                                        features,
-                                        aspectField,
-                                        null,
-                                        moveNextMethod);
-                    break;
+                    throw new NotSupportedException();
+
                 case StateMachineKind.Async:
+                    // void for Task and T for Task<T>
                     effectiveReturnType = method.ReturnType.IsGenericInstance
                         ? ((GenericInstanceType) method.ReturnType).GenericArguments.Single().Resolve()
                         : null;
 
-                    moveNextMethod.Body.SimplifyMacros();
+                    stateMachine.Body.SimplifyMacros();
 
                     WeaveAsyncMethod(mwc,
                                      method,
@@ -90,11 +84,10 @@ namespace Spinner.Fody.Weavers
                                      features,
                                      aspectField,
                                      effectiveReturnType,
-                                     moveNextMethod);
+                                     stateMachine);
 
-                    moveNextMethod.Body.RemoveNops();
-                    moveNextMethod.Body.OptimizeMacros();
-                    //moveNextMethod.Body.UpdateOffsets();
+                    stateMachine.Body.RemoveNops();
+                    stateMachine.Body.OptimizeMacros();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -105,7 +98,6 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
-            int aspectIndex,
             Features features,
             FieldReference aspectField,
             TypeDefinition effectiveReturnType
@@ -136,7 +128,8 @@ namespace Spinner.Fody.Weavers
                 WriteSetMethodInfo(mwc, method, null, insc.Count, meaVar, null);
 
             // Write OnEntry call
-            WriteOnEntryCall(mwc, method, insc.Count, aspectType, features, returnValueVar, aspectField, meaVar);
+            if ((features & Features.OnEntry) != 0)
+                WriteOnEntryCall(mwc, method, insc.Count, aspectType, features, returnValueVar, aspectField, meaVar);
 
             // Re-add original body
             int tryStartIndex = insc.Count;
@@ -294,7 +287,6 @@ namespace Spinner.Fody.Weavers
             {
                 // Write OnEntry call
                 WriteSmOnEntryCall(mwc,
-                                   method,
                                    stateMachine,
                                    insc.Count - initEndOffset,
                                    aspectType,
@@ -533,7 +525,7 @@ namespace Spinner.Fody.Weavers
         private static void WriteMeaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
-            VariableDefinition argumentsVar,
+            VariableDefinition argumentsVarOpt,
             int offset,
             out VariableDefinition meaVar)
         {
@@ -558,13 +550,13 @@ namespace Spinner.Fody.Weavers
                 }
             }
 
-            if (argumentsVar == null)
+            if (argumentsVarOpt == null)
             {
                 insc.Add(Ins.Create(OpCodes.Ldnull));
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVar));
+                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVarOpt));
             }
 
             insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
@@ -577,7 +569,7 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachine,
-            VariableDefinition arguments,
+            VariableDefinition argumentsVarOpt,
             int offset,
             out FieldDefinition mea)
         {
@@ -608,13 +600,13 @@ namespace Spinner.Fody.Weavers
                 }
             }
 
-            if (arguments == null)
+            if (argumentsVarOpt == null)
             {
                 insc.Add(Ins.Create(OpCodes.Ldnull));
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldloc, arguments));
+                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVarOpt));
             }
 
             insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
@@ -632,7 +624,7 @@ namespace Spinner.Fody.Weavers
             Features features,
             VariableDefinition returnValueHolder,
             FieldReference aspectField,
-            VariableDefinition meaVar)
+            VariableDefinition meaVarOpt)
         {
             if ((features & Features.OnEntry) == 0)
                 return;
@@ -643,37 +635,42 @@ namespace Spinner.Fody.Weavers
             var insc = new[]
             {
                 Ins.Create(OpCodes.Ldsfld, aspectField),
-                Ins.Create(OpCodes.Ldloc, meaVar),
+                meaVarOpt == null
+                    ? Ins.Create(OpCodes.Ldnull)
+                    : Ins.Create(OpCodes.Ldloc, meaVarOpt),
                 Ins.Create(OpCodes.Callvirt, onEntry)
             };
-
+            
             method.Body.InsertInstructions(offset, insc);
         }
 
         private static void WriteSmOnEntryCall(
             ModuleWeavingContext mwc,
-            MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
             TypeDefinition aspectType,
             Features features,
             VariableDefinition returnValueHolder,
             FieldReference aspectField,
-            FieldReference meaVar)
+            FieldReference meaFieldOpt)
         {
-            if ((features & Features.OnEntry) == 0)
-                return;
-
-            MethodDefinition onEntryDef = aspectType.GetInheritedMethods().First(m => m.Name == OnEntryAdviceName);
+            MethodDefinition onEntryDef = MetadataResolver.GetMethod(aspectType.Methods,
+                                                                     mwc.Spinner.IMethodBoundaryAspect_OnEntry);
             MethodReference onEntry = mwc.SafeImport(onEntryDef);
 
-            var insc = new[]
+            var insc = new Collection<Ins>();
+
+            insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+            if (meaFieldOpt == null)
             {
-                Ins.Create(OpCodes.Ldsfld, aspectField),
-                Ins.Create(OpCodes.Ldarg_0),
-                Ins.Create(OpCodes.Ldfld, meaVar),
-                Ins.Create(OpCodes.Callvirt, onEntry)
-            };
+                insc.Add(Ins.Create(OpCodes.Ldnull));
+            }
+            else
+            {
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, meaFieldOpt));
+            }
+            insc.Add(Ins.Create(OpCodes.Callvirt, onEntry));
 
             stateMachine.Body.InsertInstructions(offset, insc);
         }

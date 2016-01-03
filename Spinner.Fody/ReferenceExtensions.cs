@@ -26,11 +26,13 @@ namespace Spinner.Fody
                 CallingConvention = self.CallingConvention
             };
 
-            foreach (ParameterDefinition parameter in self.Parameters)
-                reference.Parameters.Add(new ParameterDefinition(parameter.ParameterType));
+            if (self.HasParameters)
+                foreach (ParameterDefinition parameter in self.Parameters)
+                    reference.Parameters.Add(new ParameterDefinition(parameter.ParameterType));
 
-            foreach (GenericParameter genericParam in self.GenericParameters)
-                reference.GenericParameters.Add(new GenericParameter(genericParam.Name, reference));
+            if (self.HasGenericParameters)
+                foreach (GenericParameter genericParam in self.GenericParameters)
+                    reference.GenericParameters.Add(new GenericParameter(genericParam.Name, reference));
 
             return reference;
         }
@@ -75,14 +77,20 @@ namespace Spinner.Fody
 
         //    if (!IsSame(self.DeclaringType, other.DeclaringType))
         //        return false;
-            
+
         //    if (self.HasThis != other.HasThis)
         //        return false;
-            
+
         //    if (self.HasParameters != other.HasParameters)
         //        return false;
 
+        //    if (self.HasGenericParameters != other.HasGenericParameters)
+        //        return false;
+
         //    if (self.HasParameters && (self.Parameters.Count != other.Parameters.Count))
+        //        return false;
+
+        //    if (self.HasGenericParameters && (self.GenericParameters.Count != other.GenericParameters.Count))
         //        return false;
 
         //    if (!IsSame(self.ReturnType, other.ReturnType))
