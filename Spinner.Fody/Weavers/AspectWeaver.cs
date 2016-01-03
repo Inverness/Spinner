@@ -88,7 +88,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = mwc.Spinner.Arguments_ctor[effectiveParameterCount];
+            MethodDefinition constructorDef = mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
             
             argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
@@ -117,7 +117,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = mwc.Spinner.Arguments_ctor[effectiveParameterCount];
+            MethodDefinition constructorDef = mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
             arguments = stateMachine.Body.AddVariableDefinition(argumentsType);
@@ -159,14 +159,14 @@ namespace Spinner.Fody.Weavers
                 baseParameterTypes[i] = pt;
             }
 
-            TypeDefinition typeDef = mwc.Spinner.Arguments[effectiveParameterCount];
+            TypeDefinition typeDef = mwc.Spinner.ArgumentsT[effectiveParameterCount];
             type = mwc.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
             for (int i = 0; i < effectiveParameterCount; i++)
             {
-                FieldDefinition fieldDef = mwc.Spinner.Arguments_Item[effectiveParameterCount][i];
+                FieldDefinition fieldDef = mwc.Spinner.ArgumentsT_Item[effectiveParameterCount][i];
                 FieldReference field = mwc.SafeImport(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;
@@ -356,7 +356,7 @@ namespace Spinner.Fody.Weavers
             MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
             MethodReference ctor = mwc.SafeImport(ctorDef);
 
-            Ins jtNotNull = CreateNop();
+            Ins jtNotNull = Ins.Create(OpCodes.Nop);
 
             var insc = new[]
             {
@@ -401,7 +401,7 @@ namespace Spinner.Fody.Weavers
             FieldReference instanceField = bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName);
             MethodReference constructor = bindingType.Methods.Single(f => f.IsConstructor && !f.IsStatic);
 
-            Ins notNullLabel = CreateNop();
+            Ins notNullLabel = Ins.Create(OpCodes.Nop);
 
             var insc = new[]
             {
@@ -505,11 +505,6 @@ namespace Spinner.Fody.Weavers
             return method;
         }
 
-        protected static Ins CreateNop()
-        {
-            return Ins.Create(OpCodes.Nop);
-        }
-
         protected static void AddCompilerGeneratedAttribute(ModuleWeavingContext mwc, ICustomAttributeProvider definition)
         {
             if (definition.CustomAttributes.Any(a => a.AttributeType.IsSame(mwc.Framework.CompilerGeneratedAttribute)))
@@ -518,6 +513,54 @@ namespace Spinner.Fody.Weavers
             MethodReference ctor = mwc.SafeImport(mwc.Framework.CompilerGeneratedAttribute_ctor);
             
             definition.CustomAttributes.Add(new CustomAttribute(ctor));
+        }
+
+        protected static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
+        {
+            TypeDefinition featuresAttributeType = mwc.Spinner.FeaturesAttribute;
+
+            TypeDefinition current = aspectType;
+            while (current != null)
+            {
+                if (current.HasCustomAttributes)
+                {
+                    foreach (CustomAttribute a in current.CustomAttributes)
+                    {
+                        if (a.AttributeType.Name == featuresAttributeType.Name && a.AttributeType.Namespace == featuresAttributeType.Namespace)
+                        {
+                            return (Features) (uint) a.ConstructorArguments.First().Value;
+                        }
+                    }
+                }
+
+                current = current.BaseType.Resolve();
+            }
+
+            return Features.None;
+        }
+
+        protected static Features GetFeatures(ModuleWeavingContext mwc, MethodDefinition advice)
+        {
+            TypeDefinition featuresAttributeType = mwc.Spinner.FeaturesAttribute;
+
+            MethodDefinition current = advice;
+            while (current != null)
+            {
+                if (current.HasCustomAttributes)
+                {
+                    foreach (CustomAttribute a in current.CustomAttributes)
+                    {
+                        if (a.AttributeType.IsSame(featuresAttributeType))
+                        {
+                            return (Features) (uint) a.ConstructorArguments.First().Value;
+                        }
+                    }
+                }
+
+                current = current.HasOverrides ? current.Overrides.Single().Resolve() : null;
+            }
+
+            return Features.None;
         }
     }
 }

@@ -132,7 +132,7 @@ namespace Spinner.Fody.Weavers
             VariableDefinition meaVar;
             WriteMeaInit(mwc, method, argumentsVar, insc.Count, out meaVar);
 
-            if ((features & Features.Method) != 0)
+            if ((features & Features.MemberInfo) != 0)
                 WriteSetMethodInfo(mwc, method, null, insc.Count, meaVar, null);
 
             // Write OnEntry call
@@ -148,8 +148,8 @@ namespace Spinner.Fody.Weavers
 
             if (withException || withExit || withSuccess)
             {
-                Ins labelNewReturn = CreateNop();
-                Ins labelSuccess = CreateNop();
+                Ins labelNewReturn = Ins.Create(OpCodes.Nop);
+                Ins labelSuccess = Ins.Create(OpCodes.Nop);
 
                 RewriteReturns(method,
                                tryStartIndex,
@@ -349,7 +349,7 @@ namespace Spinner.Fody.Weavers
 
             if (withException || withExit || withSuccess)
             {
-                Ins labelSuccess = CreateNop();
+                Ins labelSuccess = Ins.Create(OpCodes.Nop);
 
                 // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
                 // They will be replaced by breaks to labelSuccess.
@@ -714,7 +714,7 @@ namespace Spinner.Fody.Weavers
                 else
                 {
                     // Need to replace with Nop if last so branch targets aren't broken.
-                    Ins newIns = i == endIndex && skipLast ? CreateNop() : Ins.Create(OpCodes.Br, brTarget);
+                    Ins newIns = i == endIndex && skipLast ? Ins.Create(OpCodes.Nop) : Ins.Create(OpCodes.Br, brTarget);
 
                     method.Body.ReplaceInstruction(i, newIns);
                 }
@@ -743,7 +743,7 @@ namespace Spinner.Fody.Weavers
                 Debug.Assert(ins.OpCode == OpCodes.Leave);
 
                 // Need to replace with Nop if last so branch targets aren't broken.
-                Ins newIns = i == endIndex && skipLast ? CreateNop() : Ins.Create(OpCodes.Br, brTarget);
+                Ins newIns = i == endIndex && skipLast ? Ins.Create(OpCodes.Nop) : Ins.Create(OpCodes.Br, brTarget);
 
                 body.ReplaceInstruction(i, newIns);
             }
@@ -811,8 +811,8 @@ namespace Spinner.Fody.Weavers
 
             VariableDefinition exceptionHolder = targetMethod.Body.AddVariableDefinition(exceptionType);
 
-            Ins labelFilterTrue = CreateNop();
-            Ins labelFilterEnd = CreateNop();
+            Ins labelFilterTrue = Ins.Create(OpCodes.Nop);
+            Ins labelFilterEnd = Ins.Create(OpCodes.Nop);
 
             int ehTryCatchEnd = insc.Count;
             int ehFilterStart = insc.Count;
@@ -867,7 +867,7 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
                 insc.Add(Ins.Create(OpCodes.Callvirt, onException));
 
-                Ins labelCaught = CreateNop();
+                Ins labelCaught = Ins.Create(OpCodes.Nop);
 
                 // If the Exception property was set to null, return normally, otherwise rethrow
                 insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
@@ -1163,30 +1163,6 @@ namespace Spinner.Fody.Weavers
 
             moveNextMethod = null;
             return StateMachineKind.None;
-        }
-
-        private static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
-        {
-            TypeDefinition featuresAttributeType = mwc.Spinner.FeaturesAttribute;
-
-            TypeDefinition currentType = aspectType;
-            while (currentType != null)
-            {
-                if (currentType.HasCustomAttributes)
-                {
-                    foreach (CustomAttribute a in currentType.CustomAttributes)
-                    {
-                        if (a.AttributeType.Name == featuresAttributeType.Name && a.AttributeType.Namespace == featuresAttributeType.Namespace)
-                        {
-                            return (Features) (int) a.ConstructorArguments.First().Value;
-                        }
-                    }
-                }
-
-                currentType = currentType.BaseType.Resolve();
-            }
-
-            return Features.None;
         }
 
         private static bool IsBranching(Ins ins)

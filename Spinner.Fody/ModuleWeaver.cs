@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
+using Spinner.Fody.Analysis;
 using Spinner.Fody.Weavers;
 
 namespace Spinner.Fody
@@ -49,16 +50,18 @@ namespace Spinner.Fody
             _mwc = new ModuleWeavingContext(ModuleDefinition,
                                             ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
 
+            List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
+
+            types.ForEach(t => AspectFeatureAnalyzer.Analyze(_mwc, t));
+
             // Execute type weavings in parallel. The ModuleWeavingContext provides thread-safe imports.
             // Weaving does not require any other module-level changes.
 
             // Tasks are only created when there is actual work to be done for a type.
-            Task[] tasks = ModuleDefinition.GetAllTypes()
-                                           .ToList()
-                                           .Select(CreateWeaveAction)
-                                           .Where(a => a != null)
-                                           .Select(Task.Run)
-                                           .ToArray();
+            Task[] tasks = types.Select(CreateWeaveAction)
+                                .Where(a => a != null)
+                                .Select(Task.Run)
+                                .ToArray();
 
             if (tasks.Length != 0)
             {

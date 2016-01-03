@@ -48,12 +48,12 @@ namespace Spinner.TestTarget
     {
         public override void OnEntry(MethodExecutionArgs args)
         {
-            Console.WriteLine("Boundary Entry!");
+            Console.WriteLine("Boundary Entry! " + args.Instance);
         }
 
         public override void OnSuccess(MethodExecutionArgs args)
         {
-            Console.WriteLine("Boundary success!");
+            Console.WriteLine("Boundary success! " + args.Instance);
         }
     }
 

@@ -155,7 +155,7 @@ namespace Spinner.Fody.Weavers
                 bindingTypeDef.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.ArgumentsBase);
+                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -243,7 +243,7 @@ namespace Spinner.Fody.Weavers
                 bindingTypeDef.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.ArgumentsBase);
+                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));

@@ -205,7 +205,7 @@ namespace Spinner.Fody.Weavers
             bindingTypeDef.Methods.Add(invokeMethod);
 
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.ArgumentsBase);
+            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
 
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));

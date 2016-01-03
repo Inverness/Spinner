@@ -6,42 +6,42 @@ namespace Spinner
     ///     Describes the code generation features that can be enabled for an aspect.
     /// </summary>
     [Flags]
-    public enum Features
+    public enum Features : uint
     {
         /// <summary>
         ///     No features.
         /// </summary>
-        None = 0x0000,
+        None = 0x00000000,
 
         /// <summary>
         ///     Enables OnEntry().
         /// </summary>
-        OnEntry = 0x0001,
+        OnEntry = 0x00000001,
 
         /// <summary>
         ///     Enables OnExit().
         /// </summary>
-        OnExit = 0x0002,
+        OnExit = 0x00000002,
 
         /// <summary>
         ///     Enables OnSuccess().
         /// </summary>
-        OnSuccess = 0x0004,
+        OnSuccess = 0x00000004,
 
         /// <summary>
         ///     Enables FilterException() and OnException().
         /// </summary>
-        OnException = 0x0008,
+        OnException = 0x00000008,
 
         /// <summary>
         ///     Enables OnYield().
         /// </summary>
-        OnYield = 0x0010,
+        OnYield = 0x00000010,
 
         /// <summary>
         ///     Enables OnResume().
         /// </summary>
-        OnResume = 0x0020,
+        OnResume = 0x00000020,
 
         /// <summary>
         ///     Enables all advice methods.
@@ -52,48 +52,49 @@ namespace Spinner
         ///     Whether the instance will be provided with the advice args. This feature is implied if any other
         ///     features are enabled that require AdviceArgs.
         /// </summary>
-        Instance = 0x0040,
+        Instance = 0x00000040,
 
         /// <summary>
         ///     Whether arguments will be provided to the advice args.
         /// </summary>
-        GetArguments = 0x0080,
+        GetArguments = 0x00000080,
 
         /// <summary>
         ///     Whether arguments can be set from the advice args.
         /// </summary>
-        SetArguments = 0x0100,
+        SetArguments = 0x00000100,
 
         /// <summary>
-        ///     Gets or sets whether flow control will be allowed from an aspect by changing FlowBehavior.
+        ///     Whether flow control will be allowed from an aspect by changing FlowBehavior.
         /// </summary>
-        FlowControl = 0x0200,
+        FlowControl = 0x00000200,
         
         /// <summary>
         ///     Enables getting and setting the current return value from OnSuccess().
         ///     This does not affect methods where FlowControl.Return is respected.
         /// </summary>
-        ReturnValue = 0x0400,
+        ReturnValue = 0x00000400,
 
         /// <summary>
-        ///     Gets or sets whether an aspect will be allowed to get and set the current yielded value in OnYield()
+        ///     Whether an aspect will be allowed to get and set the current yielded value in OnYield()
         ///     and OnResume() for iterators and async methods.
         /// </summary>
-        YieldValue = 0x0800,
+        YieldValue = 0x00000800,
 
         /// <summary>
-        ///     Gets or sets whether MethodInfo will be made available.
+        ///     Whether the MemberInfo derived class will be made available for the member the aspect
+        ///     was applied to.
         /// </summary>
-        Method = 0x1000,
+        MemberInfo = 0x00001000,
 
         /// <summary>
-        ///     Gets or sets whether the Tag property will be used to store user data between advice calls.
+        ///     Whether the Tag property will be used to store user data between advice calls.
         /// </summary>
-        Tag = 0x2000,
+        Tag = 0x00002000,
 
         /// <summary>
         ///     Enables all features.
         /// </summary>
-        All = 0xFFFF,
+        All = 0xFFFFFFFF,
     }
 }

@@ -64,5 +64,37 @@ namespace Spinner.Fody
 
             return self.Name == other.Name && self.Namespace == other.Namespace;
         }
+
+        //internal static bool IsSame(this MethodReference self, MethodReference other)
+        //{
+        //    if (ReferenceEquals(self, other))
+        //        return true;
+
+        //    if (self.Name != other.Name)
+        //        return false;
+
+        //    if (!IsSame(self.DeclaringType, other.DeclaringType))
+        //        return false;
+            
+        //    if (self.HasThis != other.HasThis)
+        //        return false;
+            
+        //    if (self.HasParameters != other.HasParameters)
+        //        return false;
+
+        //    if (self.HasParameters && (self.Parameters.Count != other.Parameters.Count))
+        //        return false;
+
+        //    if (!IsSame(self.ReturnType, other.ReturnType))
+        //        return false;
+
+        //    for (int i = 0; i < self.Parameters.Count; i++)
+        //    {
+        //        if (!self.Parameters[i].ParameterType.IsSame(other.Parameters[i].ParameterType))
+        //            return false;
+        //    }
+
+        //    return true;
+        //}
     }
 }

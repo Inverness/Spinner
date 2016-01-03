@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
 
@@ -14,17 +15,27 @@ namespace Spinner.Fody
         private const string IntNs = "Spinner.Internal";
         
         // ReSharper disable InconsistentNaming
+        internal readonly ModuleDefinition Module;
+        internal readonly TypeDefinition IAspect;
         internal readonly TypeDefinition IMethodBoundaryAspect;
         internal readonly TypeDefinition IMethodInterceptionAspect;
         internal readonly TypeDefinition IPropertyInterceptionAspect;
+        internal readonly TypeDefinition MethodBoundaryAspect;
+        internal readonly TypeDefinition MethodInterceptionAspect;
+        internal readonly TypeDefinition PropertyInterceptionAspect;
+        internal readonly TypeDefinition AdviceArgs;
+        internal readonly PropertyDefinition AdviceArgs_Tag;
+        internal readonly PropertyDefinition AdviceArgs_Instance;
         internal readonly TypeDefinition MethodArgs;
         internal readonly PropertyDefinition MethodArgs_Method;
+        internal readonly PropertyDefinition MethodArgs_Arguments;
         internal readonly TypeDefinition MethodExecutionArgs;
         internal readonly MethodDefinition MethodExecutionArgs_ctor;
         internal readonly PropertyDefinition MethodExecutionArgs_Exception;
         internal readonly PropertyDefinition MethodExecutionArgs_FlowBehavior;
         internal readonly PropertyDefinition MethodExecutionArgs_ReturnValue;
         internal readonly PropertyDefinition MethodExecutionArgs_YieldValue;
+        internal readonly TypeDefinition MethodInterceptionArgs;
         internal readonly TypeDefinition BoundMethodInterceptionArgs;
         internal readonly MethodDefinition BoundMethodInterceptionArgs_ctor;
         internal readonly TypeDefinition BoundMethodInterceptionArgsT1;
@@ -35,25 +46,52 @@ namespace Spinner.Fody
         internal readonly TypeDefinition PropertyBindingT1;
         internal readonly TypeDefinition PropertyInterceptionArgs;
         internal readonly PropertyDefinition PropertyInterceptionArgs_Property;
+        internal readonly PropertyDefinition PropertyInterceptionArgs_Index;
         internal readonly TypeDefinition BoundPropertyInterceptionArgsT1;
         internal readonly MethodDefinition BoundPropertyInterceptionArgsT1_ctor;
         internal readonly FieldDefinition BoundPropertyInterceptionArgsT1_TypedValue;
         internal readonly TypeDefinition Features;
         internal readonly TypeDefinition FeaturesAttribute;
-        internal readonly TypeDefinition ArgumentsBase;
-        internal readonly TypeDefinition[] Arguments;
-        internal readonly MethodDefinition[] Arguments_ctor;
-        internal readonly FieldDefinition[][] Arguments_Item;
+        internal readonly TypeDefinition AnalyzedFeaturesAttribute;
+        internal readonly MethodDefinition AnalyzedFeaturesAttribute_ctor;
+        internal readonly TypeDefinition Arguments;
+        internal readonly MethodDefinition Arguments_set_Item;
+        internal readonly MethodDefinition Arguments_SetValue;
+        internal readonly MethodDefinition Arguments_SetValueT;
+        internal readonly TypeDefinition[] ArgumentsT;
+        internal readonly MethodDefinition[] ArgumentsT_ctor;
+        internal readonly FieldDefinition[][] ArgumentsT_Item;
         // ReSharper restore InconsistentNaming
+
+        private readonly HashSet<TypeDefinition> _emptyAspectBaseTypes; 
 
         internal WellKnownSpinnerMembers(ModuleDefinition module)
         {
+            Module = module;
+
+            IAspect = module.GetType(Ns, "IAspect");
             IMethodBoundaryAspect = module.GetType(Ns, "IMethodBoundaryAspect");
             IMethodInterceptionAspect = module.GetType(Ns, "IMethodInterceptionAspect");
             IPropertyInterceptionAspect = module.GetType(Ns, "IPropertyInterceptionAspect");
 
+            MethodBoundaryAspect = module.GetType(Ns, "MethodBoundaryAspect");
+            MethodInterceptionAspect = module.GetType(Ns, "MethodInterceptionAspect");
+            PropertyInterceptionAspect = module.GetType(Ns, "PropertyInterceptionAspect");
+
+            _emptyAspectBaseTypes = new HashSet<TypeDefinition>
+            {
+                MethodBoundaryAspect,
+                MethodInterceptionAspect,
+                PropertyInterceptionAspect
+            };
+
+            AdviceArgs = module.GetType(Ns, "AdviceArgs");
+            AdviceArgs_Instance = AdviceArgs.Properties.First(p => p.Name == "Instance");
+            AdviceArgs_Tag = AdviceArgs.Properties.First(p => p.Name == "Tag");
+
             MethodArgs = module.GetType(Ns, "MethodArgs");
             MethodArgs_Method = MethodArgs.Properties.First(p => p.Name == "Method");
+            MethodArgs_Arguments = MethodArgs.Properties.First(p => p.Name == "Arguments");
 
             MethodExecutionArgs = module.GetType(Ns, "MethodExecutionArgs");
             MethodExecutionArgs_ctor = MethodExecutionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
@@ -68,9 +106,14 @@ namespace Spinner.Fody
 
             Features = module.GetType(Ns, "Features");
             FeaturesAttribute = module.GetType(Ns, "FeaturesAttribute");
+            AnalyzedFeaturesAttribute = module.GetType(IntNs, "AnalyzedFeaturesAttribute");
+            AnalyzedFeaturesAttribute_ctor = AnalyzedFeaturesAttribute.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
             PropertyInterceptionArgs = module.GetType(Ns, "PropertyInterceptionArgs");
             PropertyInterceptionArgs_Property = PropertyInterceptionArgs.Properties.First(p => p.Name == "Property");
+            PropertyInterceptionArgs_Index = PropertyInterceptionArgs.Properties.First(p => p.Name == "Index");
+
+            MethodInterceptionArgs = module.GetType(Ns, "MethodInterceptionArgs");
 
             BoundMethodInterceptionArgs = module.GetType(IntNs, "BoundMethodInterceptionArgs");
             BoundMethodInterceptionArgs_ctor = BoundMethodInterceptionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
@@ -83,28 +126,39 @@ namespace Spinner.Fody
             BoundPropertyInterceptionArgsT1_ctor = BoundPropertyInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundPropertyInterceptionArgsT1_TypedValue = BoundPropertyInterceptionArgsT1.Fields.First(f => f.Name == "TypedValue");
 
-            ArgumentsBase = module.GetType(Ns, "Arguments");
+            Arguments = module.GetType(Ns, "Arguments");
+            Arguments_set_Item = Arguments.Methods.First(m => m.Name == "set_Item");
+            Arguments_SetValue = Arguments.Methods.First(m => m.Name == "SetValue" && !m.HasGenericParameters);
+            Arguments_SetValueT = Arguments.Methods.First(m => m.Name == "SetValue" && m.HasGenericParameters);
 
-            Arguments = new TypeDefinition[MaxArguments + 1];
+            ArgumentsT = new TypeDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                Arguments[i] = module.GetType(IntNs, "Arguments`" + i);
+                ArgumentsT[i] = module.GetType(IntNs, "Arguments`" + i);
 
-            Arguments_ctor = new MethodDefinition[MaxArguments + 1];
+            ArgumentsT_ctor = new MethodDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                Arguments_ctor[i] = Arguments[i].Methods.First(m => m.IsConstructor && !m.IsStatic);
+                ArgumentsT_ctor[i] = ArgumentsT[i].Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            Arguments_Item = new FieldDefinition[MaxArguments + 1][];
+            ArgumentsT_Item = new FieldDefinition[MaxArguments + 1][];
             for (int i = 1; i <= MaxArguments; i++)
             {
-                TypeDefinition type = Arguments[i];
+                TypeDefinition type = ArgumentsT[i];
                 var fields = new FieldDefinition[i];
                 for (int f = 0; f < i; f++)
                 {
                     string fieldName = "Item" + f;
                     fields[f] = type.Fields.First(fe => fe.Name == fieldName);
                 }
-                Arguments_Item[i] = fields;
+                ArgumentsT_Item[i] = fields;
             }
+        }
+
+        /// <summary>
+        /// Check if a type is one of the abstract aspect base classes with empty virtual methods.
+        /// </summary>
+        internal bool IsEmptyAdviceBase(TypeDefinition type)
+        {
+            return _emptyAspectBaseTypes.Contains(type);
         }
     }
 }

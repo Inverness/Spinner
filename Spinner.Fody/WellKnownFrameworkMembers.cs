@@ -14,6 +14,7 @@ namespace Spinner.Fody
 
         // ReSharper disable InconsistentNaming
         internal readonly TypeDefinition Exception;
+        internal readonly TypeDefinition Attribute;
         internal readonly TypeDefinition AsyncStateMachineAttribute;
         internal readonly TypeDefinition IteratorStateMachineAttribute;
         internal readonly TypeDefinition CompilerGeneratedAttribute;
@@ -33,6 +34,7 @@ namespace Spinner.Fody
             ModuleDefinition module = runtimeAssembly.MainModule;
 
             Exception = module.GetType(NsSystem, nameof(Exception));
+            Attribute = module.GetType(NsSystem, nameof(Attribute));
             AsyncStateMachineAttribute = module.GetType(NsCompilerServices, nameof(AsyncStateMachineAttribute));
             IteratorStateMachineAttribute = module.GetType(NsCompilerServices, nameof(IteratorStateMachineAttribute));
             CompilerGeneratedAttribute = module.GetType(NsCompilerServices, nameof(CompilerGeneratedAttribute));

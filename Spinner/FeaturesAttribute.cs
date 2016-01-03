@@ -7,7 +7,7 @@ namespace Spinner
     ///     with MethodExecutionArgs.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class)]
-    public class FeaturesAttribute : Attribute
+    public sealed class FeaturesAttribute : Attribute
     {
         public FeaturesAttribute(Features features)
         {
