@@ -3,10 +3,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using Mono.Cecil;
+using Spinner.Fody;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Spinner.Fody.Tests
+namespace Spinner.Tests
 {
     public class WeaverTests
     {
@@ -136,12 +137,6 @@ namespace Spinner.Fody.Tests
             }
 
             _output.WriteLine("--------------------------");
-        }
-
-        [Fact(DisplayName = "Weave Only", Skip = "NA")]
-        public void WeaveOnly()
-        {
-            RunPeVerify(_assembly.Location, 0);
         }
 
         [Fact(DisplayName = "Weave and Run")]

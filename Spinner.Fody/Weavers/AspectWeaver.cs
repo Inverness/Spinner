@@ -236,9 +236,11 @@ namespace Spinner.Fody.Weavers
 
                 ParameterDefinition p = method.Parameters[i];
 
-                FieldReference af =
-                    stateMachine.DeclaringType.Fields.FirstOrDefault(f => f.Name == p.Name &&
-                                                                          f.FieldType.IsSame(p.ParameterType));
+                Func<FieldDefinition, bool> isField = f => f.Name == p.Name &&
+                                                           f.FieldType.IsSimilar(p.ParameterType) &&
+                                                           f.FieldType.Resolve() == p.ParameterType.Resolve();
+
+                FieldReference af = stateMachine.DeclaringType.Fields.FirstOrDefault(isField);
 
                 // Release builds will optimize out unused fields
                 if (af == null)
@@ -507,9 +509,6 @@ namespace Spinner.Fody.Weavers
 
         protected static void AddCompilerGeneratedAttribute(ModuleWeavingContext mwc, ICustomAttributeProvider definition)
         {
-            if (definition.CustomAttributes.Any(a => a.AttributeType.IsSame(mwc.Framework.CompilerGeneratedAttribute)))
-                return;
-
             MethodReference ctor = mwc.SafeImport(mwc.Framework.CompilerGeneratedAttribute_ctor);
             
             definition.CustomAttributes.Add(new CustomAttribute(ctor));
@@ -532,12 +531,14 @@ namespace Spinner.Fody.Weavers
                 {
                     foreach (CustomAttribute a in current.CustomAttributes)
                     {
-                        if (a.AttributeType.IsSame(analyzedAttrType))
+                        TypeReference atype = a.AttributeType;
+
+                        if (atype.IsSimilar(analyzedAttrType) && atype.Resolve() == analyzedAttrType)
                         {
                             return (Features) (uint) a.ConstructorArguments.First().Value;
                         }
 
-                        if (a.AttributeType.IsSame(attrType))
+                        if (atype.IsSimilar(attrType) && atype.Resolve() == attrType)
                         {
                             features = (Features) (uint) a.ConstructorArguments.First().Value;
                             // Continue in case AnalyzedFeaturesAttribute is found.
@@ -572,12 +573,14 @@ namespace Spinner.Fody.Weavers
                 {
                     foreach (CustomAttribute a in current.CustomAttributes)
                     {
-                        if (a.AttributeType.IsSame(analyzedAttrType))
+                        TypeReference atype = a.AttributeType;
+
+                        if (atype.IsSimilar(analyzedAttrType) && atype.Resolve() == analyzedAttrType)
                         {
                             return (Features) (uint) a.ConstructorArguments.First().Value;
                         }
 
-                        if (a.AttributeType.IsSame(attrType))
+                        if (atype.IsSimilar(attrType) && atype.Resolve() == attrType)
                         {
                             features = (Features) (uint) a.ConstructorArguments.First().Value;
                             // Continue in case AnalyzedFeaturesAttribute is found on same type.

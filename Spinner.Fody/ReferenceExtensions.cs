@@ -56,15 +56,38 @@ namespace Spinner.Fody
             }
         }
 
-        internal static bool IsSame(this TypeReference self, TypeReference other)
+        /// <summary>
+        /// Checks if two type references have the same name, namespace, and generic parameter count.
+        /// </summary>
+        /// <param name="self"></param>
+        /// <param name="other"></param>
+        /// <returns></returns>
+        internal static bool IsSimilar(this TypeReference self, TypeReference other)
         {
             if (ReferenceEquals(self, other))
                 return true;
 
-            Debug.Assert(self.IsGenericParameter == other.IsGenericParameter,
-                         "comparing generic parameter to non-generic paramter");
+            if (self.Name != other.Name || self.Namespace != other.Namespace)
+                return false;
 
-            return self.Name == other.Name && self.Namespace == other.Namespace;
+            if (self.HasGenericParameters != other.HasGenericParameters)
+                return false;
+
+            if (self.HasGenericParameters && (self.GenericParameters.Count != other.GenericParameters.Count))
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Shortcut for MetadataResolver.GetMethod() to get a matching method reference.
+        /// </summary>
+        /// <param name="self"></param>
+        /// <param name="reference"></param>
+        /// <returns></returns>
+        internal static MethodDefinition GetMethod(this TypeDefinition self, MethodReference reference)
+        {
+            return self.HasMethods ? MetadataResolver.GetMethod(self.Methods, reference) : null;
         }
 
         //internal static bool IsSame(this MethodReference self, MethodReference other)

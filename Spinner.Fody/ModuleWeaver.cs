@@ -51,8 +51,17 @@ namespace Spinner.Fody
                                             ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
+            
+            Task[] analysisTasks = types.Select(CreateAnalysisAction)
+                                        .Where(a => a != null)
+                                        .Select(Task.Run)
+                                        .ToArray();
 
-            types.ForEach(t => AspectFeatureAnalyzer.Analyze(_mwc, t));
+            if (analysisTasks.Length != 0)
+            {
+                Task.WhenAll(analysisTasks).Wait();
+                LogInfo($"Finished feature analysisf or {analysisTasks.Length} types.");
+            }
 
             // Execute type weavings in parallel. The ModuleWeavingContext provides thread-safe imports.
             // Weaving does not require any other module-level changes.
@@ -177,6 +186,11 @@ namespace Spinner.Fody
             };
 
             return taskAction;
+        }
+
+        private Action CreateAnalysisAction(TypeDefinition type)
+        {
+            return () => AspectFeatureAnalyzer.Analyze(_mwc, type);
         }
 
         private static bool IsAspectAttribute(TypeDefinition attributeType, TypeDefinition aspectType)

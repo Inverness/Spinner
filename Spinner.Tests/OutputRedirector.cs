@@ -2,7 +2,7 @@
 using System.Text;
 using Xunit.Abstractions;
 
-namespace Spinner.Fody.Tests
+namespace Spinner.Tests
 {
     internal class OutputRedirector : TextWriter
     {

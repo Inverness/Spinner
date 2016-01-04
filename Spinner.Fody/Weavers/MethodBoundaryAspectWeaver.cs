@@ -442,7 +442,7 @@ namespace Spinner.Fody.Weavers
             // Identify yield and resume points by looking for calls to a get_IsCompleted property and a GetResult
             // method. These can be defined on any type due to how awaitables work. IsCompleted is required to be
             // a property, not a field.
-            TypeReference awaiterType = null;
+            TypeDefinition awaiterType = null;
             int count = 0;
             for (int i = start; i < end; i++)
             {
@@ -467,9 +467,9 @@ namespace Spinner.Fody.Weavers
 
                     callYield = i + 2;
 
-                    awaiterType = mr.DeclaringType;
+                    awaiterType = mr.DeclaringType.Resolve();
                 }
-                else if (callYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.IsSame(awaiterType))
+                else if (callYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.Resolve() == awaiterType)
                 {
                     if (mr.ReturnType == mr.Module.TypeSystem.Void)
                     {
@@ -654,8 +654,7 @@ namespace Spinner.Fody.Weavers
             FieldReference aspectField,
             FieldReference meaFieldOpt)
         {
-            MethodDefinition onEntryDef = MetadataResolver.GetMethod(aspectType.Methods,
-                                                                     mwc.Spinner.IMethodBoundaryAspect_OnEntry);
+            MethodDefinition onEntryDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnEntry);
             MethodReference onEntry = mwc.SafeImport(onEntryDef);
 
             var insc = new Collection<Ins>();
