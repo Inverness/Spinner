@@ -52,8 +52,10 @@ namespace Spinner.Fody
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             
-            Task[] analysisTasks = types.Select(CreateAnalysisAction)
-                                        .Where(a => a != null)
+            // Analyze aspect types in parallel.
+
+            Task[] analysisTasks = types.Where(AspectFeatureAnalyzer.IsMaybeAspect)
+                                        .Select(CreateAnalysisAction)
                                         .Select(Task.Run)
                                         .ToArray();
 
@@ -67,15 +69,15 @@ namespace Spinner.Fody
             // Weaving does not require any other module-level changes.
 
             // Tasks are only created when there is actual work to be done for a type.
-            Task[] tasks = types.Select(CreateWeaveAction)
-                                .Where(a => a != null)
-                                .Select(Task.Run)
-                                .ToArray();
+            Task[] weaveTasks = types.Select(CreateWeaveAction)
+                                     .Where(a => a != null)
+                                     .Select(Task.Run)
+                                     .ToArray();
 
-            if (tasks.Length != 0)
+            if (weaveTasks.Length != 0)
             {
-                Task.WhenAll(tasks).Wait();
-                LogInfo($"Finished aspect weaving for {tasks.Length} types.");
+                Task.WhenAll(weaveTasks).Wait();
+                LogInfo($"Finished aspect weaving for {weaveTasks.Length} types.");
             }
             else
             {

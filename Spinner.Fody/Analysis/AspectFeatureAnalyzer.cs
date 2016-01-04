@@ -15,11 +15,21 @@ namespace Spinner.Fody.Analysis
     internal static class AspectFeatureAnalyzer
     {
         // Constants used to optimize various parts of analysis.
-        private const string GeneratedNamePrefix = "<";
+        private const char GeneratedNamePrefix = '<';
         private const int AspectInterfaceNameMinimumLength = 21;
         private const string AspectInterfaceNameSuffix = "Aspect";
         private const string AdviceArgsNamespace = "Spinner";
         private const string AdviceNamePrefix = "On";
+        
+        internal static bool IsMaybeAspect(TypeDefinition type)
+        {
+            return type.IsClass &&
+                   type.Name[0] != GeneratedNamePrefix &&
+                   !type.IsValueType &&
+                   !type.IsAbstract &&
+                   !type.IsSpecialName &&
+                   type.HasMethods;
+        }
 
         /// <summary>
         /// Analyzes a type and adds AnalyzedFeatureAttribute to the type and its methods where necessary.
@@ -28,9 +38,7 @@ namespace Spinner.Fody.Analysis
         internal static void Analyze(ModuleWeavingContext mwc, TypeDefinition type)
         {
             // Aspects can only be types that are valid as attributes.
-            if (!type.IsClass || type.IsValueType || type.IsAbstract || type.IsSpecialName || !type.HasMethods ||
-                type.Name.StartsWith(GeneratedNamePrefix, StringComparison.Ordinal))
-                return;
+            Debug.Assert(IsMaybeAspect(type), "this should be checked before starting analysis");
 
             // Identify the fundamental aspect kind and inheritance list
             AspectKind? ak = null;
