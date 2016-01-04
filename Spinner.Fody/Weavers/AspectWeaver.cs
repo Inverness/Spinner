@@ -103,7 +103,7 @@ namespace Spinner.Fody.Weavers
             MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
-            out VariableDefinition arguments)
+            out FieldDefinition arguments)
         {
             int effectiveParameterCount = GetEffectiveParameterCount(method);
 
@@ -120,12 +120,15 @@ namespace Spinner.Fody.Weavers
             MethodDefinition constructorDef = mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
-            arguments = stateMachine.Body.AddVariableDefinition(argumentsType);
+            arguments = new FieldDefinition("<>z__args", FieldAttributes.Private, argumentsType);
+
+            stateMachine.DeclaringType.Fields.Add(arguments);
 
             var insc = new[]
             {
+                Ins.Create(OpCodes.Ldarg_0),
                 Ins.Create(OpCodes.Newobj, constructor),
-                Ins.Create(OpCodes.Stloc, arguments)
+                Ins.Create(OpCodes.Stfld, arguments)
             };
 
             stateMachine.Body.InsertInstructions(offset, insc);
@@ -216,7 +219,7 @@ namespace Spinner.Fody.Weavers
             MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
-            VariableDefinition arguments,
+            FieldDefinition argumentContainerField,
             bool excludeOut)
         {
             int effectiveParameterCount = GetEffectiveParameterCount(method);
@@ -228,7 +231,7 @@ namespace Spinner.Fody.Weavers
             GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
 
             var insc = new Collection<Ins>();
-
+            
             for (int i = 0; i < effectiveParameterCount; i++)
             {
                 if (method.Parameters[i].IsOut && excludeOut)
@@ -240,15 +243,16 @@ namespace Spinner.Fody.Weavers
                                                            f.FieldType.IsSimilar(p.ParameterType) &&
                                                            f.FieldType.Resolve() == p.ParameterType.Resolve();
 
-                FieldReference af = stateMachine.DeclaringType.Fields.FirstOrDefault(isField);
+                FieldReference smArgumentField = stateMachine.DeclaringType.Fields.FirstOrDefault(isField);
 
                 // Release builds will optimize out unused fields
-                if (af == null)
+                if (smArgumentField == null)
                     continue;
 
-                insc.Add(Ins.Create(OpCodes.Ldloc, arguments));
                 insc.Add(Ins.Create(OpCodes.Ldarg_0));
-                insc.Add(Ins.Create(OpCodes.Ldfld, af));
+                insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerField));
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, smArgumentField));
                 insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
             }
 
@@ -296,6 +300,47 @@ namespace Spinner.Fody.Weavers
                     insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
                     insc.Add(Ins.Create(OpCodes.Starg, method.Parameters[i]));
                 }
+            }
+
+            method.Body.InsertInstructions(offset, insc);
+        }
+
+        /// <summary>
+        /// Copies arguments from the generic arguments container to the method.
+        /// </summary>
+        protected static void WriteSmCopyArgumentsFromContainer(
+            ModuleWeavingContext rc,
+            MethodDefinition method,
+            MethodDefinition stateMachine,
+            int offset,
+            FieldReference argumentContainerField,
+            bool includeNormal,
+            bool includeRef)
+        {
+            GenericInstanceType argumentContainerType;
+            FieldReference[] argumentContainerFields;
+            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
+
+            var insc = new Collection<Ins>();
+            for (int i = 0; i < GetEffectiveParameterCount(method); i++)
+            {
+                ParameterDefinition p = method.Parameters[i];
+
+                Func<FieldDefinition, bool> isField = f => f.Name == p.Name &&
+                                                           f.FieldType.IsSimilar(p.ParameterType) &&
+                                                           f.FieldType.Resolve() == p.ParameterType.Resolve();
+
+                FieldReference smArgumentField = stateMachine.DeclaringType.Fields.FirstOrDefault(isField);
+
+                // Release builds will optimize out unused fields
+                if (smArgumentField == null)
+                    continue;
+
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Dup));
+                insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerField));
+                insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
+                insc.Add(Ins.Create(OpCodes.Stfld, smArgumentField));
             }
 
             method.Body.InsertInstructions(offset, insc);

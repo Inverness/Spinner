@@ -48,7 +48,7 @@ namespace Spinner.TestTarget
     {
         public override void OnEntry(MethodExecutionArgs args)
         {
-            Console.WriteLine("Boundary Entry! " + args.Instance);
+            Console.WriteLine("Boundary Entry! " + args.Arguments[0]);
         }
 
         public override void OnSuccess(MethodExecutionArgs args)

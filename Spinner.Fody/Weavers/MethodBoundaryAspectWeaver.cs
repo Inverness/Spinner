@@ -208,6 +208,8 @@ namespace Spinner.Fody.Weavers
 
                 insc2.Add(labelNewReturn);
 
+
+
                 // Return the previously stored result
                 if (returnValueVar != null)
                     insc2.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
@@ -273,7 +275,7 @@ namespace Spinner.Fody.Weavers
 
             WriteAspectInit(mwc, stateMachine, insc.Count - initEndOffset, aspectType, aspectField);
 
-            VariableDefinition arguments = null;
+            FieldDefinition arguments = null;
             if ((features & Features.GetArguments) != 0)
             {
                 WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - initEndOffset, out arguments);
@@ -569,7 +571,7 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachine,
-            VariableDefinition argumentsVarOpt,
+            FieldReference argumentsFieldOpt,
             int offset,
             out FieldDefinition mea)
         {
@@ -600,13 +602,14 @@ namespace Spinner.Fody.Weavers
                 }
             }
 
-            if (argumentsVarOpt == null)
+            if (argumentsFieldOpt == null)
             {
                 insc.Add(Ins.Create(OpCodes.Ldnull));
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVarOpt));
+                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                insc.Add(Ins.Create(OpCodes.Ldfld, argumentsFieldOpt));
             }
 
             insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
