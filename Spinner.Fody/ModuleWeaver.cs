@@ -60,7 +60,7 @@ namespace Spinner.Fody
             if (analysisTasks.Length != 0)
             {
                 Task.WhenAll(analysisTasks).Wait();
-                LogInfo($"Finished feature analysisf or {analysisTasks.Length} types.");
+                LogInfo($"Finished feature analysis for {analysisTasks.Length} types.");
             }
 
             // Execute type weavings in parallel. The ModuleWeavingContext provides thread-safe imports.

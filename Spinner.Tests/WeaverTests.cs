@@ -35,6 +35,17 @@ namespace Spinner.Tests
             _assembly = WeaveAndLoadAssembly();
         }
 
+        private WeaverTests(string[] args, ITestOutputHelper output)
+        {
+            _output = output;
+            _assembly = WeaveAndLoadAssembly();
+        }
+
+        public static void RunFromConsole(string[] args)
+        {
+            new WeaverTests(args, new ConsoleOutputHelper()).WeaveAndRun();
+        }
+
         private Assembly WeaveAndLoadAssembly()
         {
             string projectPath = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, RelativeProjectpath));
@@ -145,6 +156,19 @@ namespace Spinner.Tests
             RunPeVerify(_assembly.Location, 0);
 
             InvokeRunMethod(_assembly);
+        }
+
+        private class ConsoleOutputHelper : ITestOutputHelper
+        {
+            public void WriteLine(string message)
+            {
+                Console.WriteLine(message);
+            }
+
+            public void WriteLine(string format, params object[] args)
+            {
+                Console.WriteLine(format, args);
+            }
         }
     }
 }
