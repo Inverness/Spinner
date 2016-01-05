@@ -642,4 +642,12 @@ namespace Spinner.Fody.Weavers
             return Features.None;
         }
     }
+
+    internal static class FeaturesExtensions
+    {
+        internal static bool Has(this Features self, Features features)
+        {
+            return (self & features) != 0;
+        }
+    }
 }

@@ -55,6 +55,16 @@ namespace Spinner.TestTarget
         {
             Console.WriteLine("Boundary success! " + args.Instance);
         }
+
+        public override void OnExit(MethodExecutionArgs args)
+        {
+            Console.WriteLine("Boundary Exit!");
+        }
+
+        public override void OnException(MethodExecutionArgs args)
+        {
+            Console.WriteLine("Boundary Exception! " + args.Exception.Message);
+        }
     }
 
     public class TestClass

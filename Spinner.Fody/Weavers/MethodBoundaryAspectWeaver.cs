@@ -80,7 +80,6 @@ namespace Spinner.Fody.Weavers
                     WeaveAsyncMethod(mwc,
                                      method,
                                      aspectType,
-                                     aspectIndex,
                                      features,
                                      aspectField,
                                      effectiveReturnType,
@@ -102,9 +101,8 @@ namespace Spinner.Fody.Weavers
             FieldReference aspectField,
             TypeDefinition effectiveReturnType
             )
-
         {
-            var insc = method.Body.Instructions;
+            Collection<Ins> insc = method.Body.Instructions;
             var originalInsc = new Collection<Ins>(insc);
             insc.Clear();
 
@@ -115,7 +113,7 @@ namespace Spinner.Fody.Weavers
             WriteAspectInit(mwc, method, insc.Count, aspectType, aspectField);
 
             VariableDefinition argumentsVar = null;
-            if ((features & Features.GetArguments) != 0)
+            if (features.Has(Features.GetArguments))
             {
                 WriteArgumentContainerInit(mwc, method, insc.Count, out argumentsVar);
                 WriteCopyArgumentsToContainer(mwc, method, insc.Count, argumentsVar, true);
@@ -124,22 +122,18 @@ namespace Spinner.Fody.Weavers
             VariableDefinition meaVar;
             WriteMeaInit(mwc, method, argumentsVar, insc.Count, out meaVar);
 
-            if ((features & Features.MemberInfo) != 0)
+            if (features.Has(Features.MemberInfo))
                 WriteSetMethodInfo(mwc, method, null, insc.Count, meaVar, null);
 
             // Write OnEntry call
-            if ((features & Features.OnEntry) != 0)
+            if (features.Has(Features.OnEntry))
                 WriteOnEntryCall(mwc, method, insc.Count, aspectType, features, returnValueVar, aspectField, meaVar);
 
             // Re-add original body
             int tryStartIndex = insc.Count;
             insc.AddRange(originalInsc);
 
-            bool withException = (features & Features.OnException) != 0;
-            bool withExit = (features & Features.OnExit) != 0;
-            bool withSuccess = (features & Features.OnSuccess) != 0;
-
-            if (withException || withExit || withSuccess)
+            if (features.Has(Features.OnException | Features.OnExit | Features.OnSuccess))
             {
                 Ins labelNewReturn = Ins.Create(OpCodes.Nop);
                 Ins labelSuccess = Ins.Create(OpCodes.Nop);
@@ -149,30 +143,30 @@ namespace Spinner.Fody.Weavers
                                method.Body.Instructions.Count - 1,
                                returnValueVar,
                                labelSuccess,
-                               withSuccess);
+                               features.Has(Features.OnSuccess));
 
                 insc.Add(labelSuccess);
 
                 // Write success block
 
-                if (withSuccess)
+                if (features.Has(Features.OnSuccess))
                 {
                     WriteSuccessHandler(mwc,
                                         method,
+                                        insc.Count,
                                         aspectType,
                                         aspectField,
                                         meaVar,
                                         null,
-                                        returnValueVar,
-                                        insc.Count);
+                                        features.Has(Features.ReturnValue) ? returnValueVar : null);
                 }
 
-                if (withException || withExit)
+                if (features.Has(Features.OnException | Features.OnExit))
                     insc.Add(Ins.Create(OpCodes.Leave, labelNewReturn));
 
                 // Write exception filter and handler
 
-                if (withException)
+                if (features.Has(Features.OnException))
                 {
                     WriteCatchExceptionHandler(mwc,
                                                method,
@@ -188,7 +182,7 @@ namespace Spinner.Fody.Weavers
 
                 // End of try block for the finally handler
 
-                if (withExit)
+                if (features.Has(Features.OnExit))
                 {
                     WriteFinallyExceptionHandler(mwc,
                                                  method,
@@ -198,24 +192,17 @@ namespace Spinner.Fody.Weavers
                                                  aspectField,
                                                  meaVar,
                                                  null,
-                                                 tryStartIndex,
-                                                 labelNewReturn);
+                                                 tryStartIndex);
                 }
 
                 // End finally block
 
-                var insc2 = new Collection<Ins>();
-
-                insc2.Add(labelNewReturn);
-
-
-
+                insc.Add(labelNewReturn);
+                
                 // Return the previously stored result
                 if (returnValueVar != null)
-                    insc2.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
-                insc2.Add(Ins.Create(OpCodes.Ret));
-
-                method.Body.InsertInstructions(null, insc2);
+                    insc.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
+                insc.Add(Ins.Create(OpCodes.Ret));
             }
         }
 
@@ -223,20 +210,12 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
-            int aspectIndex,
             Features features,
             FieldReference aspectField,
             TypeDefinition effectiveReturnType,
             MethodDefinition stateMachine
             )
         {
-            bool withEntry = (features & Features.OnEntry) != 0;
-            bool withException = (features & Features.OnException) != 0;
-            bool withExit = (features & Features.OnExit) != 0;
-            bool withSuccess = (features & Features.OnSuccess) != 0;
-            bool withYield = (features & Features.OnYield) != 0;
-            bool withResume = (features & Features.OnResume) != 0;
-
             // The last exception handler is used for setting the returning task state.
             // This is needed to identify insertion points.
             ExceptionHandler taskExceptionHandler = stateMachine.Body.ExceptionHandlers.Last();
@@ -276,16 +255,17 @@ namespace Spinner.Fody.Weavers
             WriteAspectInit(mwc, stateMachine, insc.Count - initEndOffset, aspectType, aspectField);
 
             FieldDefinition arguments = null;
-            if ((features & Features.GetArguments) != 0)
+            if (features.Has(Features.GetArguments))
             {
                 WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - initEndOffset, out arguments);
                 WriteSmCopyArgumentsToContainer(mwc, method, stateMachine, insc.Count - initEndOffset, arguments, true);
             }
 
-            FieldDefinition mea;
-            WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - initEndOffset, out mea);
+            // The meaVar would be used temporarily after loading from the field.
+            FieldDefinition meaField;
+            WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
 
-            if (withEntry)
+            if (features.Has(Features.OnEntry))
             {
                 // Write OnEntry call
                 WriteSmOnEntryCall(mwc,
@@ -295,11 +275,11 @@ namespace Spinner.Fody.Weavers
                                    features,
                                    resultVar,
                                    aspectField,
-                                   mea);
+                                   meaField);
             }
 
             // Search through the body for places to insert OnYield() and OnResume() calls
-            if (withYield || withResume)
+            if (features.Has(Features.OnYield | Features.OnResume))
             {
                 int awaitSearchStart = insc.Count - initEndOffset;
                 VariableDefinition awaitableStorage = null;
@@ -333,46 +313,50 @@ namespace Spinner.Fody.Weavers
                                         callResume,
                                         aspectType,
                                         aspectField,
-                                        mea,
+                                        meaField,
                                         awaitableStorage,
                                         awaitResultVar);
                 }
             }
 
-            // Everything following this point is written after the body but inside the async exception handler.
+            // Everything following this point is written after the body but BEFORE the async exception handler's
+            // leave instruction.
 
-            if (withException || withExit || withSuccess)
+            if (features.Has(Features.OnException | Features.OnExit | Features.OnSuccess))
             {
-                Ins labelSuccess = Ins.Create(OpCodes.Nop);
-
-                // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
-                // They will be replaced by breaks to labelSuccess.
-                RewriteSmLeaves(stateMachine,
-                                tryStartOffset,
-                                insc.Count - leaveEndOffset - 1,
-                                labelSuccess,
-                                false);
-
-                insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
-
-                // Write success block
-
-                if (withSuccess)
+                Ins labelLeaveTarget = null;
+                if (features.Has(Features.OnSuccess))
                 {
+                    Ins labelSuccess = Ins.Create(OpCodes.Nop);
+
+                    // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
+                    // They will be replaced by breaks to labelSuccess.
+                    RewriteSmLeaves(stateMachine,
+                                    tryStartOffset,
+                                    insc.Count - leaveEndOffset - 1,
+                                    labelSuccess,
+                                    false);
+
+                    insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
+
                     WriteSuccessHandler(mwc,
                                         stateMachine,
+                                        insc.Count - leaveEndOffset,
                                         aspectType,
                                         aspectField,
                                         null,
-                                        mea,
-                                        resultVar,
-                                        insc.Count - leaveEndOffset);
+                                        meaField,
+                                        features.Has(Features.ReturnValue) ? resultVar : null);
+
+                    // Leave the the exception handlers that will be written next.
+                    if (features.Has(Features.OnException | Features.OnExit))
+                    {
+                        labelLeaveTarget = Ins.Create(OpCodes.Nop);
+                        insc.Insert(insc.Count - leaveEndOffset, Ins.Create(OpCodes.Leave, labelLeaveTarget));
+                    }
                 }
 
-                // Mark where the leave instruction needs to be inserted before the exception handler
-                int leaveInsertPoint = insc.Count - leaveEndOffset;
-
-                if (withException)
+                if (features.Has(Features.OnException))
                 {
                     WriteCatchExceptionHandler(mwc,
                                                method,
@@ -381,12 +365,12 @@ namespace Spinner.Fody.Weavers
                                                aspectType,
                                                aspectField,
                                                null,
-                                               mea,
+                                               meaField,
                                                tryStartOffset,
                                                insc[insc.Count - leaveEndOffset]);
                 }
 
-                if (withExit)
+                if (features.Has(Features.OnExit))
                 {
                     WriteFinallyExceptionHandler(mwc,
                                                  method,
@@ -395,16 +379,12 @@ namespace Spinner.Fody.Weavers
                                                  aspectType,
                                                  aspectField,
                                                  null,
-                                                 mea,
-                                                 tryStartOffset,
-                                                 insc[insc.Count - leaveEndOffset]);
+                                                 meaField,
+                                                 tryStartOffset);
                 }
-
-                // Insert the try block leave right before the exception handlers
-                // This is done last to ensure that insertions for the exception and exit handlers do not break
-                // any offsets.
-                if (withException || withExit)
-                    stateMachine.Body.InsertInstructions(leaveInsertPoint, Ins.Create(OpCodes.Leave, insc[insc.Count - leaveEndOffset]));
+                
+                if (labelLeaveTarget != null)
+                    insc.Insert(insc.Count - leaveEndOffset, labelLeaveTarget);
                 
                 // Ensure the task EH is last
                 stateMachine.Body.ExceptionHandlers.Remove(taskExceptionHandler);
@@ -416,7 +396,6 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
-            int aspectIndex,
             Features features,
             FieldReference aspectField,
             TypeDefinition effectiveReturnType,
@@ -500,29 +479,29 @@ namespace Spinner.Fody.Weavers
             return false;
         }
 
-        /// <summary>
-        /// Resolves a generic parameter type or return type for a method.
-        /// </summary>
-        private static TypeReference ResolveMethodGenericParameter(
-            TypeReference parameter,
-            MethodReference method)
-        {
-            if (!parameter.IsGenericParameter)
-                return parameter;
+        ///// <summary>
+        ///// Resolves a generic parameter type or return type for a method.
+        ///// </summary>
+        //private static TypeReference ResolveMethodGenericParameter(
+        //    TypeReference parameter,
+        //    MethodReference method)
+        //{
+        //    if (!parameter.IsGenericParameter)
+        //        return parameter;
 
-            var gp = (GenericParameter) parameter;
+        //    var gp = (GenericParameter) parameter;
 
-            if (gp.Type == GenericParameterType.Type)
-            {
-                Debug.Assert(method.DeclaringType.IsGenericInstance, "method declaring type is not a generic instance");
-                return ((GenericInstanceType) method.DeclaringType).GenericArguments[gp.Position];
-            }
-            else
-            {
-                Debug.Assert(method.IsGenericInstance, "method is not a generic instance");
-                return ((GenericInstanceMethod) method).GenericArguments[gp.Position];
-            }
-        }
+        //    if (gp.Type == GenericParameterType.Type)
+        //    {
+        //        Debug.Assert(method.DeclaringType.IsGenericInstance, "method declaring type is not a generic instance");
+        //        return ((GenericInstanceType) method.DeclaringType).GenericArguments[gp.Position];
+        //    }
+        //    else
+        //    {
+        //        Debug.Assert(method.IsGenericInstance, "method is not a generic instance");
+        //        return ((GenericInstanceMethod) method).GenericArguments[gp.Position];
+        //    }
+        //}
 
         private static void WriteMeaInit(
             ModuleWeavingContext mwc,
@@ -573,13 +552,13 @@ namespace Spinner.Fody.Weavers
             MethodDefinition stateMachine,
             FieldReference argumentsFieldOpt,
             int offset,
-            out FieldDefinition mea)
+            out FieldDefinition meaField)
         {
             TypeReference meaType = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs);
             MethodReference meaCtor = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_ctor);
-
-            mea = new FieldDefinition("<>z__mea", FieldAttributes.Private, meaType);
-            stateMachine.DeclaringType.Fields.Add(mea);
+            
+            meaField = new FieldDefinition("<>z__mea", FieldAttributes.Private, meaType);
+            stateMachine.DeclaringType.Fields.Add(meaField);
 
             FieldReference thisField = stateMachine.DeclaringType.Fields.First(f => f.Name == StateMachineThisFieldName);
 
@@ -614,7 +593,7 @@ namespace Spinner.Fody.Weavers
 
             insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
 
-            insc.Add(Ins.Create(OpCodes.Stfld, mea));
+            insc.Add(Ins.Create(OpCodes.Stfld, meaField));
 
             stateMachine.Body.InsertInstructions(offset, insc);
         }
@@ -625,7 +604,7 @@ namespace Spinner.Fody.Weavers
             int offset,
             TypeDefinition aspectType,
             Features features,
-            VariableDefinition returnValueHolder,
+            VariableDefinition returnVar,
             FieldReference aspectField,
             VariableDefinition meaVarOpt)
         {
@@ -653,7 +632,7 @@ namespace Spinner.Fody.Weavers
             int offset,
             TypeDefinition aspectType,
             Features features,
-            VariableDefinition returnValueHolder,
+            VariableDefinition returnVar,
             FieldReference aspectField,
             FieldReference meaFieldOpt)
         {
@@ -681,7 +660,7 @@ namespace Spinner.Fody.Weavers
             MethodDefinition method,
             int startIndex,
             int endIndex,
-            VariableDefinition returnValueHolder,
+            VariableDefinition returnVar,
             Ins brTarget,
             bool skipLast)
         {
@@ -697,9 +676,9 @@ namespace Spinner.Fody.Weavers
                 if (ins.OpCode != OpCodes.Ret)
                     continue;
 
-                if (returnValueHolder != null)
+                if (returnVar != null)
                 {
-                    Ins insStoreReturnValue = Ins.Create(OpCodes.Stloc, returnValueHolder);
+                    Ins insStoreReturnValue = Ins.Create(OpCodes.Stloc, returnVar);
 
                     method.Body.ReplaceInstruction(i, insStoreReturnValue);
 
@@ -748,23 +727,53 @@ namespace Spinner.Fody.Weavers
             }
         }
 
+        /// <summary>
+        /// Writes the OnSuccess() call and ReturnValue get and set for it.
+        /// </summary>
         private static void WriteSuccessHandler(
             ModuleWeavingContext mwc,
             MethodDefinition method,
+            int offset,
             TypeDefinition aspectType,
             FieldReference aspectField,
             VariableDefinition meaVar,
             FieldReference meaField,
-            VariableDefinition resultVar,
-            int offset)
+            VariableDefinition returnVar)
         {
-            MethodDefinition onSuccessDef = aspectType.GetInheritedMethods().First(m => m.Name == OnSuccessAdviceName);
-            MethodReference onSuccess = mwc.SafeImport(onSuccessDef);
+            MethodReference onSuccess = mwc.SafeImport(aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnSuccess));
+
+            // For state machines, the return var type would need to be imported
+            TypeReference returnVarType = null;
+            if (returnVar != null)
+                returnVarType = mwc.SafeImport(returnVar.VariableType);
 
             var insc = new Collection<Ins>();
-            
-            insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
 
+            // Set ReturnValue to returnVar
+
+            if (returnVar != null && (meaVar != null || meaField != null))
+            {
+                MethodReference setReturnValue = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
+
+                if (meaField != null)
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                    insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
+                }
+                else
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+                }
+                insc.Add(Ins.Create(OpCodes.Ldloc, returnVar));
+                if (returnVarType.IsValueType)
+                    insc.Add(Ins.Create(OpCodes.Box, returnVarType));
+                insc.Add(Ins.Create(OpCodes.Callvirt, setReturnValue));
+            }
+
+            // Call OnSuccess()
+
+            insc.Add(Ins.Create(OpCodes.Ldsfld, aspectField));
+            
             if (meaField != null)
             {
                 insc.Add(Ins.Create(OpCodes.Ldarg_0));
@@ -780,6 +789,27 @@ namespace Spinner.Fody.Weavers
             }
 
             insc.Add(Ins.Create(OpCodes.Callvirt, onSuccess));
+
+            // Set resultVar to ReturnValue
+
+            if (returnVar != null && (meaVar != null || meaField != null))
+            {
+                MethodReference getReturnValue = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
+
+                if (meaField != null)
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                    insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
+                }
+                else
+                {
+                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
+                }
+                insc.Add(Ins.Create(OpCodes.Callvirt, getReturnValue));
+                if (returnVarType.IsValueType)
+                    insc.Add(Ins.Create(OpCodes.Unbox_Any, returnVarType));
+                insc.Add(Ins.Create(OpCodes.Stloc, returnVar));
+            }
 
             method.Body.InsertInstructions(offset, insc);
         }
@@ -891,7 +921,7 @@ namespace Spinner.Fody.Weavers
 
             insc.Add(Ins.Create(OpCodes.Nop));
 
-            targetMethod.Body.InsertInstructions(offset, insc);
+            targetMethod.Body.Instructions.InsertRange(offset, insc);
 
             targetMethod.Body.ExceptionHandlers.Add(new ExceptionHandler(ExceptionHandlerType.Filter)
             {
@@ -913,8 +943,7 @@ namespace Spinner.Fody.Weavers
             FieldReference aspectField,
             VariableDefinition meaVar,
             FieldReference meaField,
-            int tryStart,
-            Ins leaveTarget)
+            int tryStart)
         {
             MethodDefinition onExitDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExitAdviceName);
             MethodReference onExit = mwc.SafeImport(onExitDef);
@@ -923,12 +952,7 @@ namespace Spinner.Fody.Weavers
 
             var insc = new Collection<Ins>();
 
-            insc.Add(Ins.Create(OpCodes.Leave, leaveTarget));
-
             int ehTryFinallyEnd = insc.Count;
-
-            // Begin finally block
-
             int ehFinallyStart = insc.Count;
 
             // Call OnExit()
@@ -948,7 +972,7 @@ namespace Spinner.Fody.Weavers
             int ehFinallyEnd = insc.Count;
             insc.Add(Ins.Create(OpCodes.Nop));
 
-            targetMethod.Body.InsertInstructions(offset, insc);
+            targetMethod.Body.Instructions.InsertRange(offset, insc);
 
             var finallyHandler = new ExceptionHandler(ExceptionHandlerType.Finally)
             {
@@ -1135,7 +1159,10 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Discover whether a method is an async state machine creator and the nested type that implements it.
         /// </summary>
-        private static StateMachineKind GetStateMachineInfo(ModuleWeavingContext mwc, MethodDefinition method, out MethodDefinition moveNextMethod)
+        private static StateMachineKind GetStateMachineInfo(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            out MethodDefinition stateMachine)
         {
             if (method.HasCustomAttributes)
             {
@@ -1145,22 +1172,22 @@ namespace Spinner.Fody.Weavers
                 foreach (CustomAttribute a in method.CustomAttributes)
                 {
                     TypeReference atype = a.AttributeType;
-                    if (atype.Name == asmType.Name && atype.Namespace == asmType.Namespace)
+                    if (atype.IsSimilar(asmType) && atype.Resolve() == asmType)
                     {
                         var type = (TypeDefinition) a.ConstructorArguments.First().Value;
-                        moveNextMethod = type.Methods.Single(m => m.Name == "MoveNext");
+                        stateMachine = type.Methods.Single(m => m.Name == "MoveNext");
                         return StateMachineKind.Async;
                     }
-                    if (atype.Name == ismType.Name && atype.Namespace == ismType.Namespace)
+                    if (atype.IsSimilar(ismType) && atype.Resolve() == ismType)
                     {
                         var type = (TypeDefinition) a.ConstructorArguments.First().Value;
-                        moveNextMethod = type.Methods.Single(m => m.Name == "MoveNext");
+                        stateMachine = type.Methods.Single(m => m.Name == "MoveNext");
                         return StateMachineKind.Iterator;
                     }
                 }
             }
 
-            moveNextMethod = null;
+            stateMachine = null;
             return StateMachineKind.None;
         }
 
