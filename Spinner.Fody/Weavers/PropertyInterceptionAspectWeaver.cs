@@ -183,18 +183,11 @@ namespace Spinner.Fody.Weavers
                     // Load the instance for the method call
                     if (!property.GetMethod.IsStatic)
                     {
-                        if (property.GetMethod.DeclaringType.IsValueType)
-                        {
-                            bil.Emit(OpCodes.Ldarg_1);
-                            bil.Emit(OpCodes.Ldind_Ref);
-                            bil.Emit(OpCodes.Unbox, property.GetMethod.DeclaringType);
-                        }
-                        else
-                        {
-                            bil.Emit(OpCodes.Ldarg_1);
-                            bil.Emit(OpCodes.Ldind_Ref);
-                            bil.Emit(OpCodes.Castclass, property.GetMethod.DeclaringType);
-                        }
+                        // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
+                        bil.Emit(OpCodes.Ldarg_1);
+                        bil.Emit(OpCodes.Ldind_Ref);
+                        bil.Emit(property.GetMethod.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
+                                 property.GetMethod.DeclaringType);
                     }
 
                     // Load arguments or addresses directly from the arguments container
@@ -274,18 +267,11 @@ namespace Spinner.Fody.Weavers
                     // Load the instance for the method call
                     if (!property.SetMethod.IsStatic)
                     {
-                        if (property.SetMethod.DeclaringType.IsValueType)
-                        {
-                            bil.Emit(OpCodes.Ldarg_1);
-                            bil.Emit(OpCodes.Ldind_Ref);
-                            bil.Emit(OpCodes.Unbox, property.SetMethod.DeclaringType);
-                        }
-                        else
-                        {
-                            bil.Emit(OpCodes.Ldarg_1);
-                            bil.Emit(OpCodes.Ldind_Ref);
-                            bil.Emit(OpCodes.Castclass, property.SetMethod.DeclaringType);
-                        }
+                        // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
+                        bil.Emit(OpCodes.Ldarg_1);
+                        bil.Emit(OpCodes.Ldind_Ref);
+                        bil.Emit(property.SetMethod.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
+                                 property.SetMethod.DeclaringType);
                     }
 
                     // Load arguments or addresses directly from the arguments container

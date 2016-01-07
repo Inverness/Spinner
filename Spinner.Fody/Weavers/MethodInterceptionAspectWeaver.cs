@@ -230,18 +230,10 @@ namespace Spinner.Fody.Weavers
             // Load the instance for the method call
             if (!method.IsStatic)
             {
-                if (method.DeclaringType.IsValueType)
-                {
-                    bil.Emit(OpCodes.Ldarg_1);
-                    bil.Emit(OpCodes.Ldind_Ref);
-                    bil.Emit(OpCodes.Unbox, method.DeclaringType);
-                }
-                else
-                {
-                    bil.Emit(OpCodes.Ldarg_1);
-                    bil.Emit(OpCodes.Ldind_Ref);
-                    bil.Emit(OpCodes.Castclass, method.DeclaringType);
-                }
+                // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
+                bil.Emit(OpCodes.Ldarg_1);
+                bil.Emit(OpCodes.Ldind_Ref);
+                bil.Emit(method.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass, method.DeclaringType);
             }
 
             // Load arguments or addresses directly from the arguments container
