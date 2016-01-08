@@ -18,14 +18,6 @@ namespace Spinner.Fody.Weavers
 
     internal sealed class MethodBoundaryAspectWeaver : AspectWeaver
     {
-        private const string OnEntryAdviceName = "OnEntry";
-        private const string OnExitAdviceName = "OnExit";
-        private const string OnExceptionAdviceName = "OnException";
-        private const string OnSuccessAdviceName = "OnSuccess";
-        private const string OnYieldAdviceName = "OnYield";
-        private const string OnResumeAdviceName = "OnResume";
-        private const string FilterExceptionAdviceName = "FilterException";
-
         internal static void Weave(
             ModuleWeavingContext mwc,
             MethodDefinition method,
@@ -127,7 +119,7 @@ namespace Spinner.Fody.Weavers
 
             // Write OnEntry call
             if (features.Has(Features.OnEntry))
-                WriteOnEntryCall(mwc, method, insc.Count, aspectType, features, returnValueVar, aspectField, meaVar);
+                WriteOnEntryCall(mwc, method, insc.Count, aspectType, aspectField, meaVar);
 
             // Re-add original body
             int tryStartIndex = insc.Count;
@@ -272,8 +264,6 @@ namespace Spinner.Fody.Weavers
                                    stateMachine,
                                    insc.Count - initEndOffset,
                                    aspectType,
-                                   features,
-                                   resultVar,
                                    aspectField,
                                    meaField);
             }
@@ -322,70 +312,70 @@ namespace Spinner.Fody.Weavers
             // Everything following this point is written after the body but BEFORE the async exception handler's
             // leave instruction.
 
-            if (features.Has(Features.OnException | Features.OnExit | Features.OnSuccess))
+            Ins labelLeaveTarget = null;
+            if (features.Has(Features.OnSuccess))
             {
-                Ins labelLeaveTarget = null;
-                if (features.Has(Features.OnSuccess))
+                Ins labelSuccess = Ins.Create(OpCodes.Nop);
+
+                // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
+                // They will be replaced by breaks to labelSuccess.
+                RewriteSmLeaves(stateMachine,
+                                tryStartOffset,
+                                insc.Count - leaveEndOffset - 1,
+                                labelSuccess,
+                                false);
+
+                insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
+
+                WriteSuccessHandler(mwc,
+                                    stateMachine,
+                                    insc.Count - leaveEndOffset,
+                                    aspectType,
+                                    aspectField,
+                                    null,
+                                    meaField,
+                                    features.Has(Features.ReturnValue) ? resultVar : null);
+
+                // Leave the the exception handlers that will be written next.
+                if (features.Has(Features.OnException | Features.OnExit))
                 {
-                    Ins labelSuccess = Ins.Create(OpCodes.Nop);
-
-                    // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
-                    // They will be replaced by breaks to labelSuccess.
-                    RewriteSmLeaves(stateMachine,
-                                    tryStartOffset,
-                                    insc.Count - leaveEndOffset - 1,
-                                    labelSuccess,
-                                    false);
-
-                    insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
-
-                    WriteSuccessHandler(mwc,
-                                        stateMachine,
-                                        insc.Count - leaveEndOffset,
-                                        aspectType,
-                                        aspectField,
-                                        null,
-                                        meaField,
-                                        features.Has(Features.ReturnValue) ? resultVar : null);
-
-                    // Leave the the exception handlers that will be written next.
-                    if (features.Has(Features.OnException | Features.OnExit))
-                    {
-                        labelLeaveTarget = Ins.Create(OpCodes.Nop);
-                        insc.Insert(insc.Count - leaveEndOffset, Ins.Create(OpCodes.Leave, labelLeaveTarget));
-                    }
+                    labelLeaveTarget = Ins.Create(OpCodes.Nop);
+                    insc.Insert(insc.Count - leaveEndOffset, Ins.Create(OpCodes.Leave, labelLeaveTarget));
                 }
+            }
 
-                if (features.Has(Features.OnException))
-                {
-                    WriteCatchExceptionHandler(mwc,
-                                               method,
-                                               stateMachine,
-                                               insc.Count - leaveEndOffset,
-                                               aspectType,
-                                               aspectField,
-                                               null,
-                                               meaField,
-                                               tryStartOffset,
-                                               insc[insc.Count - leaveEndOffset]);
-                }
+            if (features.Has(Features.OnException))
+            {
+                WriteCatchExceptionHandler(mwc,
+                                           method,
+                                           stateMachine,
+                                           insc.Count - leaveEndOffset,
+                                           aspectType,
+                                           aspectField,
+                                           null,
+                                           meaField,
+                                           tryStartOffset,
+                                           insc[insc.Count - leaveEndOffset]);
+            }
 
-                if (features.Has(Features.OnExit))
-                {
-                    WriteFinallyExceptionHandler(mwc,
-                                                 method,
-                                                 stateMachine,
-                                                 insc.Count - leaveEndOffset,
-                                                 aspectType,
-                                                 aspectField,
-                                                 null,
-                                                 meaField,
-                                                 tryStartOffset);
-                }
+            if (features.Has(Features.OnExit))
+            {
+                WriteFinallyExceptionHandler(mwc,
+                                             method,
+                                             stateMachine,
+                                             insc.Count - leaveEndOffset,
+                                             aspectType,
+                                             aspectField,
+                                             null,
+                                             meaField,
+                                             tryStartOffset);
+            }
                 
-                if (labelLeaveTarget != null)
-                    insc.Insert(insc.Count - leaveEndOffset, labelLeaveTarget);
-                
+            if (labelLeaveTarget != null)
+                insc.Insert(insc.Count - leaveEndOffset, labelLeaveTarget);
+
+            if (features.Has(Features.OnException | Features.OnExit))
+            {
                 // Ensure the task EH is last
                 stateMachine.Body.ExceptionHandlers.Remove(taskExceptionHandler);
                 stateMachine.Body.ExceptionHandlers.Add(taskExceptionHandler);
@@ -503,6 +493,9 @@ namespace Spinner.Fody.Weavers
         //    }
         //}
 
+        /// <summary>
+        /// Write MethodExecutionArgs initialization.
+        /// </summary>
         private static void WriteMeaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
@@ -546,6 +539,9 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
+        /// <summary>
+        /// Write MethodExecutionArgs initialization for a state machine.
+        /// </summary>
         private static void WriteSmMeaInit(
             ModuleWeavingContext mwc,
             MethodDefinition method,
@@ -598,20 +594,18 @@ namespace Spinner.Fody.Weavers
             stateMachine.Body.InsertInstructions(offset, insc);
         }
 
+        /// <summary>
+        /// Write the OnEntry advice call.
+        /// </summary>
         private static void WriteOnEntryCall(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             int offset,
             TypeDefinition aspectType,
-            Features features,
-            VariableDefinition returnVar,
             FieldReference aspectField,
             VariableDefinition meaVarOpt)
         {
-            if ((features & Features.OnEntry) == 0)
-                return;
-
-            MethodDefinition onEntryDef = aspectType.GetInheritedMethods().First(m => m.Name == OnEntryAdviceName);
+            MethodDefinition onEntryDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnEntry, true);
             MethodReference onEntry = mwc.SafeImport(onEntryDef);
 
             var insc = new[]
@@ -631,12 +625,10 @@ namespace Spinner.Fody.Weavers
             MethodDefinition stateMachine,
             int offset,
             TypeDefinition aspectType,
-            Features features,
-            VariableDefinition returnVar,
             FieldReference aspectField,
             FieldReference meaFieldOpt)
         {
-            MethodDefinition onEntryDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnEntry);
+            MethodDefinition onEntryDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnEntry, true);
             MethodReference onEntry = mwc.SafeImport(onEntryDef);
 
             var insc = new Collection<Ins>();
@@ -740,7 +732,7 @@ namespace Spinner.Fody.Weavers
             FieldReference meaField,
             VariableDefinition returnVar)
         {
-            MethodReference onSuccess = mwc.SafeImport(aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnSuccess));
+            MethodReference onSuccess = mwc.SafeImport(aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnSuccess, true));
 
             // For state machines, the return var type would need to be imported
             TypeReference returnVarType = null;
@@ -828,13 +820,11 @@ namespace Spinner.Fody.Weavers
         {
             var insc = new Collection<Ins>();
 
-            MethodDefinition filterExceptionDef =
-                aspectType.GetInheritedMethods().First(m => m.Name == FilterExceptionAdviceName);
+            MethodDefinition filterExceptionDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_FilterException, true);
             MethodReference filterExcetion = mwc.SafeImport(filterExceptionDef);
-            MethodDefinition onExceptionDef =
-                aspectType.GetInheritedMethods().First(m => m.Name == OnExceptionAdviceName);
+            MethodDefinition onExceptionDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnException, true);
             MethodReference onException = mwc.SafeImport(onExceptionDef);
-            var exceptionType = mwc.SafeImport(mwc.Framework.Exception);
+            TypeReference exceptionType = mwc.SafeImport(mwc.Framework.Exception);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
 
@@ -945,7 +935,7 @@ namespace Spinner.Fody.Weavers
             FieldReference meaField,
             int tryStart)
         {
-            MethodDefinition onExitDef = aspectType.GetInheritedMethods().First(m => m.Name == OnExitAdviceName);
+            MethodDefinition onExitDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnExit, true);
             MethodReference onExit = mwc.SafeImport(onExitDef);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
@@ -1006,7 +996,7 @@ namespace Spinner.Fody.Weavers
 
             if (yieldOffset != -1)
             {
-                MethodDefinition onYieldDef = aspectType.GetInheritedMethods().First(m => m.Name == OnYieldAdviceName);
+                MethodDefinition onYieldDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnYield, true);
                 MethodReference onYield = mwc.SafeImport(onYieldDef);
 
                 // Need to know whether the awaitable is a value type. It will be boxed as object if so, instead
@@ -1063,7 +1053,7 @@ namespace Spinner.Fody.Weavers
 
             if (resumeOffset != -1)
             {
-                MethodDefinition onResumeDef = aspectType.GetInheritedMethods().First(m => m.Name == OnResumeAdviceName);
+                MethodDefinition onResumeDef = aspectType.GetMethod(mwc.Spinner.IMethodBoundaryAspect_OnResume, true);
                 MethodReference onResume = mwc.SafeImport(onResumeDef);
 
                 // Store the typed awaitable as YieldValue, optionally boxing it.

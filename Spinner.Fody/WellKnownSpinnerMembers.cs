@@ -24,6 +24,7 @@ namespace Spinner.Fody
         internal readonly MethodDefinition IMethodBoundaryAspect_OnException;
         internal readonly MethodDefinition IMethodBoundaryAspect_OnYield;
         internal readonly MethodDefinition IMethodBoundaryAspect_OnResume;
+        internal readonly MethodDefinition IMethodBoundaryAspect_FilterException;
         internal readonly TypeDefinition IMethodInterceptionAspect;
         internal readonly MethodDefinition IMethodInterceptionAspect_OnInvoke;
         internal readonly TypeDefinition IPropertyInterceptionAspect;
@@ -87,6 +88,7 @@ namespace Spinner.Fody
             IMethodBoundaryAspect_OnException = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnException");
             IMethodBoundaryAspect_OnYield = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnYield");
             IMethodBoundaryAspect_OnResume = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnResume");
+            IMethodBoundaryAspect_FilterException = IMethodBoundaryAspect.Methods.First(m => m.Name == "FilterException");
 
             IMethodInterceptionAspect = module.GetType(Ns, "IMethodInterceptionAspect");
             IMethodInterceptionAspect_OnInvoke = IMethodInterceptionAspect.Methods.First(m => m.Name == "OnInvoke");

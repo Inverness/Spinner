@@ -82,12 +82,22 @@ namespace Spinner.Fody
         /// <summary>
         /// Shortcut for MetadataResolver.GetMethod() to get a matching method reference.
         /// </summary>
-        /// <param name="self"></param>
-        /// <param name="reference"></param>
-        /// <returns></returns>
-        internal static MethodDefinition GetMethod(this TypeDefinition self, MethodReference reference)
+        internal static MethodDefinition GetMethod(this TypeDefinition self, MethodReference reference, bool inherited)
         {
-            return self.HasMethods ? MetadataResolver.GetMethod(self.Methods, reference) : null;
+            if (!inherited)
+                return self.HasMethods ? MetadataResolver.GetMethod(self.Methods, reference) : null;
+
+            TypeDefinition current = self;
+            while (current != null)
+            {
+                MethodDefinition result;
+                if (current.HasMethods && (result = MetadataResolver.GetMethod(current.Methods, reference)) != null)
+                    return result;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return null;
         }
 
         //internal static bool IsSame(this MethodReference self, MethodReference other)

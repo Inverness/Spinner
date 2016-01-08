@@ -242,7 +242,7 @@ namespace Spinner.Fody.Analysis
                     throw new ArgumentOutOfRangeException(nameof(ak), ak, null);
             }
 
-            MethodDefinition baseMethod = baseType.GetMethod(method);
+            MethodDefinition baseMethod = baseType.GetMethod(method, false);
             if (baseMethod == null)
             {
                 typeFeature = Features.None;
