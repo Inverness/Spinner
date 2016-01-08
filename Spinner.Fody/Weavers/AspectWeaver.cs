@@ -159,7 +159,7 @@ namespace Spinner.Fody.Weavers
                 if (pt.IsByReference)
                     pt = pt.GetElementType();
 
-                baseParameterTypes[i] = pt;
+                baseParameterTypes[i] = mwc.SafeImport(pt);
             }
 
             TypeDefinition typeDef = mwc.Spinner.ArgumentsT[effectiveParameterCount];
@@ -424,7 +424,7 @@ namespace Spinner.Fody.Weavers
             string name,
             TypeDefinition aspectType,
             FieldReference aspectField,
-            VariableDefinition iaVariable)
+            VariableDefinition iaVariableOpt)
         {
             MethodDefinition adviceDef = aspectType.Methods.Single(m => m.Name == name);
             MethodReference advice = mwc.SafeImport(adviceDef);
@@ -432,7 +432,7 @@ namespace Spinner.Fody.Weavers
             var insc = new[]
             {
                 Ins.Create(OpCodes.Ldsfld, aspectField),
-                Ins.Create(OpCodes.Ldloc, iaVariable),
+                iaVariableOpt != null ? Ins.Create(OpCodes.Ldloc, iaVariableOpt) : Ins.Create(OpCodes.Ldnull),
                 Ins.Create(OpCodes.Callvirt, advice)
             };
 
@@ -640,6 +640,39 @@ namespace Spinner.Fody.Weavers
             }
 
             return Features.None;
+        }
+
+        /// <summary>
+        /// Create a nested binding class with an empty default constructor and a static instance field.
+        /// </summary>
+        protected static void CreateBindingClass(
+            ModuleWeavingContext mwc,
+            TypeDefinition declaringType,
+            TypeReference baseType,
+            string name,
+            out TypeDefinition bindingTypeDef)
+        {
+            var tattrs = TypeAttributes.NestedPrivate |
+                         TypeAttributes.Class |
+                         TypeAttributes.Sealed;
+
+            bindingTypeDef = new TypeDefinition(null, name, tattrs, baseType)
+            {
+                DeclaringType = declaringType
+            };
+
+            AddCompilerGeneratedAttribute(mwc, bindingTypeDef);
+
+            declaringType.NestedTypes.Add(bindingTypeDef);
+
+            MethodDefinition constructorDef = MakeDefaultConstructor(mwc, bindingTypeDef);
+
+            bindingTypeDef.Methods.Add(constructorDef);
+
+            var instanceAttrs = FieldAttributes.Public | FieldAttributes.Static;
+            var instanceField = new FieldDefinition(BindingInstanceFieldName, instanceAttrs, bindingTypeDef);
+
+            bindingTypeDef.Fields.Add(instanceField);
         }
     }
 

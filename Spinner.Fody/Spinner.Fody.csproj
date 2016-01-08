@@ -50,6 +50,7 @@
     <Compile Include="ReferenceExtensions.cs" />
     <Compile Include="Utilities\LabelProcessor.cs" />
     <Compile Include="Weavers\AspectWeaver.cs" />
+    <Compile Include="Weavers\EventInterceptionAspectWeaver.cs" />
     <Compile Include="Weavers\MethodBoundaryAspectWeaver.cs" />
     <Compile Include="Weavers\MethodInterceptionAspectWeaver.cs" />
     <Compile Include="Weavers\PropertyInterceptionAspectWeaver.cs" />

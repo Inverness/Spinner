@@ -118,29 +118,7 @@ namespace Spinner.Fody.Weavers
             
             TypeReference baseType = mwc.SafeImport(mwc.Spinner.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
 
-            var tattrs = TypeAttributes.NestedPrivate |
-                         TypeAttributes.Class |
-                         TypeAttributes.Sealed;
-
-            bindingTypeDef = new TypeDefinition(null, bindingClassName, tattrs, baseType)
-            {
-                DeclaringType = property.DeclaringType
-            };
-
-            AddCompilerGeneratedAttribute(mwc, bindingTypeDef);
-
-            property.DeclaringType.NestedTypes.Add(bindingTypeDef);
-
-            MethodDefinition constructorDef = MakeDefaultConstructor(mwc, bindingTypeDef);
-
-            bindingTypeDef.Methods.Add(constructorDef);
-
-            // Add the static instance field
-
-            var instanceAttrs = FieldAttributes.Public | FieldAttributes.Static;
-            var instanceField = new FieldDefinition(BindingInstanceFieldName, instanceAttrs, bindingTypeDef);
-
-            bindingTypeDef.Fields.Add(instanceField);
+            CreateBindingClass(mwc, property.DeclaringType, baseType, bindingClassName, out bindingTypeDef);
 
             // Override the GetValue method
             {
@@ -166,8 +144,10 @@ namespace Spinner.Fody.Weavers
                 {
                     GenericInstanceType argumentContainerType;
                     FieldReference[] argumentContainerFields;
-                    GetArgumentContainerInfo(mwc, property.GetMethod, out argumentContainerType,
-                        out argumentContainerFields);
+                    GetArgumentContainerInfo(mwc,
+                                             property.GetMethod,
+                                             out argumentContainerType,
+                                             out argumentContainerFields);
 
                     // Case the arguments container from its base type to the generic instance type
                     VariableDefinition argsContainer = null;
@@ -251,7 +231,10 @@ namespace Spinner.Fody.Weavers
 
                     GenericInstanceType argumentContainerType;
                     FieldReference[] argumentContainerFields;
-                    GetArgumentContainerInfo(mwc, property.SetMethod, out argumentContainerType, out argumentContainerFields);
+                    GetArgumentContainerInfo(mwc,
+                                             property.SetMethod,
+                                             out argumentContainerType,
+                                             out argumentContainerFields);
 
                     // Case the arguments container from its base type to the generic instance type
                     VariableDefinition argsContainer = null;

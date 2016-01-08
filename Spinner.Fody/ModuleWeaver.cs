@@ -99,27 +99,27 @@ namespace Spinner.Fody
                     {
                         foreach (CustomAttribute a in method.CustomAttributes)
                         {
-                            TypeDefinition attributeType = a.AttributeType.Resolve();
+                            TypeDefinition atype = a.AttributeType.Resolve();
 
-                            if (IsAspectAttribute(attributeType, _mwc.Spinner.IMethodBoundaryAspect))
+                            if (IsAspectAttribute(atype, _mwc.Spinner.IMethodBoundaryAspect))
                             {
                                 Debug.Assert(method.HasBody);
 
                                 if (aspects == null)
                                     aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 0));
+                                aspects.Add(Tuple.Create((IMemberDefinition) method, atype, 0));
 
-                                LogDebug($"Found aspect {attributeType.Name} for {method}");
+                                LogDebug($"Found aspect {atype.Name} for {method}");
                             }
-                            else if (IsAspectAttribute(attributeType, _mwc.Spinner.IMethodInterceptionAspect))
+                            else if (IsAspectAttribute(atype, _mwc.Spinner.IMethodInterceptionAspect))
                             {
                                 Debug.Assert(method.HasBody);
 
                                 if (aspects == null)
                                     aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) method, attributeType, 1));
+                                aspects.Add(Tuple.Create((IMemberDefinition) method, atype, 1));
 
-                                LogDebug($"Found aspect {attributeType.Name} for {method}");
+                                LogDebug($"Found aspect {atype.Name} for {method}");
                             }
                         }
                     }
@@ -134,17 +134,40 @@ namespace Spinner.Fody
                     {
                         foreach (CustomAttribute a in property.CustomAttributes)
                         {
-                            TypeDefinition attributeType = a.AttributeType.Resolve();
+                            TypeDefinition atype = a.AttributeType.Resolve();
 
-                            if (IsAspectAttribute(attributeType, _mwc.Spinner.IPropertyInterceptionAspect))
+                            if (IsAspectAttribute(atype, _mwc.Spinner.IPropertyInterceptionAspect))
                             {
                                 Debug.Assert(property.GetMethod != null || property.SetMethod != null);
 
                                 if (aspects == null)
                                     aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) property, attributeType, 2));
+                                aspects.Add(Tuple.Create((IMemberDefinition) property, atype, 2));
 
-                                LogDebug($"Found aspect {attributeType.Name} for {property}");
+                                LogDebug($"Found aspect {atype.Name} for {property}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (type.HasEvents)
+            {
+                foreach (EventDefinition xevent in type.Events)
+                {
+                    if (xevent.HasCustomAttributes)
+                    {
+                        foreach (CustomAttribute a in xevent.CustomAttributes)
+                        {
+                            TypeDefinition atype = a.AttributeType.Resolve();
+
+                            if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
+                            {
+                                if (aspects == null)
+                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                                aspects.Add(Tuple.Create((IMemberDefinition) xevent, atype, 3));
+
+                                LogDebug($"Found aspect {atype.Name} for {xevent}");
                             }
                         }
                     }
@@ -181,6 +204,12 @@ namespace Spinner.Fody
                                                                    (PropertyDefinition) a.Item1,
                                                                    a.Item2,
                                                                    aspectIndex);
+                            break;
+                        case 3:
+                            EventInterceptionAspectWeaver.Weave(_mwc,
+                                                                (EventDefinition) a.Item1,
+                                                                a.Item2,
+                                                                aspectIndex);
                             break;
 
                     }

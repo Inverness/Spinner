@@ -67,6 +67,27 @@ namespace Spinner.TestTarget
         }
     }
 
+    public class TestEventInterceptor : EventInterceptionAspect
+    {
+        public override void OnAddHandler(EventInterceptionArgs args)
+        {
+            Console.WriteLine("Add handler!");
+            args.ProceedAddHandler();
+        }
+
+        public override void OnRemoveHandler(EventInterceptionArgs args)
+        {
+            Console.WriteLine("Remove handler!");
+            args.ProceedRemoveHandler();
+        }
+
+        public override void OnInvokeHandler(EventInterceptionArgs args)
+        {
+            Console.WriteLine("Invoke handler!");
+            args.ProceedInvokeHandler();
+        }
+    }
+
     public class TestClass
     {
         private int _x;
@@ -80,10 +101,15 @@ namespace Spinner.TestTarget
             Console.WriteLine("Result: " + b);
 
             int r = tc.TestMethod2(44, out b, "forty");
+
+            tc.TestEvent?.Invoke(tc, EventArgs.Empty);
+            tc._testEvent2?.Invoke(tc, EventArgs.Empty);
         }
 
+        [TestEventInterceptor]
         public event EventHandler TestEvent;
 
+        [TestEventInterceptor]
         public event EventHandler TestEvent2
         {
             add { _testEvent2 += value; }

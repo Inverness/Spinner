@@ -168,29 +168,7 @@ namespace Spinner.Fody.Weavers
                 baseType = mwc.SafeImport(mwc.Spinner.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
             }
 
-            var tattrs = TypeAttributes.NestedPrivate |
-                         TypeAttributes.Class |
-                         TypeAttributes.Sealed;
-
-            bindingTypeDef = new TypeDefinition(null, bindingClassName, tattrs, baseType)
-            {
-                DeclaringType = method.DeclaringType
-            };
-
-            AddCompilerGeneratedAttribute(mwc, bindingTypeDef);
-
-            method.DeclaringType.NestedTypes.Add(bindingTypeDef);
-
-            MethodDefinition constructorDef = MakeDefaultConstructor(mwc, bindingTypeDef);
-
-            bindingTypeDef.Methods.Add(constructorDef);
-
-            // Add the static instance field
-
-            var instanceAttrs = FieldAttributes.Public | FieldAttributes.Static;
-            var instanceField = new FieldDefinition(BindingInstanceFieldName, instanceAttrs, bindingTypeDef);
-
-            bindingTypeDef.Fields.Add(instanceField);
+            CreateBindingClass(mwc, method.DeclaringType, baseType, bindingClassName, out bindingTypeDef);
 
             // Override the invoke method
 

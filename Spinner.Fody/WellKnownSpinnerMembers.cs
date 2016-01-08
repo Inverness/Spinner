@@ -16,7 +16,9 @@ namespace Spinner.Fody
         
         // ReSharper disable InconsistentNaming
         internal readonly ModuleDefinition Module;
+
         internal readonly TypeDefinition IAspect;
+
         internal readonly TypeDefinition IMethodBoundaryAspect;
         internal readonly MethodDefinition IMethodBoundaryAspect_OnEntry;
         internal readonly MethodDefinition IMethodBoundaryAspect_OnExit;
@@ -25,49 +27,88 @@ namespace Spinner.Fody
         internal readonly MethodDefinition IMethodBoundaryAspect_OnYield;
         internal readonly MethodDefinition IMethodBoundaryAspect_OnResume;
         internal readonly MethodDefinition IMethodBoundaryAspect_FilterException;
+
         internal readonly TypeDefinition IMethodInterceptionAspect;
         internal readonly MethodDefinition IMethodInterceptionAspect_OnInvoke;
+
         internal readonly TypeDefinition IPropertyInterceptionAspect;
         internal readonly MethodDefinition IPropertyInterceptionAspect_OnGetValue;
         internal readonly MethodDefinition IPropertyInterceptionAspect_OnSetValue;
+
+        internal readonly TypeDefinition IEventInterceptionAspect;
+        internal readonly MethodDefinition IEventInterceptionAspect_OnAddHandler;
+        internal readonly MethodDefinition IEventInterceptionAspect_OnRemoveHandler;
+        internal readonly MethodDefinition IEventInterceptionAspect_OnInvokeHandler;
+
         internal readonly TypeDefinition MethodBoundaryAspect;
+
         internal readonly TypeDefinition MethodInterceptionAspect;
+
         internal readonly TypeDefinition PropertyInterceptionAspect;
+
+        internal readonly TypeDefinition EventInterceptionAspect;
+
         internal readonly TypeDefinition AdviceArgs;
         internal readonly PropertyDefinition AdviceArgs_Tag;
         internal readonly PropertyDefinition AdviceArgs_Instance;
+
         internal readonly TypeDefinition MethodArgs;
         internal readonly PropertyDefinition MethodArgs_Method;
         internal readonly PropertyDefinition MethodArgs_Arguments;
+
         internal readonly TypeDefinition MethodExecutionArgs;
         internal readonly MethodDefinition MethodExecutionArgs_ctor;
         internal readonly PropertyDefinition MethodExecutionArgs_Exception;
         internal readonly PropertyDefinition MethodExecutionArgs_FlowBehavior;
         internal readonly PropertyDefinition MethodExecutionArgs_ReturnValue;
         internal readonly PropertyDefinition MethodExecutionArgs_YieldValue;
+
         internal readonly TypeDefinition MethodInterceptionArgs;
+
         internal readonly TypeDefinition BoundMethodInterceptionArgs;
         internal readonly MethodDefinition BoundMethodInterceptionArgs_ctor;
+
         internal readonly TypeDefinition BoundMethodInterceptionArgsT1;
         internal readonly MethodDefinition BoundMethodInterceptionArgsT1_ctor;
         internal readonly FieldDefinition BoundMethodInterceptionArgsT1_TypedReturnValue;
+
         internal readonly TypeDefinition MethodBinding;
+
         internal readonly TypeDefinition MethodBindingT1;
+
         internal readonly TypeDefinition PropertyBindingT1;
+
+        internal readonly TypeDefinition EventBinding;
+
         internal readonly TypeDefinition PropertyInterceptionArgs;
         internal readonly PropertyDefinition PropertyInterceptionArgs_Property;
         internal readonly PropertyDefinition PropertyInterceptionArgs_Index;
+
         internal readonly TypeDefinition BoundPropertyInterceptionArgsT1;
         internal readonly MethodDefinition BoundPropertyInterceptionArgsT1_ctor;
         internal readonly FieldDefinition BoundPropertyInterceptionArgsT1_TypedValue;
+
+        internal readonly TypeDefinition EventInterceptionArgs;
+        internal readonly PropertyDefinition EventInterceptionArgs_Arguments;
+        internal readonly PropertyDefinition EventInterceptionArgs_Handler;
+        internal readonly PropertyDefinition EventInterceptionArgs_Event;
+        internal readonly PropertyDefinition EventInterceptionArgs_ReturnValue;
+
+        internal readonly TypeDefinition BoundEventInterceptionArgs;
+        internal readonly MethodDefinition BoundEventInterceptionArgs_ctor;
+
         internal readonly TypeDefinition Features;
+
         internal readonly TypeDefinition FeaturesAttribute;
+
         internal readonly TypeDefinition AnalyzedFeaturesAttribute;
         internal readonly MethodDefinition AnalyzedFeaturesAttribute_ctor;
+
         internal readonly TypeDefinition Arguments;
         internal readonly MethodDefinition Arguments_set_Item;
         internal readonly MethodDefinition Arguments_SetValue;
         internal readonly MethodDefinition Arguments_SetValueT;
+
         internal readonly TypeDefinition[] ArgumentsT;
         internal readonly MethodDefinition[] ArgumentsT_ctor;
         internal readonly FieldDefinition[][] ArgumentsT_Item;
@@ -97,15 +138,22 @@ namespace Spinner.Fody
             IPropertyInterceptionAspect_OnGetValue = IPropertyInterceptionAspect.Methods.First(m => m.Name == "OnGetValue");
             IPropertyInterceptionAspect_OnSetValue = IPropertyInterceptionAspect.Methods.First(m => m.Name == "OnSetValue");
 
+            IEventInterceptionAspect = module.GetType(Ns, "IEventInterceptionAspect");
+            IEventInterceptionAspect_OnAddHandler = IEventInterceptionAspect.Methods.First(m => m.Name == "OnAddHandler");
+            IEventInterceptionAspect_OnRemoveHandler = IEventInterceptionAspect.Methods.First(m => m.Name == "OnRemoveHandler");
+            IEventInterceptionAspect_OnInvokeHandler = IEventInterceptionAspect.Methods.First(m => m.Name == "OnInvokeHandler");
+
             MethodBoundaryAspect = module.GetType(Ns, "MethodBoundaryAspect");
             MethodInterceptionAspect = module.GetType(Ns, "MethodInterceptionAspect");
             PropertyInterceptionAspect = module.GetType(Ns, "PropertyInterceptionAspect");
+            EventInterceptionAspect = module.GetType(Ns, "EventInterceptionAspect");
 
             _emptyAspectBaseTypes = new HashSet<TypeDefinition>
             {
                 MethodBoundaryAspect,
                 MethodInterceptionAspect,
-                PropertyInterceptionAspect
+                PropertyInterceptionAspect,
+                EventInterceptionAspect
             };
 
             AdviceArgs = module.GetType(Ns, "AdviceArgs");
@@ -126,6 +174,7 @@ namespace Spinner.Fody
             MethodBinding = module.GetType(IntNs, "MethodBinding");
             MethodBindingT1 = module.GetType(IntNs, "MethodBinding`1");
             PropertyBindingT1 = module.GetType(IntNs, "PropertyBinding`1");
+            EventBinding = module.GetType(IntNs, "EventBinding");
 
             Features = module.GetType(Ns, "Features");
             FeaturesAttribute = module.GetType(Ns, "FeaturesAttribute");
@@ -148,6 +197,15 @@ namespace Spinner.Fody
             BoundPropertyInterceptionArgsT1 = module.GetType(IntNs, "BoundPropertyInterceptionArgs`1");
             BoundPropertyInterceptionArgsT1_ctor = BoundPropertyInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundPropertyInterceptionArgsT1_TypedValue = BoundPropertyInterceptionArgsT1.Fields.First(f => f.Name == "TypedValue");
+
+            EventInterceptionArgs = module.GetType(Ns, "EventInterceptionArgs");
+            EventInterceptionArgs_Arguments = EventInterceptionArgs.Properties.First(p => p.Name == "Arguments");
+            EventInterceptionArgs_Handler = EventInterceptionArgs.Properties.First(p => p.Name == "Handler");
+            EventInterceptionArgs_ReturnValue = EventInterceptionArgs.Properties.First(p => p.Name == "ReturnValue");
+            EventInterceptionArgs_Event = EventInterceptionArgs.Properties.First(p => p.Name == "Event");
+
+            BoundEventInterceptionArgs = module.GetType(IntNs, "BoundEventInterceptionArgs");
+            BoundEventInterceptionArgs_ctor = BoundEventInterceptionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
             Arguments = module.GetType(Ns, "Arguments");
             Arguments_set_Item = Arguments.Methods.First(m => m.Name == "set_Item");
