@@ -7,14 +7,17 @@ namespace Spinner
     {
         public virtual void OnAddHandler(EventInterceptionArgs args)
         {
+            args.ProceedAddHandler();
         }
 
         public virtual void OnRemoveHandler(EventInterceptionArgs args)
         {
+            args.ProceedRemoveHandler();
         }
 
         public virtual void OnInvokeHandler(EventInterceptionArgs args)
         {
+            args.ProceedInvokeHandler();
         }
     }
 }

@@ -10,7 +10,7 @@ namespace Spinner
     {
         public virtual void OnInvoke(MethodInterceptionArgs args)
         {
-
+            args.Proceed();
         }
     }
 }

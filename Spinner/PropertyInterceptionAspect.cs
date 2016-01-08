@@ -10,10 +10,12 @@ namespace Spinner
     {
         public virtual void OnGetValue(PropertyInterceptionArgs args)
         {
+            args.ProceedGetValue();
         }
 
         public virtual void OnSetValue(PropertyInterceptionArgs args)
         {
+            args.ProceedSetValue();
         }
     }
 }
