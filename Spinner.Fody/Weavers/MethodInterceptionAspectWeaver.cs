@@ -3,6 +3,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -21,18 +22,13 @@ namespace Spinner.Fody.Weavers
             TypeDefinition aspectType,
             int aspectIndex)
         {
-            string originalName = ExtractOriginalName(method.Name);
-
-            string cacheFieldName = $"<{originalName}>z__CachedAspect" + aspectIndex;
-            string bindingClassName = $"<{originalName}>z__MethodBinding" + aspectIndex;
-            
-            MethodDefinition original = DuplicateOriginalMethod(method, aspectIndex);
+            MethodDefinition original = DuplicateOriginalMethod(mwc, method, aspectIndex);
             
             TypeDefinition bindingType;
-            CreateMethodBindingClass(mwc, method, bindingClassName, original, out bindingType);
+            CreateMethodBindingClass(mwc, method, aspectIndex, original, out bindingType);
 
             FieldReference aspectField;
-            CreateAspectCacheField(mwc, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
+            CreateAspectCacheField(mwc, method, aspectType, aspectIndex, out aspectField);
 
             // Clear the target method body as it needs entirely new code
 
@@ -151,7 +147,7 @@ namespace Spinner.Fody.Weavers
         private static void CreateMethodBindingClass(
             ModuleWeavingContext mwc,
             MethodDefinition method,
-            string bindingClassName,
+            int aspectIndex,
             MethodReference original,
             out TypeDefinition bindingTypeDef)
         {
@@ -168,7 +164,9 @@ namespace Spinner.Fody.Weavers
                 baseType = mwc.SafeImport(mwc.Spinner.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
             }
 
-            CreateBindingClass(mwc, method.DeclaringType, baseType, bindingClassName, out bindingTypeDef);
+            string name = NameGenerator.MakeMethodBindingName(method.Name, aspectIndex);
+
+            CreateBindingClass(mwc, method.DeclaringType, baseType, name, out bindingTypeDef);
 
             // Override the invoke method
 

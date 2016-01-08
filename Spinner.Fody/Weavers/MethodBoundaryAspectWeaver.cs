@@ -24,12 +24,10 @@ namespace Spinner.Fody.Weavers
             TypeDefinition aspectType,
             int aspectIndex)
         {
-            string cacheFieldName = $"<{method.Name}>z__CachedAspect" + aspectIndex;
-
             Features features = GetFeatures(mwc, aspectType);
             
             FieldReference aspectField;
-            CreateAspectCacheField(mwc, method.DeclaringType, aspectType, cacheFieldName, out aspectField);
+            CreateAspectCacheField(mwc, method, aspectType, aspectIndex, out aspectField);
 
             // State machines are very different and have their own weaving methods.
             MethodDefinition stateMachine;
@@ -556,13 +554,14 @@ namespace Spinner.Fody.Weavers
             meaField = new FieldDefinition("<>z__mea", FieldAttributes.Private, meaType);
             stateMachine.DeclaringType.Fields.Add(meaField);
 
-            FieldReference thisField = stateMachine.DeclaringType.Fields.First(f => f.Name == StateMachineThisFieldName);
+            // Field can be missing on release builds if its not used by the state machine.
+            FieldReference thisField = stateMachine.DeclaringType.Fields.FirstOrDefault(f => f.Name == StateMachineThisFieldName);
 
             var insc = new Collection<Ins>();
 
             insc.Add(Ins.Create(OpCodes.Ldarg_0)); // for stfld
 
-            if (method.IsStatic)
+            if (method.IsStatic || thisField == null)
             {
                 insc.Add(Ins.Create(OpCodes.Ldnull));
             }

@@ -4,6 +4,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -22,23 +23,18 @@ namespace Spinner.Fody.Weavers
             int aspectIndex)
         {
             Debug.Assert(property.GetMethod != null || property.SetMethod != null);
-            
-            string originalName = ExtractOriginalName(property.Name);
-
-            string cacheFieldName = $"<{originalName}>z__CachedAspect" + aspectIndex;
-            string bindingClassName = $"<{originalName}>z__PropertyBinding" + aspectIndex;
 
             MethodDefinition getter = property.GetMethod;
             MethodDefinition setter = property.SetMethod;
 
-            MethodDefinition originalGetter = getter != null ? DuplicateOriginalMethod(getter, aspectIndex) : null;
-            MethodDefinition originalSetter = setter != null ? DuplicateOriginalMethod(setter, aspectIndex) : null;
+            MethodDefinition originalGetter = getter != null ? DuplicateOriginalMethod(mwc, getter, aspectIndex) : null;
+            MethodDefinition originalSetter = setter != null ? DuplicateOriginalMethod(mwc, setter, aspectIndex) : null;
 
             TypeDefinition bindingType;
-            CreatePropertyBindingClass(mwc, property, bindingClassName, originalGetter, originalSetter, out bindingType);
+            CreatePropertyBindingClass(mwc, property, aspectIndex, originalGetter, originalSetter, out bindingType);
 
             FieldReference aspectField;
-            CreateAspectCacheField(mwc, property.DeclaringType, aspectType, cacheFieldName, out aspectField);
+            CreateAspectCacheField(mwc, property, aspectType, aspectIndex, out aspectField);
 
             if (getter != null)
                 WeaveMethod(mwc, property, getter, aspectType, aspectField, bindingType);
@@ -109,16 +105,17 @@ namespace Spinner.Fody.Weavers
         private static void CreatePropertyBindingClass(
             ModuleWeavingContext mwc,
             PropertyDefinition property,
-            string bindingClassName,
+            int aspectIndex,
             MethodReference originalGetter,
             MethodReference originalSetter,
             out TypeDefinition bindingTypeDef)
         {
             ModuleDefinition module = property.Module;
-            
+
+            string name = NameGenerator.MakePropertyBindingName(property.Name, aspectIndex);
             TypeReference baseType = mwc.SafeImport(mwc.Spinner.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
 
-            CreateBindingClass(mwc, property.DeclaringType, baseType, bindingClassName, out bindingTypeDef);
+            CreateBindingClass(mwc, property.DeclaringType, baseType, name, out bindingTypeDef);
 
             // Override the GetValue method
             {

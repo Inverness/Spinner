@@ -3,6 +3,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -19,22 +20,18 @@ namespace Spinner.Fody.Weavers
             int aspectIndex)
         {
             TypeDefinition dtype = xevent.DeclaringType;
-            string originalName = ExtractOriginalName(xevent.Name);
-
-            string cacheFieldName = $"<{originalName}>z__CachedAspect" + aspectIndex;
-            string bindingClassName = $"<{originalName}>z__EventBinding" + aspectIndex;
 
             MethodDefinition adder = xevent.AddMethod;
             MethodDefinition remover = xevent.RemoveMethod;
 
-            MethodDefinition originalAdder = adder != null ? DuplicateOriginalMethod(adder, aspectIndex) : null;
-            MethodDefinition originalRemover = remover != null ? DuplicateOriginalMethod(remover, aspectIndex) : null;
+            MethodDefinition originalAdder = adder != null ? DuplicateOriginalMethod(mwc, adder, aspectIndex) : null;
+            MethodDefinition originalRemover = remover != null ? DuplicateOriginalMethod(mwc, remover, aspectIndex) : null;
 
             FieldReference aspectField;
-            CreateAspectCacheField(mwc, dtype, aspectType, cacheFieldName, out aspectField);
+            CreateAspectCacheField(mwc, xevent, aspectType, aspectIndex, out aspectField);
 
             TypeDefinition bindingClass;
-            CreateEventBindingClass(mwc, xevent, bindingClassName, originalAdder, originalRemover, out bindingClass);
+            CreateEventBindingClass(mwc, xevent, aspectIndex, originalAdder, originalRemover, out bindingClass);
 
             //FieldDefinition backingField = GetEventBackingField(xevent);
             // TODO: Replace backing field invocations in a class with a call to a generated method that will
@@ -84,7 +81,7 @@ namespace Spinner.Fody.Weavers
         private static void CreateEventBindingClass(
             ModuleWeavingContext mwc,
             EventDefinition xevent,
-            string name,
+            int aspectIndex,
             MethodReference originalAdder,
             MethodReference originalRemover,
             out TypeDefinition bindingTypeDef)
@@ -98,6 +95,7 @@ namespace Spinner.Fody.Weavers
             MethodDefinition delegateInvokeMethodDef = delegateTypeDef.Methods.Single(m => m.Name == "Invoke");
             MethodReference delegateInvokeMethod = mwc.SafeImport(delegateInvokeMethodDef);
 
+            string name = NameGenerator.MakeEventBindingName(xevent.Name, aspectIndex);
             TypeReference baseType = mwc.SafeImport(mwc.Spinner.EventBinding);
             CreateBindingClass(mwc, xevent.DeclaringType, baseType, name, out bindingTypeDef);
 

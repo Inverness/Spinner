@@ -4,6 +4,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -27,7 +28,10 @@ namespace Spinner.Fody.Weavers
             return e;
         }
 
-        protected static MethodDefinition DuplicateOriginalMethod(MethodDefinition method, int aspectIndex)
+        protected static MethodDefinition DuplicateOriginalMethod(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            int aspectIndex)
         {
             const MethodAttributes preservedAttributes =
                 MethodAttributes.Static | MethodAttributes.HideBySig | MethodAttributes.PInvokeImpl |
@@ -35,12 +39,14 @@ namespace Spinner.Fody.Weavers
 
             // Duplicate the target method under a new name: <Name>z__OriginalMethod
 
-            string originalName = $"<{ExtractOriginalName(method.Name)}>z__OriginalMethod" + aspectIndex;
+            string originalName = NameGenerator.MakeOriginalMethodName(method.Name, aspectIndex);
 
             MethodAttributes originalAttributes = method.Attributes & preservedAttributes |
                                                   MethodAttributes.Private;
 
             var original = new MethodDefinition(originalName, originalAttributes, method.ReturnType);
+
+            AddCompilerGeneratedAttribute(mwc, original);
 
             original.Parameters.AddRange(method.Parameters);
             original.GenericParameters.AddRange(method.GenericParameters.Select(p => p.Clone(original)));
@@ -498,34 +504,20 @@ namespace Spinner.Fody.Weavers
 
         protected static void CreateAspectCacheField(
             ModuleWeavingContext mwc,
-            TypeDefinition declaringType,
+            IMemberDefinition aspectTarget,
             TypeReference aspectType,
-            string cacheFieldName,
+            int aspectIndex,
             out FieldReference aspectCacheField)
         {
-            var fattrs = FieldAttributes.Private | FieldAttributes.Static;
+            string name = NameGenerator.MakeAspectFieldName(aspectTarget.Name, aspectIndex);
 
-            // Find existing so property aspects do not generate two cache fields
-            var aspectFieldDef = new FieldDefinition(cacheFieldName, fattrs, mwc.SafeImport(aspectType));
+            var fattrs = FieldAttributes.Private | FieldAttributes.Static;
+            
+            var aspectFieldDef = new FieldDefinition(name, fattrs, mwc.SafeImport(aspectType));
             AddCompilerGeneratedAttribute(mwc, aspectFieldDef);
-            declaringType.Fields.Add(aspectFieldDef);
+            aspectTarget.DeclaringType.Fields.Add(aspectFieldDef);
 
             aspectCacheField = aspectFieldDef;
-        }
-
-        protected static string ExtractOriginalName(string name)
-        {
-            const StringComparison comparison = StringComparison.InvariantCulture;
-
-            int endBracketIndex;
-            if (name.StartsWith("<", comparison) && (endBracketIndex = name.IndexOf(">", comparison)) != -1)
-            {
-                return name.Substring(1, endBracketIndex - 1);
-            }
-            else
-            {
-                return name;
-            }
         }
 
         protected static MethodDefinition MakeDefaultConstructor(ModuleWeavingContext mwc, TypeDefinition type)
