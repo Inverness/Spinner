@@ -47,7 +47,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="TestClass.cs" />
+    <Compile Include="Aspects\BasicLoggingMba.cs" />
+    <Compile Include="Aspects\BasicLoggingEia.cs" />
+    <Compile Include="Aspects\BasicLoggingMia.cs" />
+    <Compile Include="Aspects\BasicLogginaPia.cs" />
+    <Compile Include="EventInterceptionTest.cs" />
+    <Compile Include="MethodBoundaryTest.cs" />
+    <Compile Include="MethodInterceptionTest.cs" />
+    <Compile Include="PropertyInterceptionTest.cs" />
+    <Compile Include="TestRun.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -13,7 +13,7 @@ namespace Spinner.Tests
     {
         private const string RelativeProjectpath = @"..\..\..\Spinner.Tests\Spinner.Tests.csproj";
         private const string RelativeAssemblyPath = @"bin\Debug\Spinner.TestTarget.dll";
-        private const string TestClassName = "Spinner.TestTarget.TestClass";
+        private const string TestClassName = "Spinner.TestTarget.TestRun";
         private const string PeVerifyName = "PEVerify.exe";
 
         private static readonly string[] PeVerifyDirectories =
