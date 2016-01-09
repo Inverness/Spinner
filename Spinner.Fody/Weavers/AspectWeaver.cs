@@ -4,7 +4,6 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
-using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -423,16 +422,19 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
+        /// <summary>
+        /// Writes a call to an aspect's advice with the advice args object if available.
+        /// </summary>
         protected static void WriteCallAdvice(
             ModuleWeavingContext mwc,
             MethodDefinition method,
             int offset,
-            string name,
+            MethodReference baseReference,
             TypeDefinition aspectType,
             FieldReference aspectField,
             VariableDefinition iaVariableOpt)
         {
-            MethodDefinition adviceDef = aspectType.Methods.Single(m => m.Name == name);
+            MethodDefinition adviceDef = aspectType.GetMethod(baseReference, true);
             MethodReference advice = mwc.SafeImport(adviceDef);
 
             var insc = new[]

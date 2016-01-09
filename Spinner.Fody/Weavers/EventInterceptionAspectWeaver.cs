@@ -3,7 +3,6 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
-using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -69,8 +68,11 @@ namespace Spinner.Fody.Weavers
 
             VariableDefinition eiaVariable = null;
 
-            string adviceName = method.IsRemoveOn ? "OnRemoveHandler" : "OnAddHandler";
-            WriteCallAdvice(mwc, method, insc.Count, adviceName, aspectType, aspectField, eiaVariable);
+            MethodReference baseReference = method.IsRemoveOn
+                ? mwc.Spinner.IEventInterceptionAspect_OnRemoveHandler
+                : mwc.Spinner.IEventInterceptionAspect_OnAddHandler;
+
+            WriteCallAdvice(mwc, method, insc.Count, baseReference, aspectType, aspectField, eiaVariable);
 
             insc.Add(Ins.Create(OpCodes.Ret));
 

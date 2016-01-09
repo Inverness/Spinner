@@ -1,7 +1,10 @@
 ﻿using System;
 
-namespace Spinner.Fody.Utilities
+namespace Spinner.Fody.Weavers
 {
+    /// <summary>
+    /// Generates names for weaved members.
+    /// </summary>
     internal static class NameGenerator
     {
         // http://stackoverflow.com/questions/2508828/where-to-learn-about-vs-debugger-magic-names

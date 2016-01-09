@@ -3,7 +3,6 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
-using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -14,7 +13,6 @@ namespace Spinner.Fody.Weavers
     internal sealed class MethodInterceptionAspectWeaver : AspectWeaver
     {
         private const string InvokeMethodName = "Invoke";
-        private const string OnInvokeAdviceName = "OnInvoke";
 
         internal static void Weave(
             ModuleWeavingContext mwc,
@@ -54,7 +52,8 @@ namespace Spinner.Fody.Weavers
             VariableDefinition iaVariable;
             WriteMiaInit(mwc, method, insc.Count, argumentsVariable, bindingType, out iaVariable, out valueField);
 
-            WriteCallAdvice(mwc, method, insc.Count, OnInvokeAdviceName, aspectType, aspectField, iaVariable);
+            MethodReference onInvokeBase = mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
+            WriteCallAdvice(mwc, method, insc.Count, onInvokeBase, aspectType, aspectField, iaVariable);
             
             // Copy out and ref arguments from container
             WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);

@@ -4,7 +4,6 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
-using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -13,8 +12,6 @@ namespace Spinner.Fody.Weavers
     {
         private const string GetValueMethodName = "GetValue";
         private const string SetValueMethodName = "SetValue";
-        private const string OnGetValueAdviceName = "OnGetValue";
-        private const string OnSetValueAdviceName = "OnSetValue";
 
         internal static void Weave(
             ModuleWeavingContext mwc,
@@ -82,8 +79,11 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Stfld, valueField));
             }
 
-            string adviceName = method.IsGetter ? OnGetValueAdviceName : OnSetValueAdviceName;
-            WriteCallAdvice(mwc, method, insc.Count, adviceName, aspectType, aspectField, iaVariable);
+            MethodReference adviceBase = method.IsGetter
+                ? mwc.Spinner.IPropertyInterceptionAspect_OnGetValue
+                : mwc.Spinner.IPropertyInterceptionAspect_OnSetValue;
+
+            WriteCallAdvice(mwc, method, insc.Count, adviceBase, aspectType, aspectField, iaVariable);
 
             // Copy out and ref arguments from container
             WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);
