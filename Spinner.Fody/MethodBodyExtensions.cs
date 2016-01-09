@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Collections.Generic;
@@ -75,19 +76,16 @@ namespace Spinner.Fody
             return ins != null ? self.Instructions.IndexOf(ins) : self.Instructions.Count;
         }
 
+        /// <summary>
+        /// Inserts instructions while fixing branch targets for the insertion index.
+        /// </summary>
         internal static int InsertInstructions(this MethodBody self, int index, params Instruction[] instructions)
         {
             return InsertInstructions(self, index, (IEnumerable<Instruction>) instructions);
         }
 
-        internal static int InsertInstructions(this MethodBody self, Instruction before, IEnumerable<Instruction> instructions)
-        {
-            int index = before != null ? self.Instructions.IndexOf(before) : self.Instructions.Count;
-            return InsertInstructions(self, index, instructions);
-        }
-
         /// <summary>
-        /// Inserts instructions while fixing branch targets for the insertion index
+        /// Inserts instructions while fixing branch targets for the insertion index.
         /// </summary>
         internal static int InsertInstructions(this MethodBody self, int index,  IEnumerable<Instruction> instructions)
         {
@@ -116,6 +114,9 @@ namespace Spinner.Fody
             self.ReplaceBranchTargets(oldIns, ins, index, 1);
         }
 
+        /// <summary>
+        /// Helper to add a variable definition to the body and set InitLocals to true.
+        /// </summary>
         internal static VariableDefinition AddVariableDefinition(this MethodBody self, TypeReference type)
         {
             var def = new VariableDefinition(type);
@@ -124,6 +125,9 @@ namespace Spinner.Fody
             return def;
         }
 
+        /// <summary>
+        /// Helper to add a variable definition to the body and set InitLocals to true.
+        /// </summary>
         internal static VariableDefinition AddVariableDefinition(this MethodBody self, string name, TypeReference type)
         {
             var def = new VariableDefinition(name, type);
@@ -135,16 +139,15 @@ namespace Spinner.Fody
         /// <summary>
         /// Removes all Nop's from the body's instructions and fixes up instruction operands and exception handlers.
         /// </summary>
-        /// <param name="self"></param>
-        internal static void RemoveNops(this MethodBody self)
+        internal static void RemoveNops(this MethodBody self, ICollection<Instruction> excluded = null)
         {
             Collection<Instruction> instructions = self.Instructions;
 
             if (instructions.Count == 0)
                 return;
 
-            HashSet<Instruction> breaks = new HashSet<Instruction>();
-            Dictionary<Instruction, Instruction> newInstructions = new Dictionary<Instruction, Instruction>();
+            var breaks = new HashSet<Instruction>();
+            var newInstructions = new Dictionary<Instruction, Instruction>();
 
             // Find break that reference a label, and instructions that follow the no-ops
             for (int i = 0; i < instructions.Count; i++)
@@ -160,6 +163,9 @@ namespace Spinner.Fody
                 }
                 else if (ins.OpCode == OpCodes.Nop)
                 {
+                    if (excluded != null && excluded.Contains(ins))
+                        continue;
+
                     // Need to skip any following Nop's
                     Instruction next = null;
 

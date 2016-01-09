@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -32,7 +33,8 @@ namespace Spinner.Fody.Weavers
             // State machines are very different and have their own weaving methods.
             MethodDefinition stateMachine;
             StateMachineKind stateMachineKind = GetStateMachineInfo(mwc, method, out stateMachine);
-            
+
+            HashSet<Ins> existingNops;
             TypeDefinition effectiveReturnType;
             switch (stateMachineKind)
             {
@@ -42,6 +44,8 @@ namespace Spinner.Fody.Weavers
                         : method.ReturnType.Resolve();
 
                     method.Body.SimplifyMacros();
+                    // Preserve existing Nops in a debug build. These are used for optimal breakpoint placement.
+                    existingNops = new HashSet<Ins>(method.Body.Instructions.Where(i => i.OpCode == OpCodes.Nop));
 
                     WeaveMethod(mwc,
                                 method,
@@ -49,10 +53,8 @@ namespace Spinner.Fody.Weavers
                                 features,
                                 aspectField,
                                 effectiveReturnType);
-
-                    // Nops are used heavily for labeling and generating code.
-                    // TODO: Check if removing nop's has implications for debug build EnC.
-                    method.Body.RemoveNops();
+                    
+                    method.Body.RemoveNops(existingNops);
                     method.Body.OptimizeMacros();
                     break;
 
@@ -66,6 +68,7 @@ namespace Spinner.Fody.Weavers
                         : null;
 
                     stateMachine.Body.SimplifyMacros();
+                    existingNops = new HashSet<Ins>(stateMachine.Body.Instructions.Where(i => i.OpCode == OpCodes.Nop));
 
                     WeaveAsyncMethod(mwc,
                                      method,
@@ -75,7 +78,7 @@ namespace Spinner.Fody.Weavers
                                      effectiveReturnType,
                                      stateMachine);
 
-                    stateMachine.Body.RemoveNops();
+                    stateMachine.Body.RemoveNops(existingNops);
                     stateMachine.Body.OptimizeMacros();
                     break;
                 default:
