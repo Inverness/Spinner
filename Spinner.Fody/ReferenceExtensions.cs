@@ -79,6 +79,23 @@ namespace Spinner.Fody
             return true;
         }
 
+        internal static bool IsSimilar(this FieldReference self, FieldReference other)
+        {
+            if (ReferenceEquals(self, other))
+                return true;
+
+            if (self.Name != other.Name)
+                return false;
+
+            if (!self.FieldType.IsSimilar(other.FieldType))
+                return false;
+
+            if (!self.DeclaringType.IsSimilar(other.DeclaringType))
+                return false;
+
+            return true;
+        }
+
         /// <summary>
         /// Shortcut for MetadataResolver.GetMethod() to get a matching method reference.
         /// </summary>

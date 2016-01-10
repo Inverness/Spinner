@@ -20,6 +20,19 @@ namespace Spinner.TestTarget
             mi.NoArgsReturnInt();
 
             mi.WithOutArg(1, out two, "three");
+
+            var ei = new EventInterceptionTest();
+            ei.Normal += OnNormalEvent;
+            ei.Normal += OnNormalEvent2;
+            ei.Invoke();
+        }
+
+        private static void OnNormalEvent2(object sender, EventArgs eventArgs)
+        {
+        }
+
+        private static void OnNormalEvent(object sender, EventArgs eventArgs)
+        {
         }
     }
 }

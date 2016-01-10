@@ -1,11 +1,13 @@
 using System;
+using System.Diagnostics;
 
 namespace Spinner.Internal
 {
+    [DebuggerStepThrough]
     public sealed class BoundEventInterceptionArgs : EventInterceptionArgs
     {
-        private readonly EventBinding _binding; 
-
+        private readonly EventBinding _binding;
+        
         public BoundEventInterceptionArgs(object instance, Arguments arguments, EventBinding binding)
             : base(instance, arguments)
         {

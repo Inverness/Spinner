@@ -98,8 +98,8 @@ namespace Spinner.Fody.Weavers
 
             // Fix labels and optimize
             
-            method.Body.OptimizeMacros();
             method.Body.RemoveNops();
+            method.Body.OptimizeMacros();
         }
 
         private static void CreatePropertyBindingClass(

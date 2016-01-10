@@ -112,6 +112,9 @@ namespace Spinner.Fody
         internal readonly TypeDefinition[] ArgumentsT;
         internal readonly MethodDefinition[] ArgumentsT_ctor;
         internal readonly FieldDefinition[][] ArgumentsT_Item;
+
+        internal readonly MethodDefinition WeaverHelpers_InvokeEvent;
+
         // ReSharper restore InconsistentNaming
 
         private readonly HashSet<TypeDefinition> _emptyAspectBaseTypes; 
@@ -120,28 +123,30 @@ namespace Spinner.Fody
         {
             Module = module;
 
+            TypeDefinition type;
+
             IAspect = module.GetType(Ns, "IAspect");
 
-            IMethodBoundaryAspect = module.GetType(Ns, "IMethodBoundaryAspect");
-            IMethodBoundaryAspect_OnEntry = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnEntry");
-            IMethodBoundaryAspect_OnExit = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnExit");
-            IMethodBoundaryAspect_OnSuccess = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnSuccess");
-            IMethodBoundaryAspect_OnException = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnException");
-            IMethodBoundaryAspect_OnYield = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnYield");
-            IMethodBoundaryAspect_OnResume = IMethodBoundaryAspect.Methods.First(m => m.Name == "OnResume");
-            IMethodBoundaryAspect_FilterException = IMethodBoundaryAspect.Methods.First(m => m.Name == "FilterException");
+            IMethodBoundaryAspect = type = module.GetType(Ns, "IMethodBoundaryAspect");
+            IMethodBoundaryAspect_OnEntry = type.Methods.First(m => m.Name == "OnEntry");
+            IMethodBoundaryAspect_OnExit = type.Methods.First(m => m.Name == "OnExit");
+            IMethodBoundaryAspect_OnSuccess = type.Methods.First(m => m.Name == "OnSuccess");
+            IMethodBoundaryAspect_OnException = type.Methods.First(m => m.Name == "OnException");
+            IMethodBoundaryAspect_OnYield = type.Methods.First(m => m.Name == "OnYield");
+            IMethodBoundaryAspect_OnResume = type.Methods.First(m => m.Name == "OnResume");
+            IMethodBoundaryAspect_FilterException = type.Methods.First(m => m.Name == "FilterException");
 
-            IMethodInterceptionAspect = module.GetType(Ns, "IMethodInterceptionAspect");
-            IMethodInterceptionAspect_OnInvoke = IMethodInterceptionAspect.Methods.First(m => m.Name == "OnInvoke");
+            IMethodInterceptionAspect = type = module.GetType(Ns, "IMethodInterceptionAspect");
+            IMethodInterceptionAspect_OnInvoke = type.Methods.First(m => m.Name == "OnInvoke");
 
-            IPropertyInterceptionAspect = module.GetType(Ns, "IPropertyInterceptionAspect");
-            IPropertyInterceptionAspect_OnGetValue = IPropertyInterceptionAspect.Methods.First(m => m.Name == "OnGetValue");
-            IPropertyInterceptionAspect_OnSetValue = IPropertyInterceptionAspect.Methods.First(m => m.Name == "OnSetValue");
+            IPropertyInterceptionAspect = type = module.GetType(Ns, "IPropertyInterceptionAspect");
+            IPropertyInterceptionAspect_OnGetValue = type.Methods.First(m => m.Name == "OnGetValue");
+            IPropertyInterceptionAspect_OnSetValue = type.Methods.First(m => m.Name == "OnSetValue");
 
-            IEventInterceptionAspect = module.GetType(Ns, "IEventInterceptionAspect");
-            IEventInterceptionAspect_OnAddHandler = IEventInterceptionAspect.Methods.First(m => m.Name == "OnAddHandler");
-            IEventInterceptionAspect_OnRemoveHandler = IEventInterceptionAspect.Methods.First(m => m.Name == "OnRemoveHandler");
-            IEventInterceptionAspect_OnInvokeHandler = IEventInterceptionAspect.Methods.First(m => m.Name == "OnInvokeHandler");
+            IEventInterceptionAspect = type = module.GetType(Ns, "IEventInterceptionAspect");
+            IEventInterceptionAspect_OnAddHandler = type.Methods.First(m => m.Name == "OnAddHandler");
+            IEventInterceptionAspect_OnRemoveHandler = type.Methods.First(m => m.Name == "OnRemoveHandler");
+            IEventInterceptionAspect_OnInvokeHandler = type.Methods.First(m => m.Name == "OnInvokeHandler");
 
             MethodBoundaryAspect = module.GetType(Ns, "MethodBoundaryAspect");
             MethodInterceptionAspect = module.GetType(Ns, "MethodInterceptionAspect");
@@ -156,20 +161,20 @@ namespace Spinner.Fody
                 EventInterceptionAspect
             };
 
-            AdviceArgs = module.GetType(Ns, "AdviceArgs");
-            AdviceArgs_Instance = AdviceArgs.Properties.First(p => p.Name == "Instance");
-            AdviceArgs_Tag = AdviceArgs.Properties.First(p => p.Name == "Tag");
+            AdviceArgs = type = module.GetType(Ns, "AdviceArgs");
+            AdviceArgs_Instance = type.Properties.First(p => p.Name == "Instance");
+            AdviceArgs_Tag = type.Properties.First(p => p.Name == "Tag");
 
-            MethodArgs = module.GetType(Ns, "MethodArgs");
-            MethodArgs_Method = MethodArgs.Properties.First(p => p.Name == "Method");
-            MethodArgs_Arguments = MethodArgs.Properties.First(p => p.Name == "Arguments");
+            MethodArgs = type = module.GetType(Ns, "MethodArgs");
+            MethodArgs_Method = type.Properties.First(p => p.Name == "Method");
+            MethodArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
 
-            MethodExecutionArgs = module.GetType(Ns, "MethodExecutionArgs");
-            MethodExecutionArgs_ctor = MethodExecutionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
-            MethodExecutionArgs_Exception = MethodExecutionArgs.Properties.First(m => m.Name == "Exception");
-            MethodExecutionArgs_FlowBehavior = MethodExecutionArgs.Properties.First(m => m.Name == "FlowBehavior");
-            MethodExecutionArgs_ReturnValue = MethodExecutionArgs.Properties.First(m => m.Name == "ReturnValue");
-            MethodExecutionArgs_YieldValue = MethodExecutionArgs.Properties.First(m => m.Name == "YieldValue");
+            MethodExecutionArgs = type = module.GetType(Ns, "MethodExecutionArgs");
+            MethodExecutionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            MethodExecutionArgs_Exception = type.Properties.First(m => m.Name == "Exception");
+            MethodExecutionArgs_FlowBehavior = type.Properties.First(m => m.Name == "FlowBehavior");
+            MethodExecutionArgs_ReturnValue = type.Properties.First(m => m.Name == "ReturnValue");
+            MethodExecutionArgs_YieldValue = type.Properties.First(m => m.Name == "YieldValue");
 
             MethodBinding = module.GetType(IntNs, "MethodBinding");
             MethodBindingT1 = module.GetType(IntNs, "MethodBinding`1");
@@ -178,39 +183,39 @@ namespace Spinner.Fody
 
             Features = module.GetType(Ns, "Features");
             FeaturesAttribute = module.GetType(Ns, "FeaturesAttribute");
-            AnalyzedFeaturesAttribute = module.GetType(IntNs, "AnalyzedFeaturesAttribute");
-            AnalyzedFeaturesAttribute_ctor = AnalyzedFeaturesAttribute.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            AnalyzedFeaturesAttribute = type = module.GetType(IntNs, "AnalyzedFeaturesAttribute");
+            AnalyzedFeaturesAttribute_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            PropertyInterceptionArgs = module.GetType(Ns, "PropertyInterceptionArgs");
-            PropertyInterceptionArgs_Property = PropertyInterceptionArgs.Properties.First(p => p.Name == "Property");
-            PropertyInterceptionArgs_Index = PropertyInterceptionArgs.Properties.First(p => p.Name == "Index");
+            PropertyInterceptionArgs = type = module.GetType(Ns, "PropertyInterceptionArgs");
+            PropertyInterceptionArgs_Property = type.Properties.First(p => p.Name == "Property");
+            PropertyInterceptionArgs_Index = type.Properties.First(p => p.Name == "Index");
 
             MethodInterceptionArgs = module.GetType(Ns, "MethodInterceptionArgs");
 
-            BoundMethodInterceptionArgs = module.GetType(IntNs, "BoundMethodInterceptionArgs");
-            BoundMethodInterceptionArgs_ctor = BoundMethodInterceptionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundMethodInterceptionArgs = type = module.GetType(IntNs, "BoundMethodInterceptionArgs");
+            BoundMethodInterceptionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            BoundMethodInterceptionArgsT1 = module.GetType(IntNs, "BoundMethodInterceptionArgs`1");
-            BoundMethodInterceptionArgsT1_ctor = BoundMethodInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
-            BoundMethodInterceptionArgsT1_TypedReturnValue = BoundMethodInterceptionArgsT1.Fields.First(f => f.Name == "TypedReturnValue");
+            BoundMethodInterceptionArgsT1 = type = module.GetType(IntNs, "BoundMethodInterceptionArgs`1");
+            BoundMethodInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundMethodInterceptionArgsT1_TypedReturnValue = type.Fields.First(f => f.Name == "TypedReturnValue");
 
-            BoundPropertyInterceptionArgsT1 = module.GetType(IntNs, "BoundPropertyInterceptionArgs`1");
-            BoundPropertyInterceptionArgsT1_ctor = BoundPropertyInterceptionArgsT1.Methods.First(m => m.IsConstructor && !m.IsStatic);
-            BoundPropertyInterceptionArgsT1_TypedValue = BoundPropertyInterceptionArgsT1.Fields.First(f => f.Name == "TypedValue");
+            BoundPropertyInterceptionArgsT1 = type = module.GetType(IntNs, "BoundPropertyInterceptionArgs`1");
+            BoundPropertyInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundPropertyInterceptionArgsT1_TypedValue = type.Fields.First(f => f.Name == "TypedValue");
 
-            EventInterceptionArgs = module.GetType(Ns, "EventInterceptionArgs");
-            EventInterceptionArgs_Arguments = EventInterceptionArgs.Properties.First(p => p.Name == "Arguments");
-            EventInterceptionArgs_Handler = EventInterceptionArgs.Properties.First(p => p.Name == "Handler");
-            EventInterceptionArgs_ReturnValue = EventInterceptionArgs.Properties.First(p => p.Name == "ReturnValue");
-            EventInterceptionArgs_Event = EventInterceptionArgs.Properties.First(p => p.Name == "Event");
+            EventInterceptionArgs = type = module.GetType(Ns, "EventInterceptionArgs");
+            EventInterceptionArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
+            EventInterceptionArgs_Handler = type.Properties.First(p => p.Name == "Handler");
+            EventInterceptionArgs_ReturnValue = type.Properties.First(p => p.Name == "ReturnValue");
+            EventInterceptionArgs_Event = type.Properties.First(p => p.Name == "Event");
 
-            BoundEventInterceptionArgs = module.GetType(IntNs, "BoundEventInterceptionArgs");
-            BoundEventInterceptionArgs_ctor = BoundEventInterceptionArgs.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundEventInterceptionArgs = type = module.GetType(IntNs, "BoundEventInterceptionArgs");
+            BoundEventInterceptionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            Arguments = module.GetType(Ns, "Arguments");
-            Arguments_set_Item = Arguments.Methods.First(m => m.Name == "set_Item");
-            Arguments_SetValue = Arguments.Methods.First(m => m.Name == "SetValue" && !m.HasGenericParameters);
-            Arguments_SetValueT = Arguments.Methods.First(m => m.Name == "SetValue" && m.HasGenericParameters);
+            Arguments = type = module.GetType(Ns, "Arguments");
+            Arguments_set_Item = type.Methods.First(m => m.Name == "set_Item");
+            Arguments_SetValue = type.Methods.First(m => m.Name == "SetValue" && !m.HasGenericParameters);
+            Arguments_SetValueT = type.Methods.First(m => m.Name == "SetValue" && m.HasGenericParameters);
 
             ArgumentsT = new TypeDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
@@ -223,7 +228,7 @@ namespace Spinner.Fody
             ArgumentsT_Item = new FieldDefinition[MaxArguments + 1][];
             for (int i = 1; i <= MaxArguments; i++)
             {
-                TypeDefinition type = ArgumentsT[i];
+                type = ArgumentsT[i];
                 var fields = new FieldDefinition[i];
                 for (int f = 0; f < i; f++)
                 {
@@ -232,6 +237,9 @@ namespace Spinner.Fody
                 }
                 ArgumentsT_Item[i] = fields;
             }
+
+            type = module.GetType(IntNs, "WeaverHelpers");
+            WeaverHelpers_InvokeEvent = type.Methods.First(m => m.Name == "InvokeEvent");
         }
 
         /// <summary>

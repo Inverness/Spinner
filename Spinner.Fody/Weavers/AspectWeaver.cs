@@ -22,7 +22,7 @@ namespace Spinner.Fody.Weavers
         protected static int GetEffectiveParameterCount(MethodDefinition method)
         {
             int e = method.Parameters.Count;
-            if (method.IsSetter)
+            if (method.IsSetter || method.IsAddOn || method.IsRemoveOn)
                 e--;
             return e;
         }

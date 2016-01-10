@@ -60,7 +60,7 @@
     <Compile Include="Internal\BoundMethodInterceptionArgs.cs" />
     <Compile Include="Internal\BoundMethodInterceptionArgsT.cs" />
     <Compile Include="Internal\BoundPropertyInterceptionArgs.cs" />
-    <Compile Include="Internal\CompilerHelper.cs" />
+    <Compile Include="Internal\WeaverHelpers.cs" />
     <Compile Include="Internal\EventBinding.cs" />
     <Compile Include="Internal\MethodBinding.cs" />
     <Compile Include="Internal\MethodBindingT.cs" />

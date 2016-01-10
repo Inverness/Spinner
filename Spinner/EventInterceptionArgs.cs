@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Reflection;
 
 namespace Spinner
 {
     public abstract class EventInterceptionArgs : AdviceArgs
     {
+        [DebuggerStepThrough]
         protected EventInterceptionArgs(object instance, Arguments arguments)
             : base(instance)
         {

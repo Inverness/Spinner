@@ -11,6 +11,9 @@ namespace Spinner.TestTarget
         public event EventHandler Normal;
 
         [BasicLoggingEia]
+        public static event EventHandler NormalStatic;
+
+        [BasicLoggingEia]
         public event EventHandler Custom
         {
             add { _customHandlers += value; }
@@ -21,7 +24,11 @@ namespace Spinner.TestTarget
         public void Invoke()
         {
             Normal?.Invoke(this, EventArgs.Empty);
-            _customHandlers?.Invoke(this, EventArgs.Empty);
+        }
+
+        public static void InvokeStatic()
+        {
+            NormalStatic?.Invoke(null, EventArgs.Empty);
         }
     }
 }

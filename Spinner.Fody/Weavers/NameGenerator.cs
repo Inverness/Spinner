@@ -34,6 +34,16 @@ namespace Spinner.Fody.Weavers
             return $"<{ExtractOriginalName(methodName)}>w__Original{aspectIndex}";
         }
 
+        internal static string MakeEventInvokerName(string memberName, int aspectIndex)
+        {
+            return $"<{ExtractOriginalName(memberName)}>w__EventInvoker{aspectIndex}";
+        }
+
+        internal static string MakeEventInvokerDelegateCacheName(string memberName, int aspectIndex)
+        {
+            return $"<{ExtractOriginalName(memberName)}>w__EventInvokerDelegate{aspectIndex}";
+        }
+
         internal static string ExtractOriginalName(string name)
         {
             const StringComparison comparison = StringComparison.InvariantCulture;

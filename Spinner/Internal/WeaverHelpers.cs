@@ -7,7 +7,7 @@ namespace Spinner.Internal
     /// <summary>
     ///     Internal helpers for compiler code generation.
     /// </summary>
-    public static class CompilerHelper
+    public static class WeaverHelpers
     {
         private static readonly Type[] s_emptyTypes = new Type[0];
 
@@ -58,6 +58,17 @@ namespace Spinner.Internal
             }
 
             throw new NotImplementedException($"GetMethodInfo failed for type {type}, method {methodName}");
+        }
+        
+        public static void InvokeEvent<T>(Delegate handler, T aspect, EventInterceptionArgs args)
+            where T : IEventInterceptionAspect
+        {
+            Delegate[] targets = handler.GetInvocationList();
+            for (int i = 0; i < targets.Length; i++)
+            {
+                args.Handler = targets[i];
+                aspect.OnInvokeHandler(args);
+            }
         }
 
         //private const int MaxMeaPoolSize = 16;
