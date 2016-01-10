@@ -458,16 +458,6 @@ namespace Spinner.Fody.Weavers
                     newinsc.Add(notNullLabel);
 
                     method.Body.InsertInstructions(i, newinsc);
-                    //newinsc.Add(Ins.Create(OpCodes.Ldsfld, invokerField));
-                    //newinsc.Add(Ins.Create(OpCodes.Dup));
-                    //newinsc.Add(Ins.Create(OpCodes.Brtrue, notNullLabel));
-                    //newinsc.Add(Ins.Create(OpCodes.Pop));
-                    //newinsc.Add(Ins.Create(OpCodes.Ldnull));
-                    //newinsc.Add(Ins.Create(OpCodes.Ldftn, invokerMethod));
-                    //newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
-                    //newinsc.Add(Ins.Create(OpCodes.Dup));
-                    //newinsc.Add(Ins.Create(OpCodes.Stsfld, invokerField));
-                    //newinsc.Add(notNullLabel);
                 }
                 else
                 {
@@ -480,25 +470,11 @@ namespace Spinner.Fody.Weavers
                     newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
                     newinsc.Add(Ins.Create(OpCodes.Stfld, invokerField));
                     newinsc.Add(notNullLabel);
-
+                    
                     Debug.Assert(insc[i - 1].OpCode == OpCodes.Ldarg_0 || insc[i - 1].OpCode == OpCodes.Ldarg);
                     method.Body.InsertInstructions(i - 1, newinsc);
-
-                    //newinsc.Add(Ins.Create(OpCodes.Ldfld, invokerField));
-                    //newinsc.Add(Ins.Create(OpCodes.Dup));
-                    //newinsc.Add(Ins.Create(OpCodes.Brtrue, notNullLabel));
-                    //newinsc.Add(Ins.Create(OpCodes.Pop));
-                    //newinsc.Add(Ins.Create(OpCodes.Ldarg_0));
-                    //newinsc.Add(Ins.Create(OpCodes.Dup));
-                    //newinsc.Add(Ins.Create(OpCodes.Dup));
-                    //newinsc.Add(Ins.Create(OpCodes.Ldftn, invokerMethod));
-                    //newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
-                    //newinsc.Add(Ins.Create(OpCodes.Stfld, invokerField));
-                    //newinsc.Add(Ins.Create(OpCodes.Ldfld, invokerField));
-                    //newinsc.Add(notNullLabel);
                 }
-                //method.Body.ReplaceInstruction(i, Ins.Create(OpCodes.Nop));
-                //method.Body.InsertInstructions(i, newinsc);
+
                 method.Body.UpdateOffsets();
 
                 newinsc.Clear();

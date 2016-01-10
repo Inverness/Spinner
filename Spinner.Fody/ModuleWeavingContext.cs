@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Mono.Cecil;
 
 namespace Spinner.Fody
@@ -13,11 +14,13 @@ namespace Spinner.Fody
         internal readonly WellKnownSpinnerMembers Spinner;
         internal readonly WellKnownFrameworkMembers Framework;
 
+        private readonly ModuleWeaver _weaver;
         private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
         private readonly Dictionary<MethodDefinition, Features> _typeFeatures;
 
-        internal ModuleWeavingContext(ModuleDefinition module, ModuleDefinition libraryModule)
+        internal ModuleWeavingContext(ModuleWeaver weaver, ModuleDefinition module, ModuleDefinition libraryModule)
         {
+            _weaver = weaver;
             Module = module;
             Spinner = new WellKnownSpinnerMembers(libraryModule);
             Framework = new WellKnownFrameworkMembers(module);
@@ -99,6 +102,27 @@ namespace Spinner.Fody
         {
             lock (Module)
                 return Module.GetType(fullName);
+        }
+
+        [Conditional("DEBUG")]
+        internal void LogDebug(string text)
+        {
+            _weaver.LogDebug(text);
+        }
+
+        internal void LogInfo(string text)
+        {
+            _weaver.LogInfo(text);
+        }
+
+        internal void LogWarning(string text)
+        {
+            _weaver.LogWarning(text);
+        }
+
+        internal void LogError(string text)
+        {
+            _weaver.LogError(text);
         }
     }
 }

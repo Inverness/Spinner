@@ -47,12 +47,18 @@ namespace Spinner.Fody
                 return;
             }
 
-            _mwc = new ModuleWeavingContext(ModuleDefinition,
+            _mwc = new ModuleWeavingContext(this,
+                                            ModuleDefinition,
                                             ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
+            var stopwatch = new Stopwatch();
             
             // Analyze aspect types in parallel.
+
+            LogInfo("Beginning aspect feature analysis");
+
+            stopwatch.Start();
 
             Task[] analysisTasks = types.Where(AspectFeatureAnalyzer.IsMaybeAspect)
                                         .Select(CreateAnalysisAction)
@@ -60,10 +66,15 @@ namespace Spinner.Fody
                                         .ToArray();
 
             if (analysisTasks.Length != 0)
-            {
                 Task.WhenAll(analysisTasks).Wait();
-                LogInfo($"Finished feature analysis for {analysisTasks.Length} types.");
-            }
+
+            stopwatch.Stop();
+
+            LogInfo($"Finished feature analysis for {analysisTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
+
+            LogInfo("Beginning aspect weaving");
+
+            stopwatch.Restart();
 
             // Execute type weavings in parallel. The ModuleWeavingContext provides thread-safe imports.
             // Weaving does not require any other module-level changes.
@@ -75,14 +86,11 @@ namespace Spinner.Fody
                                      .ToArray();
 
             if (weaveTasks.Length != 0)
-            {
                 Task.WhenAll(weaveTasks).Wait();
-                LogInfo($"Finished aspect weaving for {weaveTasks.Length} types.");
-            }
-            else
-            {
-                LogWarning("No types found with aspects.");
-            }
+
+            stopwatch.Stop();
+
+            LogInfo($"Finished aspect weaving for {weaveTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms.");
         }
 
         private Action CreateWeaveAction(TypeDefinition type)
@@ -185,33 +193,41 @@ namespace Spinner.Fody
                 {
                     int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
 
-                    switch (a.Item3)
+                    try
                     {
-                        case 0:
-                            MethodBoundaryAspectWeaver.Weave(_mwc,
-                                                             (MethodDefinition) a.Item1,
-                                                             a.Item2,
-                                                             aspectIndex);
-                            break;
-                        case 1:
-                            MethodInterceptionAspectWeaver.Weave(_mwc,
+                        switch (a.Item3)
+                        {
+                            case 0:
+                                MethodBoundaryAspectWeaver.Weave(_mwc,
                                                                  (MethodDefinition) a.Item1,
                                                                  a.Item2,
                                                                  aspectIndex);
-                            break;
-                        case 2:
-                            PropertyInterceptionAspectWeaver.Weave(_mwc,
-                                                                   (PropertyDefinition) a.Item1,
-                                                                   a.Item2,
-                                                                   aspectIndex);
-                            break;
-                        case 3:
-                            EventInterceptionAspectWeaver.Weave(_mwc,
-                                                                (EventDefinition) a.Item1,
-                                                                a.Item2,
-                                                                aspectIndex);
-                            break;
+                                break;
+                            case 1:
+                                MethodInterceptionAspectWeaver.Weave(_mwc,
+                                                                     (MethodDefinition) a.Item1,
+                                                                     a.Item2,
+                                                                     aspectIndex);
+                                break;
+                            case 2:
+                                PropertyInterceptionAspectWeaver.Weave(_mwc,
+                                                                       (PropertyDefinition) a.Item1,
+                                                                       a.Item2,
+                                                                       aspectIndex);
+                                break;
+                            case 3:
+                                EventInterceptionAspectWeaver.Weave(_mwc,
+                                                                    (EventDefinition) a.Item1,
+                                                                    a.Item2,
+                                                                    aspectIndex);
+                                break;
 
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Exception while weaving aspect {a.Item2.Name} for member {a.Item1}: {ex.GetType().Name}: {ex.Message}");
+                        LogError(ex.StackTrace);
                     }
                 }
             };
@@ -221,7 +237,18 @@ namespace Spinner.Fody
 
         private Action CreateAnalysisAction(TypeDefinition type)
         {
-            return () => AspectFeatureAnalyzer.Analyze(_mwc, type);
+            return () =>
+            {
+                try
+                {
+                    AspectFeatureAnalyzer.Analyze(_mwc, type);
+                }
+                catch (Exception ex)
+                {
+                    LogError($"Exception while analyzing featores of type {type.Name}: {ex.GetType().Name}: {ex.Message}");
+                    LogError(ex.StackTrace);
+                }
+            };
         }
 
         private static bool IsAspectAttribute(TypeDefinition attributeType, TypeDefinition aspectType)

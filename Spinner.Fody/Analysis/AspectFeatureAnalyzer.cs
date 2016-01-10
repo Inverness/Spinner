@@ -66,6 +66,8 @@ namespace Spinner.Fody.Analysis
                     if (HasAttribute(t, mwc.Spinner.AnalyzedFeaturesAttribute))
                         continue;
 
+                    mwc.LogDebug($"Analyzing features for aspect type {t.Name}");
+
                     foreach (MethodDefinition m in t.Methods)
                     {
                         // Skip what can't be an advice implementation.
