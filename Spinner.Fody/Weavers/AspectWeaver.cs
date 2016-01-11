@@ -108,6 +108,7 @@ namespace Spinner.Fody.Weavers
             MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
+            int aspectIndex,
             out FieldDefinition arguments)
         {
             int effectiveParameterCount = GetEffectiveParameterCount(method);
@@ -125,7 +126,8 @@ namespace Spinner.Fody.Weavers
             MethodDefinition constructorDef = mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
             MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
-            arguments = new FieldDefinition("<>z__args", FieldAttributes.Private, argumentsType);
+            string fieldName = NameGenerator.MakeAdviceArgsFieldName(aspectIndex);
+            arguments = new FieldDefinition(fieldName, FieldAttributes.Private, argumentsType);
 
             stateMachine.DeclaringType.Fields.Add(arguments);
 

@@ -73,6 +73,7 @@ namespace Spinner.Fody.Weavers
                     WeaveAsyncMethod(mwc,
                                      method,
                                      aspectType,
+                                     aspectIndex,
                                      features,
                                      aspectField,
                                      effectiveReturnType,
@@ -203,6 +204,7 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             TypeDefinition aspectType,
+            int aspectIndex,
             Features features,
             FieldReference aspectField,
             TypeDefinition effectiveReturnType,
@@ -250,13 +252,13 @@ namespace Spinner.Fody.Weavers
             FieldDefinition arguments = null;
             if (features.Has(Features.GetArguments))
             {
-                WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - initEndOffset, out arguments);
+                WriteSmArgumentContainerInit(mwc, method, stateMachine, insc.Count - initEndOffset, aspectIndex, out arguments);
                 WriteSmCopyArgumentsToContainer(mwc, method, stateMachine, insc.Count - initEndOffset, arguments, true);
             }
 
             // The meaVar would be used temporarily after loading from the field.
             FieldDefinition meaField;
-            WriteSmMeaInit(mwc, method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
+            WriteSmMeaInit(mwc, method, stateMachine, aspectIndex, arguments, insc.Count - initEndOffset, out meaField);
 
             if (features.Has(Features.OnEntry))
             {
@@ -547,14 +549,16 @@ namespace Spinner.Fody.Weavers
             ModuleWeavingContext mwc,
             MethodDefinition method,
             MethodDefinition stateMachine,
+            int aspectIndex,
             FieldReference argumentsFieldOpt,
             int offset,
             out FieldDefinition meaField)
         {
             TypeReference meaType = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs);
             MethodReference meaCtor = mwc.SafeImport(mwc.Spinner.MethodExecutionArgs_ctor);
-            
-            meaField = new FieldDefinition("<>z__mea", FieldAttributes.Private, meaType);
+
+            string fieldName = NameGenerator.MakeAdviceArgsFieldName(aspectIndex);
+            meaField = new FieldDefinition(fieldName, FieldAttributes.Private, meaType);
             stateMachine.DeclaringType.Fields.Add(meaField);
 
             // Field can be missing on release builds if its not used by the state machine.

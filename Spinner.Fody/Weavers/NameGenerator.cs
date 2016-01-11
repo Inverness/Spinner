@@ -44,6 +44,16 @@ namespace Spinner.Fody.Weavers
             return $"<{ExtractOriginalName(memberName)}>w__EventInvokerDelegate{aspectIndex}";
         }
 
+        internal static string MakeArgumentContainerFieldName(int aspectIndex)
+        {
+            return $"<>w__args{aspectIndex}";
+        }
+
+        internal static string MakeAdviceArgsFieldName(int aspectIndex)
+        {
+            return $"<>w__adviceArgs{aspectIndex}";
+        }
+
         internal static string ExtractOriginalName(string name)
         {
             const StringComparison comparison = StringComparison.InvariantCulture;
