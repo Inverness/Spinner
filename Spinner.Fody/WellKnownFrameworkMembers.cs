@@ -23,6 +23,7 @@ namespace Spinner.Fody
         internal readonly MethodDefinition MethodBase_GetMethodFromHandle;
         internal readonly TypeDefinition MethodInfo;
         internal readonly TypeDefinition Delegate;
+        internal readonly MethodDefinition Type_GetTypeFromHandle;
         // ReSharper restore InconsistentNaming
 
         internal WellKnownFrameworkMembers(ModuleDefinition currentModule)
@@ -44,6 +45,8 @@ namespace Spinner.Fody
             MethodBase_GetMethodFromHandle = MethodBase.Methods.First(m => m.Name == "GetMethodFromHandle" && m.Parameters.Count == 1);
             MethodInfo = module.GetType(NsReflection, "MethodInfo");
             Delegate = module.GetType(NsSystem, "Delegate");
+            var type = module.GetType(NsSystem, "Type");
+            Type_GetTypeFromHandle = type.Methods.First(m => m.Name == "GetTypeFromHandle");
         }
     }
 }

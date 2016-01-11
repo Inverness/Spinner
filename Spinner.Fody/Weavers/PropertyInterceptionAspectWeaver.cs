@@ -21,6 +21,8 @@ namespace Spinner.Fody.Weavers
         {
             Debug.Assert(property.GetMethod != null || property.SetMethod != null);
 
+            Features features = GetFeatures(mwc, aspectType);
+
             MethodDefinition getter = property.GetMethod;
             MethodDefinition setter = property.SetMethod;
 
@@ -34,9 +36,9 @@ namespace Spinner.Fody.Weavers
             CreateAspectCacheField(mwc, property, aspectType, aspectIndex, out aspectField);
 
             if (getter != null)
-                WeaveMethod(mwc, property, getter, aspectType, aspectField, bindingType);
+                WeaveMethod(mwc, property, getter, aspectType, features, aspectField, bindingType);
             if (setter != null)
-                WeaveMethod(mwc, property, setter, aspectType, aspectField, bindingType);
+                WeaveMethod(mwc, property, setter, aspectType, features, aspectField, bindingType);
         }
 
         private static void WeaveMethod(
@@ -44,6 +46,7 @@ namespace Spinner.Fody.Weavers
             PropertyDefinition property,
             MethodDefinition method,
             TypeDefinition aspectType,
+            Features aspectFeatures,
             FieldReference aspectField,
             TypeDefinition bindingType)
         {
@@ -70,6 +73,9 @@ namespace Spinner.Fody.Weavers
             VariableDefinition iaVariable;
             WritePiaInit(mwc, method, insc.Count, property, argumentsVariable, bindingType, out iaVariable, out valueField);
             
+            if (aspectFeatures.Has(Features.MemberInfo))
+                WriteSetPropertyInfo(mwc, method, insc.Count, property, iaVariable);
+            
             if (method.IsSetter)
             {
                 Debug.Assert(method.Parameters.Count >= 1);
@@ -78,7 +84,7 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters.Last()));
                 insc.Add(Ins.Create(OpCodes.Stfld, valueField));
             }
-
+            
             MethodReference adviceBase = method.IsGetter
                 ? mwc.Spinner.IPropertyInterceptionAspect_OnGetValue
                 : mwc.Spinner.IPropertyInterceptionAspect_OnSetValue;
@@ -100,6 +106,30 @@ namespace Spinner.Fody.Weavers
             
             method.Body.RemoveNops();
             method.Body.OptimizeMacros();
+        }
+
+        private static void WriteSetPropertyInfo(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            int offset,
+            PropertyDefinition property,
+            VariableDefinition piaVariable)
+        {
+            MethodReference getTypeFromHandle = mwc.SafeImport(mwc.Framework.Type_GetTypeFromHandle);
+            MethodReference setProperty = mwc.SafeImport(mwc.Spinner.PropertyInterceptionArgs_Property.SetMethod);
+            MethodReference getPropertyInfo = mwc.SafeImport(mwc.Spinner.WeaverHelpers_GetPropertyInfo);
+
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Ldloc, piaVariable),
+                Ins.Create(OpCodes.Ldtoken, property.DeclaringType),
+                Ins.Create(OpCodes.Call, getTypeFromHandle),
+                Ins.Create(OpCodes.Ldstr, property.Name),
+                Ins.Create(OpCodes.Call, getPropertyInfo),
+                Ins.Create(OpCodes.Callvirt, setProperty)
+            };
+
+            method.Body.InsertInstructions(offset, insc);
         }
 
         private static void CreatePropertyBindingClass(

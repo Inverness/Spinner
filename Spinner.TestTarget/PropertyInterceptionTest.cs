@@ -14,6 +14,14 @@ namespace Spinner.TestTarget
             set { _x = value + 1; }
         }
 
+        [PropertyNameLoggingPia]
+        public int BasicWithName
+        {
+            get { return _x; }
+
+            set { _x = value + 2; }
+        }
+
         [BasicLogginaPia]
         public int this[int index, string a]
         {

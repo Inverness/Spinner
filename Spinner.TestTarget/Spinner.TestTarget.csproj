@@ -51,6 +51,7 @@
     <Compile Include="Aspects\BasicLoggingEia.cs" />
     <Compile Include="Aspects\BasicLoggingMia.cs" />
     <Compile Include="Aspects\BasicLogginaPia.cs" />
+    <Compile Include="Aspects\PropertyNameLoggingPia.cs" />
     <Compile Include="EventInterceptionTest.cs" />
     <Compile Include="MethodBoundaryTest.cs" />
     <Compile Include="MethodInterceptionTest.cs" />

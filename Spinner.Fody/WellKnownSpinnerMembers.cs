@@ -114,6 +114,8 @@ namespace Spinner.Fody
         internal readonly FieldDefinition[][] ArgumentsT_Item;
 
         internal readonly MethodDefinition WeaverHelpers_InvokeEvent;
+        internal readonly MethodDefinition WeaverHelpers_GetEventInfo;
+        internal readonly MethodDefinition WeaverHelpers_GetPropertyInfo;
 
         // ReSharper restore InconsistentNaming
 
@@ -240,6 +242,8 @@ namespace Spinner.Fody
 
             type = module.GetType(IntNs, "WeaverHelpers");
             WeaverHelpers_InvokeEvent = type.Methods.First(m => m.Name == "InvokeEvent");
+            WeaverHelpers_GetEventInfo = type.Methods.First(m => m.Name == "GetEventInfo");
+            WeaverHelpers_GetPropertyInfo = type.Methods.First(m => m.Name == "GetPropertyInfo");
         }
 
         /// <summary>

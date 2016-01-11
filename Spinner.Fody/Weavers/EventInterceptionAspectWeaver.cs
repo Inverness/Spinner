@@ -24,6 +24,8 @@ namespace Spinner.Fody.Weavers
             TypeDefinition aspectType,
             int aspectIndex)
         {
+            Features features = GetFeatures(mwc, aspectType);
+
             MethodDefinition adder = evt.AddMethod;
             MethodDefinition remover = evt.RemoveMethod;
 
@@ -57,9 +59,9 @@ namespace Spinner.Fody.Weavers
             //       initialize the aspect and call OnInvoke() for each handler in the backing field
 
             if (adder != null)
-                RewriteMethod(mwc, evt, adder, aspectType, aspectField, bindingClass);
+                RewriteMethod(mwc, evt, adder, aspectType, features, aspectField, bindingClass);
             if (remover != null)
-                RewriteMethod(mwc, evt, remover, aspectType, aspectField, bindingClass);
+                RewriteMethod(mwc, evt, remover, aspectType, features, aspectField, bindingClass);
         }
 
         private static void RewriteMethod(
@@ -67,6 +69,7 @@ namespace Spinner.Fody.Weavers
             EventDefinition evt,
             MethodDefinition method,
             TypeDefinition aspectType,
+            Features aspectFeatures,
             FieldReference aspectField,
             TypeDefinition bindingType)
         {
@@ -84,6 +87,9 @@ namespace Spinner.Fody.Weavers
             VariableDefinition eiaVariable;
             WriteEiaInit(mwc, method, insc.Count, null, bindingType, out eiaVariable);
 
+            if (aspectFeatures.Has(Features.MemberInfo))
+                WriteSetEventInfo(mwc, method, insc.Count, evt, eiaVariable);
+
             // Event handlers never have any arguments except the handler itself, which is not considered part of
             // the 'effective arguments' and thus not included in the arguments container.
             MethodReference setHandler = mwc.SafeImport(mwc.Spinner.EventInterceptionArgs_Handler.SetMethod);
@@ -91,16 +97,40 @@ namespace Spinner.Fody.Weavers
             insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters.First()));
             insc.Add(Ins.Create(OpCodes.Callvirt, setHandler));
 
-            MethodReference baseReference = method.IsRemoveOn
+            MethodReference adviceBase = method.IsRemoveOn
                 ? mwc.Spinner.IEventInterceptionAspect_OnRemoveHandler
                 : mwc.Spinner.IEventInterceptionAspect_OnAddHandler;
 
-            WriteCallAdvice(mwc, method, insc.Count, baseReference, aspectType, aspectField, eiaVariable);
+            WriteCallAdvice(mwc, method, insc.Count, adviceBase, aspectType, aspectField, eiaVariable);
 
             insc.Add(Ins.Create(OpCodes.Ret));
 
             method.Body.RemoveNops();
             method.Body.OptimizeMacros();
+        }
+
+        private static void WriteSetEventInfo(
+            ModuleWeavingContext mwc,
+            MethodDefinition method,
+            int offset,
+            EventDefinition evt,
+            VariableDefinition eiaVariable)
+        {
+            MethodReference getTypeFromHandle = mwc.SafeImport(mwc.Framework.Type_GetTypeFromHandle);
+            MethodReference setEvent = mwc.SafeImport(mwc.Spinner.EventInterceptionArgs_Event.SetMethod);
+            MethodReference getEventInfo = mwc.SafeImport(mwc.Spinner.WeaverHelpers_GetEventInfo);
+
+            var insc = new[]
+            {
+                Ins.Create(OpCodes.Ldloc, eiaVariable),
+                Ins.Create(OpCodes.Ldtoken, evt.DeclaringType),
+                Ins.Create(OpCodes.Call, getTypeFromHandle),
+                Ins.Create(OpCodes.Ldstr, evt.Name),
+                Ins.Create(OpCodes.Call, getEventInfo),
+                Ins.Create(OpCodes.Callvirt, setEvent)
+            };
+
+            method.Body.InsertInstructions(offset, insc);
         }
 
         private static void CreateEventBindingClass(

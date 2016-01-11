@@ -20,6 +20,8 @@ namespace Spinner.Fody.Weavers
             TypeDefinition aspectType,
             int aspectIndex)
         {
+            Features aspectFeatures = GetFeatures(mwc, aspectType);
+
             MethodDefinition original = DuplicateOriginalMethod(mwc, method, aspectIndex);
             
             TypeDefinition bindingType;
@@ -52,8 +54,11 @@ namespace Spinner.Fody.Weavers
             VariableDefinition iaVariable;
             WriteMiaInit(mwc, method, insc.Count, argumentsVariable, bindingType, out iaVariable, out valueField);
 
-            MethodReference onInvokeBase = mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
-            WriteCallAdvice(mwc, method, insc.Count, onInvokeBase, aspectType, aspectField, iaVariable);
+            if (aspectFeatures.Has(Features.MemberInfo))
+                WriteSetMethodInfo(mwc, method, null, insc.Count, iaVariable, null);
+
+            MethodReference adviceBase = mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
+            WriteCallAdvice(mwc, method, insc.Count, adviceBase, aspectType, aspectField, iaVariable);
             
             // Copy out and ref arguments from container
             WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);

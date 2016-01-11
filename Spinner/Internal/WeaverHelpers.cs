@@ -71,6 +71,16 @@ namespace Spinner.Internal
             }
         }
 
+        public static PropertyInfo GetPropertyInfo(Type type, string name)
+        {
+            return type.GetTypeInfo().GetDeclaredProperty(name);
+        }
+
+        public static EventInfo GetEventInfo(Type type, string name)
+        {
+            return type.GetTypeInfo().GetDeclaredEvent(name);
+        }
+
         //private const int MaxMeaPoolSize = 16;
 
         //private static readonly Stack<MethodExecutionArgs> _pool = new Stack<MethodExecutionArgs>(MaxMeaPoolSize);
