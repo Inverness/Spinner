@@ -18,60 +18,65 @@ namespace Spinner.Fody.Weavers
         private const string RemoveHandlerMethodName = "RemoveHandler";
         private const string InvokeHandlerMethodName = "InvokeHandler";
 
-        internal static void Weave(
+        private readonly EventDefinition _evt;
+        private FieldDefinition _evtBackingField;
+
+        private MethodDefinition _originalAdder;
+        private MethodDefinition _originalRemover;
+
+        private FieldDefinition _invokerDelegateField;
+        private MethodDefinition _invokerMethod;
+
+        public EventInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
-            EventDefinition evt,
             TypeDefinition aspectType,
-            int aspectIndex)
+            int aspectIndex,
+            EventDefinition aspectTarget)
+            : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
-            Features features = GetFeatures(mwc, aspectType);
-
-            MethodDefinition adder = evt.AddMethod;
-            MethodDefinition remover = evt.RemoveMethod;
-
-            MethodDefinition originalAdder = adder != null ? DuplicateOriginalMethod(mwc, adder, aspectIndex) : null;
-            MethodDefinition originalRemover = remover != null ? DuplicateOriginalMethod(mwc, remover, aspectIndex) : null;
-
-            FieldReference aspectField;
-            CreateAspectCacheField(mwc, evt, aspectType, aspectIndex, out aspectField);
-
-            TypeDefinition bindingClass;
-            CreateEventBindingClass(mwc, evt, aspectIndex, originalAdder, originalRemover, out bindingClass);
-
-            FieldDefinition backingField = GetEventBackingField(evt);
-            if (backingField != null)
-            {
-                MethodDefinition invoker;
-                CreateEventInvoker(mwc, evt, aspectType, backingField, aspectField, bindingClass, aspectIndex, out invoker);
-
-                FieldDefinition invokerDelegateField;
-                CreateEventInvokerDelegateField(mwc, evt, aspectIndex, out invokerDelegateField);
-
-                foreach (MethodDefinition m in evt.DeclaringType.Methods)
-                {
-                    if (m == invoker)
-                        continue;
-
-                    RewriteEventBackingFieldReferences(mwc, evt, m, backingField, invoker, invokerDelegateField);
-                }
-            }
-            // TODO: Replace backing field invocations in a class with a call to a generated method that will
-            //       initialize the aspect and call OnInvoke() for each handler in the backing field
-
-            if (adder != null)
-                RewriteMethod(mwc, evt, adder, aspectType, features, aspectField, bindingClass);
-            if (remover != null)
-                RewriteMethod(mwc, evt, remover, aspectType, features, aspectField, bindingClass);
+            _evt = aspectTarget;
         }
 
-        private static void RewriteMethod(
-            ModuleWeavingContext mwc,
-            EventDefinition evt,
-            MethodDefinition method,
-            TypeDefinition aspectType,
-            Features aspectFeatures,
-            FieldReference aspectField,
-            TypeDefinition bindingType)
+        protected override void Weave()
+        {
+            MethodDefinition adder = _evt.AddMethod;
+            MethodDefinition remover = _evt.RemoveMethod;
+
+            _originalAdder = adder != null ? DuplicateOriginalMethod(adder) : null;
+            _originalRemover = remover != null ? DuplicateOriginalMethod(remover) : null;
+
+            CreateAspectCacheField();
+
+            CreateEventBindingClass();
+
+            _evtBackingField = GetEventBackingField(_evt);
+            if (_evtBackingField != null)
+            {
+                CreateEventInvoker();
+                
+                CreateEventInvokerDelegateField();
+
+                foreach (MethodDefinition m in _evt.DeclaringType.Methods)
+                {
+                    if (m == _invokerMethod)
+                        continue;
+
+                    RewriteEventBackingFieldReferences(m);
+                }
+            }
+
+            if (adder != null)
+                RewriteMethod(adder);
+            if (remover != null)
+                RewriteMethod(remover);
+        }
+
+        internal static void Weave(ModuleWeavingContext mwc, EventDefinition evt, TypeDefinition aspect, int index)
+        {
+            new EventInterceptionAspectWeaver(mwc, aspect, index, evt).Weave();
+        }
+
+        private void RewriteMethod(MethodDefinition method)
         {
             method.Body.InitLocals = false;
             method.Body.Instructions.Clear();
@@ -80,28 +85,28 @@ namespace Spinner.Fody.Weavers
 
             Collection<Ins> insc = method.Body.Instructions;
 
-            WriteAspectInit(mwc, method, insc.Count, aspectType, aspectField);
+            WriteAspectInit(method, insc.Count);
 
-            WriteBindingInit(method, insc.Count, bindingType);
+            WriteBindingInit(method, insc.Count);
             
             VariableDefinition eiaVariable;
-            WriteEiaInit(mwc, method, insc.Count, null, bindingType, out eiaVariable);
+            WriteEiaInit(method, insc.Count, null, out eiaVariable);
 
-            if (aspectFeatures.Has(Features.MemberInfo))
-                WriteSetEventInfo(mwc, method, insc.Count, evt, eiaVariable);
+            if (_aspectFeatures.Has(Features.MemberInfo))
+                WriteSetEventInfo(method, insc.Count, eiaVariable);
 
             // Event handlers never have any arguments except the handler itself, which is not considered part of
             // the 'effective arguments' and thus not included in the arguments container.
-            MethodReference setHandler = mwc.SafeImport(mwc.Spinner.EventInterceptionArgs_Handler.SetMethod);
+            MethodReference setHandler = _mwc.SafeImport(_mwc.Spinner.EventInterceptionArgs_Handler.SetMethod);
             insc.Add(Ins.Create(OpCodes.Ldloc, eiaVariable));
             insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters.First()));
             insc.Add(Ins.Create(OpCodes.Callvirt, setHandler));
 
             MethodReference adviceBase = method.IsRemoveOn
-                ? mwc.Spinner.IEventInterceptionAspect_OnRemoveHandler
-                : mwc.Spinner.IEventInterceptionAspect_OnAddHandler;
+                ? _mwc.Spinner.IEventInterceptionAspect_OnRemoveHandler
+                : _mwc.Spinner.IEventInterceptionAspect_OnAddHandler;
 
-            WriteCallAdvice(mwc, method, insc.Count, adviceBase, aspectType, aspectField, eiaVariable);
+            WriteCallAdvice(method, insc.Count, adviceBase, eiaVariable);
 
             insc.Add(Ins.Create(OpCodes.Ret));
 
@@ -109,23 +114,21 @@ namespace Spinner.Fody.Weavers
             method.Body.OptimizeMacros();
         }
 
-        private static void WriteSetEventInfo(
-            ModuleWeavingContext mwc,
+        private void WriteSetEventInfo(
             MethodDefinition method,
             int offset,
-            EventDefinition evt,
             VariableDefinition eiaVariable)
         {
-            MethodReference getTypeFromHandle = mwc.SafeImport(mwc.Framework.Type_GetTypeFromHandle);
-            MethodReference setEvent = mwc.SafeImport(mwc.Spinner.EventInterceptionArgs_Event.SetMethod);
-            MethodReference getEventInfo = mwc.SafeImport(mwc.Spinner.WeaverHelpers_GetEventInfo);
+            MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
+            MethodReference setEvent = _mwc.SafeImport(_mwc.Spinner.EventInterceptionArgs_Event.SetMethod);
+            MethodReference getEventInfo = _mwc.SafeImport(_mwc.Spinner.WeaverHelpers_GetEventInfo);
 
             var insc = new[]
             {
                 Ins.Create(OpCodes.Ldloc, eiaVariable),
-                Ins.Create(OpCodes.Ldtoken, evt.DeclaringType),
+                Ins.Create(OpCodes.Ldtoken, _evt.DeclaringType),
                 Ins.Create(OpCodes.Call, getTypeFromHandle),
-                Ins.Create(OpCodes.Ldstr, evt.Name),
+                Ins.Create(OpCodes.Ldstr, _evt.Name),
                 Ins.Create(OpCodes.Call, getEventInfo),
                 Ins.Create(OpCodes.Callvirt, setEvent)
             };
@@ -133,32 +136,26 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        private static void CreateEventBindingClass(
-            ModuleWeavingContext mwc,
-            EventDefinition evt,
-            int aspectIndex,
-            MethodReference originalAdder,
-            MethodReference originalRemover,
-            out TypeDefinition bindingTypeDef)
+        private void CreateEventBindingClass()
         {
-            ModuleDefinition module = evt.Module;
+            ModuleDefinition module = _evt.Module;
 
-            TypeReference baseDelegateType = mwc.SafeImport(mwc.Framework.Delegate);
-            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
-            TypeDefinition delegateTypeDef = evt.EventType.Resolve();
-            TypeReference delegateType = mwc.SafeImport(delegateTypeDef);
+            TypeReference baseDelegateType = _mwc.SafeImport(_mwc.Framework.Delegate);
+            TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
+            TypeDefinition delegateTypeDef = _evt.EventType.Resolve();
+            TypeReference delegateType = _mwc.SafeImport(delegateTypeDef);
             MethodDefinition delegateInvokeMethodDef = delegateTypeDef.Methods.Single(m => m.Name == "Invoke");
-            MethodReference delegateInvokeMethod = mwc.SafeImport(delegateInvokeMethodDef);
+            MethodReference delegateInvokeMethod = _mwc.SafeImport(delegateInvokeMethodDef);
 
-            string name = NameGenerator.MakeEventBindingName(evt.Name, aspectIndex);
-            TypeReference baseType = mwc.SafeImport(mwc.Spinner.EventBinding);
-            CreateBindingClass(mwc, evt.DeclaringType, baseType, name, out bindingTypeDef);
+            string name = NameGenerator.MakeEventBindingName(_evt.Name, _aspectIndex);
+            TypeReference baseType = _mwc.SafeImport(_mwc.Spinner.EventBinding);
+            CreateBindingClass(baseType, name);
 
             for (int i = 0; i < 2; i++)
             {
                 string methodName = i == 0 ? AddHandlerMethodName : RemoveHandlerMethodName;
-                MethodReference original = i == 0 ? originalAdder : originalRemover;
-                MethodDefinition eventMethod = i == 0 ? evt.AddMethod : evt.RemoveMethod;
+                MethodReference original = i == 0 ? _originalAdder : _originalRemover;
+                MethodDefinition eventMethod = i == 0 ? _evt.AddMethod : _evt.RemoveMethod;
 
                 var mattrs = MethodAttributes.Public |
                              MethodAttributes.Virtual |
@@ -168,7 +165,7 @@ namespace Spinner.Fody.Weavers
 
                 var bmethod = new MethodDefinition(methodName, mattrs, module.TypeSystem.Void);
 
-                bindingTypeDef.Methods.Add(bmethod);
+                _bindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
 
@@ -185,8 +182,8 @@ namespace Spinner.Fody.Weavers
                         // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
                         bil.Emit(OpCodes.Ldarg_1);
                         bil.Emit(OpCodes.Ldind_Ref);
-                        bil.Emit(evt.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
-                                 evt.DeclaringType);
+                        bil.Emit(_evt.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
+                                 _evt.DeclaringType);
                     }
 
                     bil.Emit(OpCodes.Ldarg_2);
@@ -212,7 +209,7 @@ namespace Spinner.Fody.Weavers
 
                 var bmethod = new MethodDefinition(InvokeHandlerMethodName, mattrs, module.TypeSystem.Object);
 
-                bindingTypeDef.Methods.Add(bmethod);
+                _bindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
 
@@ -224,8 +221,7 @@ namespace Spinner.Fody.Weavers
 
                 GenericInstanceType argumentContainerType;
                 FieldReference[] argumentContainerFields;
-                GetArgumentContainerInfo(mwc,
-                                         delegateInvokeMethodDef,
+                GetArgumentContainerInfo(delegateInvokeMethodDef,
                                          out argumentContainerType,
                                          out argumentContainerFields);
 
@@ -264,17 +260,14 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Write MethodExecutionArgs initialization.
         /// </summary>
-        private static void WriteEiaInit(
-            ModuleWeavingContext mwc,
+        private void WriteEiaInit(
             MethodDefinition method,
             int offset,
             VariableDefinition argumentsVarOpt,
-            TypeDefinition bindingType,
             out VariableDefinition eiaVar)
         {
-            TypeReference eiaType = mwc.SafeImport(mwc.Spinner.BoundEventInterceptionArgs);
-            MethodReference eiaCtor = mwc.SafeImport(mwc.Spinner.BoundEventInterceptionArgs_ctor);
-            FieldDefinition bindingField = bindingType.Fields.First(f => f.Name == BindingInstanceFieldName);
+            TypeReference eiaType = _mwc.SafeImport(_mwc.Spinner.BoundEventInterceptionArgs);
+            MethodReference eiaCtor = _mwc.SafeImport(_mwc.Spinner.BoundEventInterceptionArgs_ctor);
 
             eiaVar = method.Body.AddVariableDefinition(eiaType);
 
@@ -296,7 +289,7 @@ namespace Spinner.Fody.Weavers
 
             insc.Add(argumentsVarOpt == null ? Ins.Create(OpCodes.Ldnull) : Ins.Create(OpCodes.Ldloc, argumentsVarOpt));
 
-            insc.Add(Ins.Create(OpCodes.Ldsfld, bindingField));
+            insc.Add(Ins.Create(OpCodes.Ldsfld, _bindingInstanceField));
 
             insc.Add(Ins.Create(OpCodes.Newobj, eiaCtor));
 
@@ -308,87 +301,77 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Create a field used to cache the event invoker delegate.
         /// </summary>
-        private static void CreateEventInvokerDelegateField(
-            ModuleWeavingContext mwc,
-            EventDefinition evt,
-            int aspectIndex,
-            out FieldDefinition field)
+        private void CreateEventInvokerDelegateField()
         {
-            Debug.Assert(evt.AddMethod != null);
+            Debug.Assert(_evt.AddMethod != null);
 
-            string name = NameGenerator.MakeEventInvokerDelegateCacheName(evt.Name, aspectIndex);
+            string name = NameGenerator.MakeEventInvokerDelegateCacheName(_evt.Name, _aspectIndex);
 
-            var attrs = FieldAttributes.Private | (evt.AddMethod.IsStatic ? FieldAttributes.Static : 0);
+            var attrs = FieldAttributes.Private | (_evt.AddMethod.IsStatic ? FieldAttributes.Static : 0);
 
-            field = new FieldDefinition(name, attrs, evt.EventType)
+            _invokerDelegateField = new FieldDefinition(name, attrs, _evt.EventType)
             {
-                DeclaringType = evt.DeclaringType
+                DeclaringType = _evt.DeclaringType
             };
 
-            AddCompilerGeneratedAttribute(mwc, field);
+            AddCompilerGeneratedAttribute(_invokerDelegateField);
 
-            evt.DeclaringType.Fields.Add(field);
+            _evt.DeclaringType.Fields.Add(_invokerDelegateField);
         }
 
         /// <summary>
         /// Create a method that will be used to invoke an event with OnInvokeHandler() calls for each handler.
         /// </summary>
-        private static void CreateEventInvoker(
-            ModuleWeavingContext mwc,
-            EventDefinition evt,
-            TypeDefinition aspectType,
-            FieldDefinition eventField,
-            FieldReference aspectField,
-            TypeDefinition bindingClass,
-            int aspectIndex,
-            out MethodDefinition invoker)
+        private void CreateEventInvoker()
         {
-            MethodDefinition invokeEventMethodDef = mwc.Spinner.WeaverHelpers_InvokeEvent;
-            GenericInstanceMethod invokeEventMethod = new GenericInstanceMethod(mwc.SafeImport(invokeEventMethodDef));
-            invokeEventMethod.GenericArguments.Add(aspectType);
+            MethodDefinition invokeEventMethodDef = _mwc.Spinner.WeaverHelpers_InvokeEvent;
+            GenericInstanceMethod invokeEventMethod = new GenericInstanceMethod(_mwc.SafeImport(invokeEventMethodDef));
+            invokeEventMethod.GenericArguments.Add(_aspectType);
 
             // Create the method definition
 
-            string name = NameGenerator.MakeEventInvokerName(evt.Name, aspectIndex);
+            string name = NameGenerator.MakeEventInvokerName(_evt.Name, _aspectIndex);
             var attrs = MethodAttributes.Private |
                         MethodAttributes.HideBySig |
-                        (eventField.IsStatic ? MethodAttributes.Static : 0);
+                        (_evtBackingField.IsStatic ? MethodAttributes.Static : 0);
 
-            invoker = new MethodDefinition(name, attrs, evt.Module.TypeSystem.Void)
+            _invokerMethod = new MethodDefinition(name, attrs, _evt.Module.TypeSystem.Void)
             {
-                DeclaringType = evt.DeclaringType
+                DeclaringType = _evt.DeclaringType
             };
 
-            AddCompilerGeneratedAttribute(mwc, invoker);
+            AddCompilerGeneratedAttribute(_invokerMethod);
             
-            evt.DeclaringType.Methods.Add(invoker);
+            _evt.DeclaringType.Methods.Add(_invokerMethod);
             
             // Add parameters matching the event delegate
 
-            var delegateInvokeMethod = eventField.FieldType.Resolve().Methods.Single(m => m.Name == "Invoke");
+            var delegateInvokeMethod = _evtBackingField.FieldType.Resolve().Methods.Single(m => m.Name == "Invoke");
 
             if (delegateInvokeMethod.HasParameters)
             {
                 foreach (ParameterDefinition p in delegateInvokeMethod.Parameters)
                 {
-                    invoker.Parameters.Add(new ParameterDefinition(p.Name, ParameterAttributes.None, mwc.SafeImport(p.ParameterType)));
+                    _invokerMethod.Parameters.Add(new ParameterDefinition(p.Name,
+                                                                    ParameterAttributes.None,
+                                                                    _mwc.SafeImport(p.ParameterType)));
                 }
             }
 
             // Start writing the body by capturing the event backing field and checking if its null.
 
-            VariableDefinition handlerVar = invoker.Body.AddVariableDefinition(eventField.FieldType);
+            VariableDefinition handlerVar = _invokerMethod.Body.AddVariableDefinition(_evtBackingField.FieldType);
 
-            ILProcessor il = invoker.Body.GetILProcessor();
+            ILProcessor il = _invokerMethod.Body.GetILProcessor();
 
-            if (invoker.IsStatic)
+            if (_invokerMethod.IsStatic)
             {
-                il.Emit(OpCodes.Ldsfld, eventField);
+                il.Emit(OpCodes.Ldsfld, _evtBackingField);
             }
             else
             {
                 il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldfld, eventField);
+                il.Emit(OpCodes.Ldfld, _evtBackingField);
             }
             il.Emit(OpCodes.Dup);
 
@@ -404,44 +387,38 @@ namespace Spinner.Fody.Weavers
             // Capture arguments
 
             VariableDefinition argumentsVar = null;
-            if (invoker.HasParameters)
+            if (_invokerMethod.HasParameters)
             {
-                WriteArgumentContainerInit(mwc, invoker, invoker.Body.Instructions.Count, out argumentsVar);
-                WriteCopyArgumentsToContainer(mwc, invoker, invoker.Body.Instructions.Count, argumentsVar, true);
+                WriteArgumentContainerInit(_invokerMethod, _invokerMethod.Body.Instructions.Count, out argumentsVar);
+                WriteCopyArgumentsToContainer(_invokerMethod, _invokerMethod.Body.Instructions.Count, argumentsVar, true);
             }
 
             // Initialize the EventInterceptionArgs
 
-            WriteAspectInit(mwc, invoker, invoker.Body.Instructions.Count, aspectType, aspectField);
+            WriteAspectInit(_invokerMethod, _invokerMethod.Body.Instructions.Count);
 
-            WriteBindingInit(invoker, invoker.Body.Instructions.Count, bindingClass);
+            WriteBindingInit(_invokerMethod, _invokerMethod.Body.Instructions.Count);
 
             VariableDefinition eiaVar;
-            WriteEiaInit(mwc, invoker, invoker.Body.Instructions.Count, argumentsVar, bindingClass, out eiaVar);
+            WriteEiaInit(_invokerMethod, _invokerMethod.Body.Instructions.Count, argumentsVar, out eiaVar);
 
             // The remaining work is handed off to a helper method since the code is not type-specific.
 
             il.Emit(OpCodes.Ldloc, handlerVar);
-            il.Emit(OpCodes.Ldsfld, aspectField);
+            il.Emit(OpCodes.Ldsfld, _aspectField);
             il.Emit(OpCodes.Ldloc, eiaVar);
             il.Emit(OpCodes.Call, invokeEventMethod);
             il.Emit(OpCodes.Ret);
 
-            invoker.Body.RemoveNops();
-            invoker.Body.OptimizeMacros();
+            _invokerMethod.Body.RemoveNops();
+            _invokerMethod.Body.OptimizeMacros();
 
             // Create a field that will be used to cache the invoker's delegate in the future
         }
 
-        private static void RewriteEventBackingFieldReferences(
-            ModuleWeavingContext mwc,
-            EventDefinition evt,
-            MethodDefinition method,
-            FieldDefinition eventBackingField,
-            MethodDefinition invokerMethod,
-            FieldDefinition invokerField)
+        private void RewriteEventBackingFieldReferences(MethodDefinition method)
         {
-            bool isStatic = eventBackingField.IsStatic;
+            bool isStatic = _evtBackingField.IsStatic;
 
             Collection<Ins> insc = method.Body.Instructions;
             Collection<Ins> newinsc = null;
@@ -457,11 +434,11 @@ namespace Spinner.Fody.Weavers
                     continue;
 
                 var fr = (FieldReference) ins.Operand;
-                if (!fr.IsSimilar(eventBackingField) || fr.Resolve() != eventBackingField)
+                if (!fr.IsSimilar(_evtBackingField) || fr.Resolve() != _evtBackingField)
                     continue;
                 
                 // Replace with reference to new field
-                ins.Operand = invokerField;
+                ins.Operand = _invokerDelegateField;
 
                 // Lazily initialize some stuff the first time work needs to be done
                 if (newinsc == null)
@@ -469,22 +446,22 @@ namespace Spinner.Fody.Weavers
                     newinsc = new Collection<Ins>();
                     existingNops = new HashSet<Ins>(insc.Where(ir => ir.OpCode == OpCodes.Nop));
 
-                    MethodDefinition delegateCtorDef = evt.EventType.Resolve().Methods.Single(m => m.IsConstructor);
-                    delegateCtor = mwc.SafeImport(delegateCtorDef);
-                    if (evt.EventType.IsGenericInstance)
-                        delegateCtor = delegateCtor.WithGenericDeclaringType((GenericInstanceType) evt.EventType);
+                    MethodDefinition delegateCtorDef = _evt.EventType.Resolve().Methods.Single(m => m.IsConstructor);
+                    delegateCtor = _mwc.SafeImport(delegateCtorDef);
+                    if (_evt.EventType.IsGenericInstance)
+                        delegateCtor = delegateCtor.WithGenericDeclaringType((GenericInstanceType) _evt.EventType);
                 }
 
                 // Insert delegate initializer BEFORE the current instruction
                 Ins notNullLabel = Ins.Create(OpCodes.Nop);
                 if (isStatic)
                 {
-                    newinsc.Add(Ins.Create(OpCodes.Ldsfld, invokerField));
+                    newinsc.Add(Ins.Create(OpCodes.Ldsfld, _invokerDelegateField));
                     newinsc.Add(Ins.Create(OpCodes.Brtrue, notNullLabel));
                     newinsc.Add(Ins.Create(OpCodes.Ldnull));
-                    newinsc.Add(Ins.Create(OpCodes.Ldftn, invokerMethod));
+                    newinsc.Add(Ins.Create(OpCodes.Ldftn, _invokerMethod));
                     newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
-                    newinsc.Add(Ins.Create(OpCodes.Stsfld, invokerField));
+                    newinsc.Add(Ins.Create(OpCodes.Stsfld, _invokerDelegateField));
                     newinsc.Add(notNullLabel);
 
                     method.Body.InsertInstructions(i, newinsc);
@@ -492,13 +469,13 @@ namespace Spinner.Fody.Weavers
                 else
                 {
                     newinsc.Add(Ins.Create(OpCodes.Ldarg_0));
-                    newinsc.Add(Ins.Create(OpCodes.Ldfld, invokerField));
+                    newinsc.Add(Ins.Create(OpCodes.Ldfld, _invokerDelegateField));
                     newinsc.Add(Ins.Create(OpCodes.Brtrue, notNullLabel));
                     newinsc.Add(Ins.Create(OpCodes.Ldarg_0));
                     newinsc.Add(Ins.Create(OpCodes.Dup));
-                    newinsc.Add(Ins.Create(OpCodes.Ldftn, invokerMethod));
+                    newinsc.Add(Ins.Create(OpCodes.Ldftn, _invokerMethod));
                     newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
-                    newinsc.Add(Ins.Create(OpCodes.Stfld, invokerField));
+                    newinsc.Add(Ins.Create(OpCodes.Stfld, _invokerDelegateField));
                     newinsc.Add(notNullLabel);
                     
                     Debug.Assert(insc[i - 1].OpCode == OpCodes.Ldarg_0 || insc[i - 1].OpCode == OpCodes.Ldarg);

@@ -13,42 +13,45 @@ namespace Spinner.Fody.Weavers
         private const string GetValueMethodName = "GetValue";
         private const string SetValueMethodName = "SetValue";
 
-        internal static void Weave(
+        private readonly PropertyDefinition _property;
+        private MethodDefinition _originalGetter;
+        private MethodDefinition _originalSetter;
+
+        private PropertyInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
-            PropertyDefinition property,
             TypeDefinition aspectType,
-            int aspectIndex)
+            int aspectIndex,
+            PropertyDefinition aspectTarget)
+            : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
-            Debug.Assert(property.GetMethod != null || property.SetMethod != null);
-
-            Features features = GetFeatures(mwc, aspectType);
-
-            MethodDefinition getter = property.GetMethod;
-            MethodDefinition setter = property.SetMethod;
-
-            MethodDefinition originalGetter = getter != null ? DuplicateOriginalMethod(mwc, getter, aspectIndex) : null;
-            MethodDefinition originalSetter = setter != null ? DuplicateOriginalMethod(mwc, setter, aspectIndex) : null;
-
-            TypeDefinition bindingType;
-            CreatePropertyBindingClass(mwc, property, aspectIndex, originalGetter, originalSetter, out bindingType);
-
-            FieldReference aspectField;
-            CreateAspectCacheField(mwc, property, aspectType, aspectIndex, out aspectField);
-
-            if (getter != null)
-                WeaveMethod(mwc, property, getter, aspectType, features, aspectField, bindingType);
-            if (setter != null)
-                WeaveMethod(mwc, property, setter, aspectType, features, aspectField, bindingType);
+            _property = aspectTarget;
+            Debug.Assert(_property.GetMethod != null || _property.SetMethod != null);
         }
 
-        private static void WeaveMethod(
-            ModuleWeavingContext mwc,
-            PropertyDefinition property,
-            MethodDefinition method,
-            TypeDefinition aspectType,
-            Features aspectFeatures,
-            FieldReference aspectField,
-            TypeDefinition bindingType)
+        protected override void Weave()
+        {
+            MethodDefinition getter = _property.GetMethod;
+            MethodDefinition setter = _property.SetMethod;
+
+            _originalGetter = getter != null ? DuplicateOriginalMethod(getter) : null;
+            _originalSetter = setter != null ? DuplicateOriginalMethod(setter) : null;
+            
+            CreatePropertyBindingClass();
+
+            CreateAspectCacheField();
+
+            if (getter != null)
+                WeaveMethod(getter);
+            if (setter != null)
+                WeaveMethod(setter);
+        }
+
+        internal static void Weave(ModuleWeavingContext mwc, PropertyDefinition property, TypeDefinition aspect, int index)
+        {
+            new PropertyInterceptionAspectWeaver(mwc, aspect, index, property).Weave();
+        }
+
+        private void WeaveMethod(MethodDefinition method)
         {
             Debug.Assert(method.IsGetter || method.IsSetter);
 
@@ -61,20 +64,20 @@ namespace Spinner.Fody.Weavers
             Collection<Ins> insc = method.Body.Instructions;
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(mwc, method, insc.Count, out argumentsVariable);
+            WriteArgumentContainerInit(method, insc.Count, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(mwc, method, insc.Count, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(method, insc.Count, argumentsVariable, true);
             
-            WriteAspectInit(mwc, method, insc.Count, aspectType, aspectField);
+            WriteAspectInit(method, insc.Count);
 
-            WriteBindingInit(method, insc.Count, bindingType);
+            WriteBindingInit(method, insc.Count);
             
             FieldReference valueField;
             VariableDefinition iaVariable;
-            WritePiaInit(mwc, method, insc.Count, property, argumentsVariable, bindingType, out iaVariable, out valueField);
+            WritePiaInit(method, insc.Count, argumentsVariable, out iaVariable, out valueField);
             
-            if (aspectFeatures.Has(Features.MemberInfo))
-                WriteSetPropertyInfo(mwc, method, insc.Count, property, iaVariable);
+            if (_aspectFeatures.Has(Features.MemberInfo))
+                WriteSetPropertyInfo(method, insc.Count, iaVariable);
             
             if (method.IsSetter)
             {
@@ -86,13 +89,13 @@ namespace Spinner.Fody.Weavers
             }
             
             MethodReference adviceBase = method.IsGetter
-                ? mwc.Spinner.IPropertyInterceptionAspect_OnGetValue
-                : mwc.Spinner.IPropertyInterceptionAspect_OnSetValue;
+                ? _mwc.Spinner.IPropertyInterceptionAspect_OnGetValue
+                : _mwc.Spinner.IPropertyInterceptionAspect_OnSetValue;
 
-            WriteCallAdvice(mwc, method, insc.Count, adviceBase, aspectType, aspectField, iaVariable);
+            WriteCallAdvice(method, insc.Count, adviceBase, iaVariable);
 
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(method, insc.Count, argumentsVariable, false, true);
             
             if (method.IsGetter)
             {
@@ -108,23 +111,21 @@ namespace Spinner.Fody.Weavers
             method.Body.OptimizeMacros();
         }
 
-        private static void WriteSetPropertyInfo(
-            ModuleWeavingContext mwc,
+        private void WriteSetPropertyInfo(
             MethodDefinition method,
             int offset,
-            PropertyDefinition property,
             VariableDefinition piaVariable)
         {
-            MethodReference getTypeFromHandle = mwc.SafeImport(mwc.Framework.Type_GetTypeFromHandle);
-            MethodReference setProperty = mwc.SafeImport(mwc.Spinner.PropertyInterceptionArgs_Property.SetMethod);
-            MethodReference getPropertyInfo = mwc.SafeImport(mwc.Spinner.WeaverHelpers_GetPropertyInfo);
+            MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
+            MethodReference setProperty = _mwc.SafeImport(_mwc.Spinner.PropertyInterceptionArgs_Property.SetMethod);
+            MethodReference getPropertyInfo = _mwc.SafeImport(_mwc.Spinner.WeaverHelpers_GetPropertyInfo);
 
             var insc = new[]
             {
                 Ins.Create(OpCodes.Ldloc, piaVariable),
-                Ins.Create(OpCodes.Ldtoken, property.DeclaringType),
+                Ins.Create(OpCodes.Ldtoken, _property.DeclaringType),
                 Ins.Create(OpCodes.Call, getTypeFromHandle),
-                Ins.Create(OpCodes.Ldstr, property.Name),
+                Ins.Create(OpCodes.Ldstr, _property.Name),
                 Ins.Create(OpCodes.Call, getPropertyInfo),
                 Ins.Create(OpCodes.Callvirt, setProperty)
             };
@@ -132,20 +133,14 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        private static void CreatePropertyBindingClass(
-            ModuleWeavingContext mwc,
-            PropertyDefinition property,
-            int aspectIndex,
-            MethodReference originalGetter,
-            MethodReference originalSetter,
-            out TypeDefinition bindingTypeDef)
+        private void CreatePropertyBindingClass()
         {
-            ModuleDefinition module = property.Module;
+            ModuleDefinition module = _property.Module;
 
-            string name = NameGenerator.MakePropertyBindingName(property.Name, aspectIndex);
-            TypeReference baseType = mwc.SafeImport(mwc.Spinner.PropertyBindingT1).MakeGenericInstanceType(property.PropertyType);
+            string name = NameGenerator.MakePropertyBindingName(_property.Name, _aspectIndex);
+            TypeReference baseType = _mwc.SafeImport(_mwc.Spinner.PropertyBindingT1).MakeGenericInstanceType(_property.PropertyType);
 
-            CreateBindingClass(mwc, property.DeclaringType, baseType, name, out bindingTypeDef);
+            CreateBindingClass(baseType, name);
 
             // Override the GetValue method
             {
@@ -155,30 +150,29 @@ namespace Spinner.Fody.Weavers
                              MethodAttributes.HideBySig |
                              MethodAttributes.ReuseSlot;
 
-                var bmethod = new MethodDefinition(GetValueMethodName, mattrs, property.PropertyType);
+                var bmethod = new MethodDefinition(GetValueMethodName, mattrs, _property.PropertyType);
 
-                bindingTypeDef.Methods.Add(bmethod);
+                _bindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
+                TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
 
                 ILProcessor bil = bmethod.Body.GetILProcessor();
 
-                if (property.GetMethod != null)
+                if (_property.GetMethod != null)
                 {
                     GenericInstanceType argumentContainerType;
                     FieldReference[] argumentContainerFields;
-                    GetArgumentContainerInfo(mwc,
-                                             property.GetMethod,
+                    GetArgumentContainerInfo(_property.GetMethod,
                                              out argumentContainerType,
                                              out argumentContainerFields);
 
                     // Case the arguments container from its base type to the generic instance type
                     VariableDefinition argsContainer = null;
-                    if (property.GetMethod.Parameters.Count != 0)
+                    if (_property.GetMethod.Parameters.Count != 0)
                     {
                         argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
 
@@ -188,37 +182,37 @@ namespace Spinner.Fody.Weavers
                     }
 
                     // Load the instance for the method call
-                    if (!property.GetMethod.IsStatic)
+                    if (!_property.GetMethod.IsStatic)
                     {
                         // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
                         bil.Emit(OpCodes.Ldarg_1);
                         bil.Emit(OpCodes.Ldind_Ref);
-                        bil.Emit(property.GetMethod.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
-                                 property.GetMethod.DeclaringType);
+                        bil.Emit(_property.GetMethod.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
+                                 _property.GetMethod.DeclaringType);
                     }
 
                     // Load arguments or addresses directly from the arguments container
-                    for (int i = 0; i < property.GetMethod.Parameters.Count; i++)
+                    for (int i = 0; i < _property.GetMethod.Parameters.Count; i++)
                     {
-                        bool byRef = property.GetMethod.Parameters[i].ParameterType.IsByReference;
+                        bool byRef = _property.GetMethod.Parameters[i].ParameterType.IsByReference;
 
                         bil.Emit(OpCodes.Ldloc, argsContainer);
                         bil.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
                     }
 
-                    if (property.GetMethod.IsStatic || property.GetMethod.DeclaringType.IsValueType)
-                        bil.Emit(OpCodes.Call, originalGetter);
+                    if (_property.GetMethod.IsStatic || _property.GetMethod.DeclaringType.IsValueType)
+                        bil.Emit(OpCodes.Call, _originalGetter);
                     else
-                        bil.Emit(OpCodes.Callvirt, originalGetter);
+                        bil.Emit(OpCodes.Callvirt, _originalGetter);
                 }
                 else
                 {
-                    if (property.PropertyType.IsValueType)
+                    if (_property.PropertyType.IsValueType)
                     {
-                        VariableDefinition returnVar = bil.Body.AddVariableDefinition(property.PropertyType);
+                        VariableDefinition returnVar = bil.Body.AddVariableDefinition(_property.PropertyType);
 
                         bil.Emit(OpCodes.Ldloca, returnVar);
-                        bil.Emit(OpCodes.Initobj, property.PropertyType);
+                        bil.Emit(OpCodes.Initobj, _property.PropertyType);
                         bil.Emit(OpCodes.Ldloc, returnVar);
                     }
                     else
@@ -240,32 +234,30 @@ namespace Spinner.Fody.Weavers
 
                 var bmethod = new MethodDefinition(SetValueMethodName, mattrs, module.TypeSystem.Void);
 
-                bindingTypeDef.Methods.Add(bmethod);
+                _bindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
+                TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
-                bmethod.Parameters.Add(new ParameterDefinition("value", ParameterAttributes.None,
-                    property.PropertyType));
+                bmethod.Parameters.Add(new ParameterDefinition("value", ParameterAttributes.None, _property.PropertyType));
 
                 ILProcessor bil = bmethod.Body.GetILProcessor();
 
-                if (property.SetMethod != null)
+                if (_property.SetMethod != null)
                 {
-                    Debug.Assert(property.SetMethod.Parameters.Count >= 1);
+                    Debug.Assert(_property.SetMethod.Parameters.Count >= 1);
 
                     GenericInstanceType argumentContainerType;
                     FieldReference[] argumentContainerFields;
-                    GetArgumentContainerInfo(mwc,
-                                             property.SetMethod,
+                    GetArgumentContainerInfo(_property.SetMethod,
                                              out argumentContainerType,
                                              out argumentContainerFields);
 
                     // Case the arguments container from its base type to the generic instance type
                     VariableDefinition argsContainer = null;
-                    if (property.SetMethod.Parameters.Count != 1)
+                    if (_property.SetMethod.Parameters.Count != 1)
                     {
                         argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
 
@@ -275,19 +267,19 @@ namespace Spinner.Fody.Weavers
                     }
 
                     // Load the instance for the method call
-                    if (!property.SetMethod.IsStatic)
+                    if (!_property.SetMethod.IsStatic)
                     {
                         // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
                         bil.Emit(OpCodes.Ldarg_1);
                         bil.Emit(OpCodes.Ldind_Ref);
-                        bil.Emit(property.SetMethod.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
-                                 property.SetMethod.DeclaringType);
+                        bil.Emit(_property.SetMethod.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass,
+                                 _property.SetMethod.DeclaringType);
                     }
 
                     // Load arguments or addresses directly from the arguments container
-                    for (int i = 0; i < property.SetMethod.Parameters.Count - 1; i++)
+                    for (int i = 0; i < _property.SetMethod.Parameters.Count - 1; i++)
                     {
-                        bool byRef = property.SetMethod.Parameters[i].ParameterType.IsByReference;
+                        bool byRef = _property.SetMethod.Parameters[i].ParameterType.IsByReference;
 
                         bil.Emit(OpCodes.Ldloc, argsContainer);
                         bil.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
@@ -296,10 +288,10 @@ namespace Spinner.Fody.Weavers
                     // Load new property value
                     bil.Emit(OpCodes.Ldarg_3);
 
-                    if (property.SetMethod.IsStatic || property.SetMethod.DeclaringType.IsValueType)
-                        bil.Emit(OpCodes.Call, originalSetter);
+                    if (_property.SetMethod.IsStatic || _property.SetMethod.DeclaringType.IsValueType)
+                        bil.Emit(OpCodes.Call, _originalSetter);
                     else
-                        bil.Emit(OpCodes.Callvirt, originalSetter);
+                        bil.Emit(OpCodes.Callvirt, _originalSetter);
                 }
 
                 bil.Emit(OpCodes.Ret);
@@ -309,25 +301,22 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Writes the PropertyInterceptionArgs initialization.
         /// </summary>
-        private static void WritePiaInit(
-            ModuleWeavingContext mwc,
+        private void WritePiaInit(
             MethodDefinition method,
             int offset,
-            PropertyDefinition property,
             VariableDefinition argumentsVariable,
-            TypeDefinition bindingType,
             out VariableDefinition iaVariable,
             out FieldReference valueField)
         {
-            TypeDefinition piaTypeDef = mwc.Spinner.BoundPropertyInterceptionArgsT1;
-            GenericInstanceType genericPiaType = mwc.SafeImport(piaTypeDef).MakeGenericInstanceType(property.PropertyType);
+            TypeDefinition piaTypeDef = _mwc.Spinner.BoundPropertyInterceptionArgsT1;
+            GenericInstanceType genericPiaType = _mwc.SafeImport(piaTypeDef).MakeGenericInstanceType(_property.PropertyType);
             TypeReference piaType = genericPiaType;
 
-            MethodDefinition constructorDef = mwc.Spinner.BoundPropertyInterceptionArgsT1_ctor;
-            MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
+            MethodDefinition constructorDef = _mwc.Spinner.BoundPropertyInterceptionArgsT1_ctor;
+            MethodReference constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
 
-            FieldDefinition valueFieldDef = mwc.Spinner.BoundPropertyInterceptionArgsT1_TypedValue;
-            valueField = mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
+            FieldDefinition valueFieldDef = _mwc.Spinner.BoundPropertyInterceptionArgsT1_TypedValue;
+            valueField = _mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
             iaVariable = method.Body.AddVariableDefinition(piaType);
 
@@ -351,7 +340,7 @@ namespace Spinner.Fody.Weavers
                 ? Ins.Create(OpCodes.Ldnull)
                 : Ins.Create(OpCodes.Ldloc, argumentsVariable));
 
-            insc.Add(Ins.Create(OpCodes.Ldsfld, bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName)));
+            insc.Add(Ins.Create(OpCodes.Ldsfld, _bindingInstanceField));
 
             insc.Add(Ins.Create(OpCodes.Newobj, constructor));
             insc.Add(Ins.Create(OpCodes.Stloc, iaVariable));

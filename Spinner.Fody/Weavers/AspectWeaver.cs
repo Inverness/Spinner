@@ -11,10 +11,35 @@ namespace Spinner.Fody.Weavers
     /// <summary>
     /// Base class for aspect weavers
     /// </summary>
-    internal class AspectWeaver
+    internal abstract class AspectWeaver
     {
         protected const string BindingInstanceFieldName = "Instance";
         protected const string StateMachineThisFieldName = "<>4__this";
+
+        // ReSharper disable InconsistentNaming
+        protected readonly ModuleWeavingContext _mwc;
+        protected readonly TypeDefinition _aspectType;
+        protected readonly int _aspectIndex;
+        protected readonly IMemberDefinition _aspectTarget;
+        protected readonly Features _aspectFeatures;
+
+        protected FieldDefinition _aspectField;
+        protected TypeDefinition _bindingClass;
+        protected FieldDefinition _bindingInstanceField;
+        // ReSharper restore InconsistentNaming
+
+        protected AspectWeaver(
+            ModuleWeavingContext mwc,
+            TypeDefinition aspectType,
+            int aspectIndex,
+            IMemberDefinition aspectTarget)
+        {
+            _mwc = mwc;
+            _aspectType = aspectType;
+            _aspectIndex = aspectIndex;
+            _aspectTarget = aspectTarget;
+            _aspectFeatures = GetFeatures(_aspectType);
+        }
 
         /// <summary>
         /// Gets an effective parameter count by excluding the value parameter of a property setter.
@@ -27,10 +52,10 @@ namespace Spinner.Fody.Weavers
             return e;
         }
 
-        protected static MethodDefinition DuplicateOriginalMethod(
-            ModuleWeavingContext mwc,
-            MethodDefinition method,
-            int aspectIndex)
+        protected abstract void Weave();
+
+        protected MethodDefinition DuplicateOriginalMethod(
+            MethodDefinition method)
         {
             const MethodAttributes preservedAttributes =
                 MethodAttributes.Static | MethodAttributes.HideBySig | MethodAttributes.PInvokeImpl |
@@ -38,14 +63,14 @@ namespace Spinner.Fody.Weavers
 
             // Duplicate the target method under a new name: <Name>z__OriginalMethod
 
-            string originalName = NameGenerator.MakeOriginalMethodName(method.Name, aspectIndex);
+            string originalName = NameGenerator.MakeOriginalMethodName(method.Name, _aspectIndex);
 
             MethodAttributes originalAttributes = method.Attributes & preservedAttributes |
                                                   MethodAttributes.Private;
 
             var original = new MethodDefinition(originalName, originalAttributes, method.ReturnType);
 
-            AddCompilerGeneratedAttribute(mwc, original);
+            AddCompilerGeneratedAttribute(original);
 
             original.Parameters.AddRange(method.Parameters);
             original.GenericParameters.AddRange(method.GenericParameters.Select(p => p.Clone(original)));
@@ -75,8 +100,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Write code to initialize the argument container instance. Works for property getters and setters too.
         /// </summary>
-        protected static void WriteArgumentContainerInit(
-            ModuleWeavingContext mwc,
+        protected void WriteArgumentContainerInit(
             MethodDefinition method,
             int offset,
             out VariableDefinition argumentsVariable)
@@ -91,10 +115,10 @@ namespace Spinner.Fody.Weavers
             
             GenericInstanceType argumentsType;
             FieldReference[] argumentFields;
-            GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
+            GetArgumentContainerInfo(method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
-            MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodDefinition constructorDef = _mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
+            MethodReference constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
             
             argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
 
@@ -103,12 +127,10 @@ namespace Spinner.Fody.Weavers
             insc.Insert(offset + 1, Ins.Create(OpCodes.Stloc, argumentsVariable));
         }
 
-        protected static void WriteSmArgumentContainerInit(
-            ModuleWeavingContext mwc,
+        protected void WriteSmArgumentContainerInit(
             MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
-            int aspectIndex,
             out FieldDefinition arguments)
         {
             int effectiveParameterCount = GetEffectiveParameterCount(method);
@@ -121,12 +143,12 @@ namespace Spinner.Fody.Weavers
 
             GenericInstanceType argumentsType;
             FieldReference[] argumentFields;
-            GetArgumentContainerInfo(mwc, method, out argumentsType, out argumentFields);
+            GetArgumentContainerInfo(method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
-            MethodReference constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodDefinition constructorDef = _mwc.Spinner.ArgumentsT_ctor[effectiveParameterCount];
+            MethodReference constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
-            string fieldName = NameGenerator.MakeAdviceArgsFieldName(aspectIndex);
+            string fieldName = NameGenerator.MakeAdviceArgsFieldName(_aspectIndex);
             arguments = new FieldDefinition(fieldName, FieldAttributes.Private, argumentsType);
 
             stateMachine.DeclaringType.Fields.Add(arguments);
@@ -141,8 +163,7 @@ namespace Spinner.Fody.Weavers
             stateMachine.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void GetArgumentContainerInfo(
-            ModuleWeavingContext mwc,
+        protected void GetArgumentContainerInfo(
             MethodDefinition method,
             out GenericInstanceType type,
             out FieldReference[] fields)
@@ -166,18 +187,18 @@ namespace Spinner.Fody.Weavers
                 if (pt.IsByReference)
                     pt = pt.GetElementType();
 
-                baseParameterTypes[i] = mwc.SafeImport(pt);
+                baseParameterTypes[i] = _mwc.SafeImport(pt);
             }
 
-            TypeDefinition typeDef = mwc.Spinner.ArgumentsT[effectiveParameterCount];
-            type = mwc.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
+            TypeDefinition typeDef = _mwc.Spinner.ArgumentsT[effectiveParameterCount];
+            type = _mwc.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
             for (int i = 0; i < effectiveParameterCount; i++)
             {
-                FieldDefinition fieldDef = mwc.Spinner.ArgumentsT_Item[effectiveParameterCount][i];
-                FieldReference field = mwc.SafeImport(fieldDef).WithGenericDeclaringType(type);
+                FieldDefinition fieldDef = _mwc.Spinner.ArgumentsT_Item[effectiveParameterCount][i];
+                FieldReference field = _mwc.SafeImport(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;
             }
@@ -186,8 +207,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Copies arguments from the method to the generic arguments container.
         /// </summary>
-        protected static void WriteCopyArgumentsToContainer(
-            ModuleWeavingContext rc,
+        protected void WriteCopyArgumentsToContainer(
             MethodDefinition method,
             int offset,
             VariableDefinition argumentsVariable,
@@ -195,7 +215,7 @@ namespace Spinner.Fody.Weavers
         {
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
             var insc = new Collection<Ins>();
 
@@ -221,8 +241,7 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteSmCopyArgumentsToContainer(
-            ModuleWeavingContext rc,
+        protected void WriteSmCopyArgumentsToContainer(
             MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
@@ -235,7 +254,7 @@ namespace Spinner.Fody.Weavers
 
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
             var insc = new Collection<Ins>();
             
@@ -269,8 +288,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Copies arguments from the generic arguments container to the method.
         /// </summary>
-        protected static void WriteCopyArgumentsFromContainer(
-            ModuleWeavingContext rc,
+        protected void WriteCopyArgumentsFromContainer(
             MethodDefinition method,
             int offset,
             VariableDefinition argumentsVariable,
@@ -279,7 +297,7 @@ namespace Spinner.Fody.Weavers
         {
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
             var insc = new Collection<Ins>();
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
@@ -315,8 +333,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Copies arguments from the generic arguments container to the method.
         /// </summary>
-        protected static void WriteSmCopyArgumentsFromContainer(
-            ModuleWeavingContext rc,
+        protected void WriteSmCopyArgumentsFromContainer(
             MethodDefinition method,
             MethodDefinition stateMachine,
             int offset,
@@ -326,7 +343,7 @@ namespace Spinner.Fody.Weavers
         {
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(rc, method, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
             var insc = new Collection<Ins>();
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
@@ -399,25 +416,22 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Write aspect initialization, works for both normal methods and state machines.
         /// </summary>
-        protected static void WriteAspectInit(
-            ModuleWeavingContext mwc,
+        protected void WriteAspectInit(
             MethodDefinition method,
-            int offset,
-            TypeDefinition aspectType,
-            FieldReference aspectCacheField)
+            int offset)
         {
             // NOTE: Aspect type can't be generic since its declared by an attribute
-            MethodDefinition ctorDef = aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
-            MethodReference ctor = mwc.SafeImport(ctorDef);
+            MethodDefinition ctorDef = _aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
+            MethodReference ctor = _mwc.SafeImport(ctorDef);
 
             Ins jtNotNull = Ins.Create(OpCodes.Nop);
 
             var insc = new[]
             {
-                Ins.Create(OpCodes.Ldsfld, aspectCacheField),
+                Ins.Create(OpCodes.Ldsfld, _aspectField),
                 Ins.Create(OpCodes.Brtrue, jtNotNull),
                 Ins.Create(OpCodes.Newobj, ctor),
-                Ins.Create(OpCodes.Stsfld, aspectCacheField),
+                Ins.Create(OpCodes.Stsfld, _aspectField),
                 jtNotNull
             };
 
@@ -427,21 +441,18 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Writes a call to an aspect's advice with the advice args object if available.
         /// </summary>
-        protected static void WriteCallAdvice(
-            ModuleWeavingContext mwc,
+        protected void WriteCallAdvice(
             MethodDefinition method,
             int offset,
             MethodReference baseReference,
-            TypeDefinition aspectType,
-            FieldReference aspectField,
             VariableDefinition iaVariableOpt)
         {
-            MethodDefinition adviceDef = aspectType.GetMethod(baseReference, true);
-            MethodReference advice = mwc.SafeImport(adviceDef);
+            MethodDefinition adviceDef = _aspectType.GetMethod(baseReference, true);
+            MethodReference advice = _mwc.SafeImport(adviceDef);
 
             var insc = new[]
             {
-                Ins.Create(OpCodes.Ldsfld, aspectField),
+                Ins.Create(OpCodes.Ldsfld, _aspectField),
                 iaVariableOpt != null ? Ins.Create(OpCodes.Ldloc, iaVariableOpt) : Ins.Create(OpCodes.Ldnull),
                 Ins.Create(OpCodes.Callvirt, advice)
             };
@@ -452,11 +463,11 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// 
         /// </summary>
-        protected static void WriteBindingInit(MethodDefinition method, int offset, TypeDefinition bindingType)
+        protected void WriteBindingInit(MethodDefinition method, int offset)
         {
             // Initialize the binding instance
-            FieldReference instanceField = bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName);
-            MethodReference constructor = bindingType.Methods.Single(f => f.IsConstructor && !f.IsStatic);
+            FieldReference instanceField = _bindingClass.Fields.Single(f => f.Name == BindingInstanceFieldName);
+            MethodReference constructor = _bindingClass.Methods.Single(f => f.IsConstructor && !f.IsStatic);
 
             Ins notNullLabel = Ins.Create(OpCodes.Nop);
 
@@ -472,8 +483,7 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void WriteSetMethodInfo(
-            ModuleWeavingContext mwc,
+        protected void WriteSetMethodInfo(
             MethodDefinition method,
             MethodDefinition stateMachineOpt,
             int offset,
@@ -481,9 +491,9 @@ namespace Spinner.Fody.Weavers
             FieldReference maFieldOpt)
         {
             MethodDefinition target = stateMachineOpt ?? method;
-            MethodReference getMethodFromHandle = mwc.SafeImport(mwc.Framework.MethodBase_GetMethodFromHandle);
-            MethodReference setMethod = mwc.SafeImport(mwc.Spinner.MethodArgs_Method.SetMethod);
-            TypeReference methodInfo = mwc.SafeImport(mwc.Framework.MethodInfo);
+            MethodReference getMethodFromHandle = _mwc.SafeImport(_mwc.Framework.MethodBase_GetMethodFromHandle);
+            MethodReference setMethod = _mwc.SafeImport(_mwc.Spinner.MethodArgs_Method.SetMethod);
+            TypeReference methodInfo = _mwc.SafeImport(_mwc.Framework.MethodInfo);
 
             var insc = new Collection<Ins>();
 
@@ -506,39 +516,34 @@ namespace Spinner.Fody.Weavers
             target.Body.InsertInstructions(offset, insc);
         }
 
-        protected static void CreateAspectCacheField(
-            ModuleWeavingContext mwc,
-            IMemberDefinition aspectTarget,
-            TypeReference aspectType,
-            int aspectIndex,
-            out FieldReference aspectCacheField)
+        protected void CreateAspectCacheField()
         {
-            string name = NameGenerator.MakeAspectFieldName(aspectTarget.Name, aspectIndex);
+            string name = NameGenerator.MakeAspectFieldName(_aspectTarget.Name, _aspectIndex);
 
             var fattrs = FieldAttributes.Private | FieldAttributes.Static;
             
-            var aspectFieldDef = new FieldDefinition(name, fattrs, mwc.SafeImport(aspectType));
-            AddCompilerGeneratedAttribute(mwc, aspectFieldDef);
-            aspectTarget.DeclaringType.Fields.Add(aspectFieldDef);
+            var aspectFieldDef = new FieldDefinition(name, fattrs, _mwc.SafeImport(_aspectType));
+            AddCompilerGeneratedAttribute(aspectFieldDef);
+            _aspectTarget.DeclaringType.Fields.Add(aspectFieldDef);
 
-            aspectCacheField = aspectFieldDef;
+            _aspectField = aspectFieldDef;
         }
 
-        protected static MethodDefinition MakeDefaultConstructor(ModuleWeavingContext mwc, TypeDefinition type)
+        protected MethodDefinition MakeDefaultConstructor(TypeDefinition type)
         {
             TypeDefinition baseTypeDef = type.BaseType.Resolve();
             MethodDefinition baseCtorDef = baseTypeDef.Methods.Single(m => !m.IsStatic && m.Parameters.Count == 0);
 
             MethodReference baseCtor = type.BaseType.IsGenericInstance
-                ? mwc.SafeImport(baseCtorDef).WithGenericDeclaringType((GenericInstanceType) type.BaseType)
-                : mwc.SafeImport(baseCtorDef);
+                ? _mwc.SafeImport(baseCtorDef).WithGenericDeclaringType((GenericInstanceType) type.BaseType)
+                : _mwc.SafeImport(baseCtorDef);
 
             var attrs = MethodAttributes.Public |
                         MethodAttributes.HideBySig |
                         MethodAttributes.SpecialName |
                         MethodAttributes.RTSpecialName;
 
-            var method = new MethodDefinition(".ctor", attrs, mwc.Module.TypeSystem.Void);
+            var method = new MethodDefinition(".ctor", attrs, _mwc.Module.TypeSystem.Void);
 
             Collection<Ins> i = method.Body.Instructions;
             i.Add(Ins.Create(OpCodes.Ldarg_0));
@@ -548,9 +553,9 @@ namespace Spinner.Fody.Weavers
             return method;
         }
 
-        protected static void AddCompilerGeneratedAttribute(ModuleWeavingContext mwc, ICustomAttributeProvider definition)
+        protected void AddCompilerGeneratedAttribute(ICustomAttributeProvider definition)
         {
-            MethodReference ctor = mwc.SafeImport(mwc.Framework.CompilerGeneratedAttribute_ctor);
+            MethodReference ctor = _mwc.SafeImport(_mwc.Framework.CompilerGeneratedAttribute_ctor);
             
             definition.CustomAttributes.Add(new CustomAttribute(ctor));
         }
@@ -558,10 +563,10 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Get the features declared for a type. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
         /// </summary>
-        protected static Features GetFeatures(ModuleWeavingContext mwc, TypeDefinition aspectType)
+        protected Features GetFeatures(TypeDefinition aspectType)
         {
-            TypeDefinition attrType = mwc.Spinner.FeaturesAttribute;
-            TypeDefinition analyzedAttrType = mwc.Spinner.AnalyzedFeaturesAttribute;
+            TypeDefinition attrType = _mwc.Spinner.FeaturesAttribute;
+            TypeDefinition analyzedAttrType = _mwc.Spinner.AnalyzedFeaturesAttribute;
 
             Features? features = null;
 
@@ -600,10 +605,10 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Get the features declared for an advice. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
         /// </summary>
-        protected static Features GetFeatures(ModuleWeavingContext mwc, MethodDefinition advice)
+        protected Features GetFeatures(MethodDefinition advice)
         {
-            TypeDefinition attrType = mwc.Spinner.FeaturesAttribute;
-            TypeDefinition analyzedAttrType = mwc.Spinner.AnalyzedFeaturesAttribute;
+            TypeDefinition attrType = _mwc.Spinner.FeaturesAttribute;
+            TypeDefinition analyzedAttrType = _mwc.Spinner.AnalyzedFeaturesAttribute;
             
             Features? features = null;
 
@@ -641,34 +646,31 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Create a nested binding class with an empty default constructor and a static instance field.
         /// </summary>
-        protected static void CreateBindingClass(
-            ModuleWeavingContext mwc,
-            TypeDefinition declaringType,
+        protected void CreateBindingClass(
             TypeReference baseType,
-            string name,
-            out TypeDefinition bindingTypeDef)
+            string name)
         {
             var tattrs = TypeAttributes.NestedPrivate |
                          TypeAttributes.Class |
                          TypeAttributes.Sealed;
 
-            bindingTypeDef = new TypeDefinition(null, name, tattrs, baseType)
+            _bindingClass = new TypeDefinition(null, name, tattrs, baseType)
             {
-                DeclaringType = declaringType
+                DeclaringType = _aspectTarget.DeclaringType
             };
 
-            AddCompilerGeneratedAttribute(mwc, bindingTypeDef);
+            AddCompilerGeneratedAttribute(_bindingClass);
 
-            declaringType.NestedTypes.Add(bindingTypeDef);
+            _aspectTarget.DeclaringType.NestedTypes.Add(_bindingClass);
 
-            MethodDefinition constructorDef = MakeDefaultConstructor(mwc, bindingTypeDef);
+            MethodDefinition constructorDef = MakeDefaultConstructor(_bindingClass);
 
-            bindingTypeDef.Methods.Add(constructorDef);
+            _bindingClass.Methods.Add(constructorDef);
 
             var instanceAttrs = FieldAttributes.Public | FieldAttributes.Static;
-            var instanceField = new FieldDefinition(BindingInstanceFieldName, instanceAttrs, bindingTypeDef);
+            _bindingInstanceField = new FieldDefinition(BindingInstanceFieldName, instanceAttrs, _bindingClass);
 
-            bindingTypeDef.Fields.Add(instanceField);
+            _bindingClass.Fields.Add(_bindingInstanceField);
         }
     }
 

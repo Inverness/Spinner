@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using Mono.Cecil;
+﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
@@ -14,59 +13,65 @@ namespace Spinner.Fody.Weavers
     {
         private const string InvokeMethodName = "Invoke";
 
-        internal static void Weave(
+        private readonly MethodDefinition _method;
+        private MethodDefinition _original;
+        private FieldReference _returnValueField;
+        private VariableDefinition _miaVar;
+
+        public MethodInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
-            MethodDefinition method,
             TypeDefinition aspectType,
-            int aspectIndex)
+            int aspectIndex,
+            MethodDefinition aspectTarget)
+            : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
-            Features aspectFeatures = GetFeatures(mwc, aspectType);
+            _method = aspectTarget;
+        }
 
-            MethodDefinition original = DuplicateOriginalMethod(mwc, method, aspectIndex);
+        protected override void Weave()
+        {
+            _original = DuplicateOriginalMethod(_method);
             
-            TypeDefinition bindingType;
-            CreateMethodBindingClass(mwc, method, aspectIndex, original, out bindingType);
-
-            FieldReference aspectField;
-            CreateAspectCacheField(mwc, method, aspectType, aspectIndex, out aspectField);
+            CreateMethodBindingClass();
+            
+            CreateAspectCacheField();
 
             // Clear the target method body as it needs entirely new code
+            MethodDefinition method = _method;
 
             method.Body.InitLocals = false;
             method.Body.Instructions.Clear();
             method.Body.Variables.Clear();
             method.Body.ExceptionHandlers.Clear();
-            
+
             Collection<Ins> insc = method.Body.Instructions;
-            
+
             //WriteOutArgumentInit(il);
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(mwc, method, insc.Count, out argumentsVariable);
+            WriteArgumentContainerInit(method, insc.Count, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(mwc, method, insc.Count, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(method, insc.Count, argumentsVariable, true);
+
+            WriteAspectInit(method, insc.Count);
+
+            WriteBindingInit(method, insc.Count);
             
-            WriteAspectInit(mwc, method, insc.Count, aspectType, aspectField);
+            WriteMiaInit(method, insc.Count, argumentsVariable);
 
-            WriteBindingInit(method, insc.Count, bindingType);
-            
-            FieldReference valueField;
-            VariableDefinition iaVariable;
-            WriteMiaInit(mwc, method, insc.Count, argumentsVariable, bindingType, out iaVariable, out valueField);
+            if (_aspectFeatures.Has(Features.MemberInfo))
+                WriteSetMethodInfo(method, null, insc.Count, _miaVar, null);
 
-            if (aspectFeatures.Has(Features.MemberInfo))
-                WriteSetMethodInfo(mwc, method, null, insc.Count, iaVariable, null);
+            MethodReference adviceBase = _mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
+            WriteCallAdvice(method, insc.Count, adviceBase, _miaVar);
 
-            MethodReference adviceBase = mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
-            WriteCallAdvice(mwc, method, insc.Count, adviceBase, aspectType, aspectField, iaVariable);
-            
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(mwc, method, insc.Count, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(method, insc.Count, argumentsVariable, false, true);
 
-            if (valueField != null)
+            if (_returnValueField != null)
             {
-                insc.Add(Ins.Create(OpCodes.Ldloc, iaVariable));
-                insc.Add(Ins.Create(OpCodes.Ldfld, valueField));
+                insc.Add(Ins.Create(OpCodes.Ldloc, _miaVar));
+                insc.Add(Ins.Create(OpCodes.Ldfld, _returnValueField));
             }
             insc.Add(Ins.Create(OpCodes.Ret));
 
@@ -76,17 +81,18 @@ namespace Spinner.Fody.Weavers
             method.Body.OptimizeMacros();
         }
 
+        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index)
+        {
+            new MethodInterceptionAspectWeaver(mwc, aspect, index, method).Weave();
+        }
+
         /// <summary>
         /// Writes the MethodInterceptionArgs initialization.
         /// </summary>
-        private static void WriteMiaInit(
-            ModuleWeavingContext mwc,
+        private void WriteMiaInit(
             MethodDefinition method,
             int offset,
-            VariableDefinition argumentsVariable,
-            TypeDefinition bindingType,
-            out VariableDefinition miaVariable,
-            out FieldReference returnValueField)
+            VariableDefinition argumentsVariable)
         {
             ModuleDefinition module = method.Module;
             
@@ -95,28 +101,26 @@ namespace Spinner.Fody.Weavers
             
             if (method.ReturnType == module.TypeSystem.Void)
             {
-                TypeDefinition miaTypeDef = mwc.Spinner.BoundMethodInterceptionArgs;
-                miaType = mwc.SafeImport(miaTypeDef);
+                TypeDefinition miaTypeDef = _mwc.Spinner.BoundMethodInterceptionArgs;
+                miaType = _mwc.SafeImport(miaTypeDef);
 
-                MethodDefinition constructorDef = mwc.Spinner.BoundMethodInterceptionArgs_ctor;
-                constructor = mwc.SafeImport(constructorDef);
-
-                returnValueField = null;
+                MethodDefinition constructorDef = _mwc.Spinner.BoundMethodInterceptionArgs_ctor;
+                constructor = _mwc.SafeImport(constructorDef);
             }
             else
             {
-                TypeDefinition miaTypeDef = mwc.Spinner.BoundMethodInterceptionArgsT1;
-                GenericInstanceType genericMiaType = mwc.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
+                TypeDefinition miaTypeDef = _mwc.Spinner.BoundMethodInterceptionArgsT1;
+                GenericInstanceType genericMiaType = _mwc.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
                 miaType = genericMiaType;
 
-                MethodDefinition constructorDef = mwc.Spinner.BoundMethodInterceptionArgsT1_ctor;
-                constructor = mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
+                MethodDefinition constructorDef = _mwc.Spinner.BoundMethodInterceptionArgsT1_ctor;
+                constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
 
-                FieldDefinition returnValueFieldDef = mwc.Spinner.BoundMethodInterceptionArgsT1_TypedReturnValue;
-                returnValueField = mwc.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
+                FieldDefinition returnValueFieldDef = _mwc.Spinner.BoundMethodInterceptionArgsT1_TypedReturnValue;
+                _returnValueField = _mwc.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
-            miaVariable = method.Body.AddVariableDefinition(miaType);
+            _miaVar = method.Body.AddVariableDefinition(miaType);
             var insc = new Collection<Ins>();
 
             if (method.IsStatic)
@@ -136,41 +140,33 @@ namespace Spinner.Fody.Weavers
             insc.Add(argumentsVariable == null
                 ? Ins.Create(OpCodes.Ldnull)
                 : Ins.Create(OpCodes.Ldloc, argumentsVariable));
-
-            // the method binding
-            insc.Add(bindingType == null
-                ? Ins.Create(OpCodes.Ldnull)
-                : Ins.Create(OpCodes.Ldsfld, bindingType.Fields.Single(f => f.Name == BindingInstanceFieldName)));
+            
+            insc.Add(Ins.Create(OpCodes.Ldsfld, _bindingInstanceField));
 
             insc.Add(Ins.Create(OpCodes.Newobj, constructor));
-            insc.Add(Ins.Create(OpCodes.Stloc, miaVariable));
+            insc.Add(Ins.Create(OpCodes.Stloc, _miaVar));
 
             method.Body.InsertInstructions(offset, insc);
         }
 
-        private static void CreateMethodBindingClass(
-            ModuleWeavingContext mwc,
-            MethodDefinition method,
-            int aspectIndex,
-            MethodReference original,
-            out TypeDefinition bindingTypeDef)
+        private void CreateMethodBindingClass()
         {
-            ModuleDefinition module = method.Module;
+            ModuleDefinition module = _method.Module;
 
             TypeReference baseType;
 
-            if (method.ReturnType == module.TypeSystem.Void)
+            if (_method.ReturnType == module.TypeSystem.Void)
             {
-                baseType = mwc.SafeImport(mwc.Spinner.MethodBinding);
+                baseType = _mwc.SafeImport(_mwc.Spinner.MethodBinding);
             }
             else
             {
-                baseType = mwc.SafeImport(mwc.Spinner.MethodBindingT1).MakeGenericInstanceType(method.ReturnType);
+                baseType = _mwc.SafeImport(_mwc.Spinner.MethodBindingT1).MakeGenericInstanceType(_method.ReturnType);
             }
 
-            string name = NameGenerator.MakeMethodBindingName(method.Name, aspectIndex);
+            string name = NameGenerator.MakeMethodBindingName(_method.Name, _aspectIndex);
 
-            CreateBindingClass(mwc, method.DeclaringType, baseType, name, out bindingTypeDef);
+            CreateBindingClass(baseType, name);
 
             // Override the invoke method
 
@@ -180,12 +176,12 @@ namespace Spinner.Fody.Weavers
                               MethodAttributes.HideBySig |
                               MethodAttributes.ReuseSlot;
 
-            var invokeMethod = new MethodDefinition(InvokeMethodName, invokeAttrs, method.ReturnType);
+            var invokeMethod = new MethodDefinition(InvokeMethodName, invokeAttrs, _method.ReturnType);
 
-            bindingTypeDef.Methods.Add(invokeMethod);
+            _bindingClass.Methods.Add(invokeMethod);
 
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-            TypeReference argumentsBaseType = mwc.SafeImport(mwc.Spinner.Arguments);
+            TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
 
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));
@@ -194,11 +190,11 @@ namespace Spinner.Fody.Weavers
 
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
-            GetArgumentContainerInfo(mwc, method, out argumentContainerType, out argumentContainerFields);
+            GetArgumentContainerInfo(_method, out argumentContainerType, out argumentContainerFields);
 
             // Case the arguments container from its base type to the generic instance type
             VariableDefinition argsContainer = null;
-            if (method.Parameters.Count != 0)
+            if (_method.Parameters.Count != 0)
             {
                 argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
 
@@ -208,27 +204,27 @@ namespace Spinner.Fody.Weavers
             }
 
             // Load the instance for the method call
-            if (!method.IsStatic)
+            if (!_method.IsStatic)
             {
                 // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
                 bil.Emit(OpCodes.Ldarg_1);
                 bil.Emit(OpCodes.Ldind_Ref);
-                bil.Emit(method.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass, method.DeclaringType);
+                bil.Emit(_method.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass, _method.DeclaringType);
             }
 
             // Load arguments or addresses directly from the arguments container
-            for (int i = 0; i < method.Parameters.Count; i++)
+            for (int i = 0; i < _method.Parameters.Count; i++)
             {
-                bool byRef = method.Parameters[i].ParameterType.IsByReference;
+                bool byRef = _method.Parameters[i].ParameterType.IsByReference;
 
                 bil.Emit(OpCodes.Ldloc, argsContainer);
                 bil.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
             }
 
-            if (method.IsStatic || method.DeclaringType.IsValueType)
-                bil.Emit(OpCodes.Call, original);
+            if (_method.IsStatic || _method.DeclaringType.IsValueType)
+                bil.Emit(OpCodes.Call, _original);
             else
-                bil.Emit(OpCodes.Callvirt, original);
+                bil.Emit(OpCodes.Callvirt, _original);
 
             bil.Emit(OpCodes.Ret);
         }
