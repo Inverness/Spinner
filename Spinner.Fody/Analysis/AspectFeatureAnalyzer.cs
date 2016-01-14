@@ -5,6 +5,7 @@ using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Collections.Generic;
+using Spinner.Aspects;
 
 namespace Spinner.Fody.Analysis
 {

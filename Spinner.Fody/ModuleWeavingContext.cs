@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Mono.Cecil;
+using Spinner.Aspects;
 
 namespace Spinner.Fody
 {

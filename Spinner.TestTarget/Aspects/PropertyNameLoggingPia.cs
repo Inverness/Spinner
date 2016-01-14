@@ -1,4 +1,5 @@
 using System;
+using Spinner.Aspects;
 
 namespace Spinner.TestTarget.Aspects
 {
