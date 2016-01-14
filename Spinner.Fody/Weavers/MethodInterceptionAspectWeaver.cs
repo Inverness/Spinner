@@ -19,7 +19,7 @@ namespace Spinner.Fody.Weavers
         private FieldReference _returnValueField;
         private VariableDefinition _miaVar;
 
-        public MethodInterceptionAspectWeaver(
+        private MethodInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
             TypeDefinition aspectType,
             int aspectIndex,
@@ -27,6 +27,11 @@ namespace Spinner.Fody.Weavers
             : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
             _method = aspectTarget;
+        }
+
+        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index)
+        {
+            new MethodInterceptionAspectWeaver(mwc, aspect, index, method).Weave();
         }
 
         protected override void Weave()
@@ -80,11 +85,6 @@ namespace Spinner.Fody.Weavers
 
             method.Body.RemoveNops();
             method.Body.OptimizeMacros();
-        }
-
-        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index)
-        {
-            new MethodInterceptionAspectWeaver(mwc, aspect, index, method).Weave();
         }
 
         /// <summary>

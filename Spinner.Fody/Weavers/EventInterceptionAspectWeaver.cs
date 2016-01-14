@@ -28,7 +28,7 @@ namespace Spinner.Fody.Weavers
         private FieldDefinition _invokerDelegateField;
         private MethodDefinition _invokerMethod;
 
-        public EventInterceptionAspectWeaver(
+        private EventInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
             TypeDefinition aspectType,
             int aspectIndex,
@@ -36,6 +36,11 @@ namespace Spinner.Fody.Weavers
             : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
             _evt = aspectTarget;
+        }
+
+        internal static void Weave(ModuleWeavingContext mwc, EventDefinition evt, TypeDefinition aspect, int index)
+        {
+            new EventInterceptionAspectWeaver(mwc, aspect, index, evt).Weave();
         }
 
         protected override void Weave()
@@ -70,11 +75,6 @@ namespace Spinner.Fody.Weavers
                 RewriteMethod(adder);
             if (remover != null)
                 RewriteMethod(remover);
-        }
-
-        internal static void Weave(ModuleWeavingContext mwc, EventDefinition evt, TypeDefinition aspect, int index)
-        {
-            new EventInterceptionAspectWeaver(mwc, aspect, index, evt).Weave();
         }
 
         private void RewriteMethod(MethodDefinition method)

@@ -29,6 +29,11 @@ namespace Spinner.Fody.Weavers
             Debug.Assert(_property.GetMethod != null || _property.SetMethod != null);
         }
 
+        internal static void Weave(ModuleWeavingContext mwc, PropertyDefinition property, TypeDefinition aspect, int index)
+        {
+            new PropertyInterceptionAspectWeaver(mwc, aspect, index, property).Weave();
+        }
+
         protected override void Weave()
         {
             MethodDefinition getter = _property.GetMethod;
@@ -45,11 +50,6 @@ namespace Spinner.Fody.Weavers
                 WeaveMethod(getter);
             if (setter != null)
                 WeaveMethod(setter);
-        }
-
-        internal static void Weave(ModuleWeavingContext mwc, PropertyDefinition property, TypeDefinition aspect, int index)
-        {
-            new PropertyInterceptionAspectWeaver(mwc, aspect, index, property).Weave();
         }
 
         private void WeaveMethod(MethodDefinition method)

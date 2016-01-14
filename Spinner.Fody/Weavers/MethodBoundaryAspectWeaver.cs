@@ -24,7 +24,7 @@ namespace Spinner.Fody.Weavers
         private MethodDefinition _stateMachine;
         private TypeDefinition _effectiveReturnType;
 
-        public MethodBoundaryAspectWeaver(
+        private MethodBoundaryAspectWeaver(
             ModuleWeavingContext mwc,
             TypeDefinition aspectType,
             int aspectIndex,
@@ -32,6 +32,11 @@ namespace Spinner.Fody.Weavers
             : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
             _method = aspectTarget;
+        }
+
+        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index)
+        {
+            new MethodBoundaryAspectWeaver(mwc, aspect, index, method).Weave();
         }
 
         protected override void Weave()
@@ -79,11 +84,6 @@ namespace Spinner.Fody.Weavers
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-        }
-
-        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index)
-        {
-            new MethodBoundaryAspectWeaver(mwc, aspect, index, method).Weave();
         }
 
         private void WeaveMethod()
