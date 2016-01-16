@@ -53,6 +53,8 @@ namespace Spinner.Fody
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             var stopwatch = new Stopwatch();
+
+            _mwc.Multicasts.InspectAssemblies();
             
             // Analyze aspect types in parallel.
 
@@ -98,37 +100,36 @@ namespace Spinner.Fody
             List<Tuple<IMemberDefinition, TypeDefinition, int>> aspects = null;
 
             // Use HasX properties to avoid on-demand allocation of the collections.
-
+            
             if (type.HasMethods)
             {
                 foreach (MethodDefinition method in type.Methods)
                 {
-                    if (method.HasCustomAttributes)
+                    MulticastInstance[] multicastAttributes = _mwc.Multicasts.GetMulticasts(method);
+
+                    foreach (MulticastInstance mi in multicastAttributes)
                     {
-                        foreach (CustomAttribute a in method.CustomAttributes)
+                        TypeDefinition atype = mi.AttributeType;
+
+                        if (IsAspectAttribute(atype, _mwc.Spinner.IMethodBoundaryAspect))
                         {
-                            TypeDefinition atype = a.AttributeType.Resolve();
+                            Debug.Assert(method.HasBody);
 
-                            if (IsAspectAttribute(atype, _mwc.Spinner.IMethodBoundaryAspect))
-                            {
-                                Debug.Assert(method.HasBody);
+                            if (aspects == null)
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, 0));
 
-                                if (aspects == null)
-                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) method, atype, 0));
+                            LogDebug($"Found aspect {atype.Name} for {method}");
+                        }
+                        else if (IsAspectAttribute(atype, _mwc.Spinner.IMethodInterceptionAspect))
+                        {
+                            Debug.Assert(method.HasBody);
 
-                                LogDebug($"Found aspect {atype.Name} for {method}");
-                            }
-                            else if (IsAspectAttribute(atype, _mwc.Spinner.IMethodInterceptionAspect))
-                            {
-                                Debug.Assert(method.HasBody);
+                            if (aspects == null)
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, 1));
 
-                                if (aspects == null)
-                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) method, atype, 1));
-
-                                LogDebug($"Found aspect {atype.Name} for {method}");
-                            }
+                            LogDebug($"Found aspect {atype.Name} for {method}");
                         }
                     }
                 }
@@ -138,22 +139,21 @@ namespace Spinner.Fody
             {
                 foreach (PropertyDefinition property in type.Properties)
                 {
-                    if (property.HasCustomAttributes)
+                    MulticastInstance[] multicastAttributes = _mwc.Multicasts.GetMulticasts(property);
+                    
+                    foreach (MulticastInstance a in multicastAttributes)
                     {
-                        foreach (CustomAttribute a in property.CustomAttributes)
+                        TypeDefinition atype = a.AttributeType;
+
+                        if (IsAspectAttribute(atype, _mwc.Spinner.IPropertyInterceptionAspect))
                         {
-                            TypeDefinition atype = a.AttributeType.Resolve();
+                            Debug.Assert(property.GetMethod != null || property.SetMethod != null);
 
-                            if (IsAspectAttribute(atype, _mwc.Spinner.IPropertyInterceptionAspect))
-                            {
-                                Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+                            if (aspects == null)
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) property, atype, 2));
 
-                                if (aspects == null)
-                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) property, atype, 2));
-
-                                LogDebug($"Found aspect {atype.Name} for {property}");
-                            }
+                            LogDebug($"Found aspect {atype.Name} for {property}");
                         }
                     }
                 }
@@ -163,20 +163,19 @@ namespace Spinner.Fody
             {
                 foreach (EventDefinition xevent in type.Events)
                 {
-                    if (xevent.HasCustomAttributes)
+                    MulticastInstance[] multicastAttributes = _mwc.Multicasts.GetMulticasts(xevent);
+                    
+                    foreach (MulticastInstance a in multicastAttributes)
                     {
-                        foreach (CustomAttribute a in xevent.CustomAttributes)
+                        TypeDefinition atype = a.AttributeType;
+
+                        if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
                         {
-                            TypeDefinition atype = a.AttributeType.Resolve();
+                            if (aspects == null)
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) xevent, atype, 3));
 
-                            if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
-                            {
-                                if (aspects == null)
-                                    aspects = new List<Tuple<IMemberDefinition, TypeDefinition, int>>();
-                                aspects.Add(Tuple.Create((IMemberDefinition) xevent, atype, 3));
-
-                                LogDebug($"Found aspect {atype.Name} for {xevent}");
-                            }
+                            LogDebug($"Found aspect {atype.Name} for {xevent}");
                         }
                     }
                 }

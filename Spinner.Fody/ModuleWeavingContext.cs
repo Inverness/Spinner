@@ -14,6 +14,7 @@ namespace Spinner.Fody
         internal readonly ModuleDefinition Module;
         internal readonly WellKnownSpinnerMembers Spinner;
         internal readonly WellKnownFrameworkMembers Framework;
+        internal readonly MulticastAttributeRegistry Multicasts;
 
         private readonly ModuleWeaver _weaver;
         private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
@@ -25,6 +26,8 @@ namespace Spinner.Fody
             Module = module;
             Spinner = new WellKnownSpinnerMembers(libraryModule);
             Framework = new WellKnownFrameworkMembers(module);
+
+            Multicasts = new MulticastAttributeRegistry(this);
 
             _methodFeatures = new Dictionary<MethodDefinition, Features>
             {

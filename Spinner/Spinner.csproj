@@ -74,6 +74,10 @@
     <Compile Include="Aspects\MethodInterceptionAspect.cs" />
     <Compile Include="Aspects\PropertyInterceptionArgs.cs" />
     <Compile Include="Aspects\PropertyInterceptionAspect.cs" />
+    <Compile Include="Extensibility\MulticastAttribute.cs" />
+    <Compile Include="Extensibility\MulticastAttributes.cs" />
+    <Compile Include="Extensibility\MulticastInheritance.cs" />
+    <Compile Include="Extensibility\MulticastTargets.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />

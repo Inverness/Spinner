@@ -1,6 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using Spinner.Extensibility;
+using Spinner.TestTarget.Aspects;
+
+[assembly: BasicLoggingMia(AttributeTargetTypes = "Spinner.TestTarget.*",
+                           AttributeTargetElements = MulticastTargets.Method)]
 
 namespace Spinner.TestTarget
 {

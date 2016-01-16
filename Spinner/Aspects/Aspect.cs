@@ -1,12 +1,11 @@
-﻿
-using System;
+﻿using Spinner.Extensibility;
 
 namespace Spinner.Aspects
 {
     /// <summary>
     ///     The base class for all aspect implementations.
     /// </summary>
-    public abstract class Aspect : Attribute, IAspect
+    public abstract class Aspect : MulticastAttribute, IAspect
     {
     }
 }

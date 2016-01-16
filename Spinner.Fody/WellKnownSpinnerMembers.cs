@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
+using SpA = Spinner.Aspects;
+using SpAi = Spinner.Aspects.Internal;
+using SpE = Spinner.Extensibility;
 
 namespace Spinner.Fody
 {
@@ -11,8 +14,9 @@ namespace Spinner.Fody
     {
         internal const int MaxArguments = Aspects.Arguments.MaxItems;
 
-        private const string NsAspects = "Spinner.Aspects";
-        private const string NsAspectsInt = "Spinner.Aspects.Internal";
+        private const string NsA = "Spinner.Aspects";
+        private const string NsAi = "Spinner.Aspects.Internal";
+        private const string NsE = "Spinner.Extensibility";
         
         // ReSharper disable InconsistentNaming
         internal readonly ModuleDefinition Module;
@@ -117,6 +121,11 @@ namespace Spinner.Fody
         internal readonly MethodDefinition WeaverHelpers_GetEventInfo;
         internal readonly MethodDefinition WeaverHelpers_GetPropertyInfo;
 
+        internal readonly TypeDefinition MulticastAttribute;
+        internal readonly TypeDefinition MulticastAttributes;
+        internal readonly TypeDefinition MulticastInheritance;
+        internal readonly TypeDefinition MulticastTargets;
+
         // ReSharper restore InconsistentNaming
 
         private readonly HashSet<TypeDefinition> _emptyAspectBaseTypes; 
@@ -127,9 +136,9 @@ namespace Spinner.Fody
 
             TypeDefinition type;
 
-            IAspect = module.GetType(NsAspects, "IAspect");
+            IAspect = module.GetType(NsA, nameof(SpA.IAspect));
 
-            IMethodBoundaryAspect = type = module.GetType(NsAspects, "IMethodBoundaryAspect");
+            IMethodBoundaryAspect = type = module.GetType(NsA, nameof(SpA.IMethodBoundaryAspect));
             IMethodBoundaryAspect_OnEntry = type.Methods.First(m => m.Name == "OnEntry");
             IMethodBoundaryAspect_OnExit = type.Methods.First(m => m.Name == "OnExit");
             IMethodBoundaryAspect_OnSuccess = type.Methods.First(m => m.Name == "OnSuccess");
@@ -138,22 +147,22 @@ namespace Spinner.Fody
             IMethodBoundaryAspect_OnResume = type.Methods.First(m => m.Name == "OnResume");
             IMethodBoundaryAspect_FilterException = type.Methods.First(m => m.Name == "FilterException");
 
-            IMethodInterceptionAspect = type = module.GetType(NsAspects, "IMethodInterceptionAspect");
+            IMethodInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IMethodInterceptionAspect));
             IMethodInterceptionAspect_OnInvoke = type.Methods.First(m => m.Name == "OnInvoke");
 
-            IPropertyInterceptionAspect = type = module.GetType(NsAspects, "IPropertyInterceptionAspect");
+            IPropertyInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IPropertyInterceptionAspect));
             IPropertyInterceptionAspect_OnGetValue = type.Methods.First(m => m.Name == "OnGetValue");
             IPropertyInterceptionAspect_OnSetValue = type.Methods.First(m => m.Name == "OnSetValue");
 
-            IEventInterceptionAspect = type = module.GetType(NsAspects, "IEventInterceptionAspect");
+            IEventInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IEventInterceptionAspect));
             IEventInterceptionAspect_OnAddHandler = type.Methods.First(m => m.Name == "OnAddHandler");
             IEventInterceptionAspect_OnRemoveHandler = type.Methods.First(m => m.Name == "OnRemoveHandler");
             IEventInterceptionAspect_OnInvokeHandler = type.Methods.First(m => m.Name == "OnInvokeHandler");
 
-            MethodBoundaryAspect = module.GetType(NsAspects, "MethodBoundaryAspect");
-            MethodInterceptionAspect = module.GetType(NsAspects, "MethodInterceptionAspect");
-            PropertyInterceptionAspect = module.GetType(NsAspects, "PropertyInterceptionAspect");
-            EventInterceptionAspect = module.GetType(NsAspects, "EventInterceptionAspect");
+            MethodBoundaryAspect = module.GetType(NsA, nameof(SpA.MethodBoundaryAspect));
+            MethodInterceptionAspect = module.GetType(NsA, nameof(SpA.MethodInterceptionAspect));
+            PropertyInterceptionAspect = module.GetType(NsA, nameof(SpA.PropertyInterceptionAspect));
+            EventInterceptionAspect = module.GetType(NsA, nameof(SpA.EventInterceptionAspect));
 
             _emptyAspectBaseTypes = new HashSet<TypeDefinition>
             {
@@ -163,65 +172,65 @@ namespace Spinner.Fody
                 EventInterceptionAspect
             };
 
-            AdviceArgs = type = module.GetType(NsAspects, "AdviceArgs");
+            AdviceArgs = type = module.GetType(NsA, nameof(SpA.AdviceArgs));
             AdviceArgs_Instance = type.Properties.First(p => p.Name == "Instance");
             AdviceArgs_Tag = type.Properties.First(p => p.Name == "Tag");
 
-            MethodArgs = type = module.GetType(NsAspects, "MethodArgs");
+            MethodArgs = type = module.GetType(NsA, nameof(SpA.MethodArgs));
             MethodArgs_Method = type.Properties.First(p => p.Name == "Method");
             MethodArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
 
-            MethodExecutionArgs = type = module.GetType(NsAspects, "MethodExecutionArgs");
+            MethodExecutionArgs = type = module.GetType(NsA, nameof(SpA.MethodExecutionArgs));
             MethodExecutionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             MethodExecutionArgs_Exception = type.Properties.First(m => m.Name == "Exception");
             MethodExecutionArgs_FlowBehavior = type.Properties.First(m => m.Name == "FlowBehavior");
             MethodExecutionArgs_ReturnValue = type.Properties.First(m => m.Name == "ReturnValue");
             MethodExecutionArgs_YieldValue = type.Properties.First(m => m.Name == "YieldValue");
 
-            MethodBinding = module.GetType(NsAspectsInt, "MethodBinding");
-            MethodBindingT1 = module.GetType(NsAspectsInt, "MethodBinding`1");
-            PropertyBindingT1 = module.GetType(NsAspectsInt, "PropertyBinding`1");
-            EventBinding = module.GetType(NsAspectsInt, "EventBinding");
+            MethodBinding = module.GetType(NsAi, nameof(SpAi.MethodBinding));
+            MethodBindingT1 = module.GetType(NsAi, nameof(SpAi.MethodBinding) + "`1");
+            PropertyBindingT1 = module.GetType(NsAi, "PropertyBinding`1");
+            EventBinding = module.GetType(NsAi, nameof(SpAi.EventBinding));
 
-            Features = module.GetType(NsAspects, "Features");
-            FeaturesAttribute = module.GetType(NsAspects, "FeaturesAttribute");
-            AnalyzedFeaturesAttribute = type = module.GetType(NsAspectsInt, "AnalyzedFeaturesAttribute");
+            Features = module.GetType(NsA, nameof(SpA.Features));
+            FeaturesAttribute = module.GetType(NsA, nameof(SpA.FeaturesAttribute));
+            AnalyzedFeaturesAttribute = type = module.GetType(NsAi, nameof(SpAi.AnalyzedFeaturesAttribute));
             AnalyzedFeaturesAttribute_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            PropertyInterceptionArgs = type = module.GetType(NsAspects, "PropertyInterceptionArgs");
+            PropertyInterceptionArgs = type = module.GetType(NsA, nameof(SpA.PropertyInterceptionArgs));
             PropertyInterceptionArgs_Property = type.Properties.First(p => p.Name == "Property");
             PropertyInterceptionArgs_Index = type.Properties.First(p => p.Name == "Index");
 
-            MethodInterceptionArgs = module.GetType(NsAspects, "MethodInterceptionArgs");
+            MethodInterceptionArgs = module.GetType(NsA, nameof(SpA.MethodInterceptionArgs));
 
-            BoundMethodInterceptionArgs = type = module.GetType(NsAspectsInt, "BoundMethodInterceptionArgs");
+            BoundMethodInterceptionArgs = type = module.GetType(NsAi, nameof(SpAi.BoundMethodInterceptionArgs));
             BoundMethodInterceptionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            BoundMethodInterceptionArgsT1 = type = module.GetType(NsAspectsInt, "BoundMethodInterceptionArgs`1");
+            BoundMethodInterceptionArgsT1 = type = module.GetType(NsAi, nameof(SpAi.BoundMethodInterceptionArgs) + "`1");
             BoundMethodInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundMethodInterceptionArgsT1_TypedReturnValue = type.Fields.First(f => f.Name == "TypedReturnValue");
 
-            BoundPropertyInterceptionArgsT1 = type = module.GetType(NsAspectsInt, "BoundPropertyInterceptionArgs`1");
+            BoundPropertyInterceptionArgsT1 = type = module.GetType(NsAi, "BoundPropertyInterceptionArgs`1");
             BoundPropertyInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundPropertyInterceptionArgsT1_TypedValue = type.Fields.First(f => f.Name == "TypedValue");
 
-            EventInterceptionArgs = type = module.GetType(NsAspects, "EventInterceptionArgs");
+            EventInterceptionArgs = type = module.GetType(NsA, nameof(SpA.EventInterceptionArgs));
             EventInterceptionArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
             EventInterceptionArgs_Handler = type.Properties.First(p => p.Name == "Handler");
             EventInterceptionArgs_ReturnValue = type.Properties.First(p => p.Name == "ReturnValue");
             EventInterceptionArgs_Event = type.Properties.First(p => p.Name == "Event");
 
-            BoundEventInterceptionArgs = type = module.GetType(NsAspectsInt, "BoundEventInterceptionArgs");
+            BoundEventInterceptionArgs = type = module.GetType(NsAi, nameof(SpAi.BoundEventInterceptionArgs));
             BoundEventInterceptionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            Arguments = type = module.GetType(NsAspects, "Arguments");
+            Arguments = type = module.GetType(NsA, nameof(SpA.Arguments));
             Arguments_set_Item = type.Methods.First(m => m.Name == "set_Item");
             Arguments_SetValue = type.Methods.First(m => m.Name == "SetValue" && !m.HasGenericParameters);
             Arguments_SetValueT = type.Methods.First(m => m.Name == "SetValue" && m.HasGenericParameters);
 
             ArgumentsT = new TypeDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                ArgumentsT[i] = module.GetType(NsAspectsInt, "Arguments`" + i);
+                ArgumentsT[i] = module.GetType(NsAi, "Arguments`" + i);
 
             ArgumentsT_ctor = new MethodDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
@@ -240,10 +249,15 @@ namespace Spinner.Fody
                 ArgumentsT_Item[i] = fields;
             }
 
-            type = module.GetType(NsAspectsInt, "WeaverHelpers");
+            type = module.GetType(NsAi, nameof(SpAi.WeaverHelpers));
             WeaverHelpers_InvokeEvent = type.Methods.First(m => m.Name == "InvokeEvent");
             WeaverHelpers_GetEventInfo = type.Methods.First(m => m.Name == "GetEventInfo");
             WeaverHelpers_GetPropertyInfo = type.Methods.First(m => m.Name == "GetPropertyInfo");
+
+            MulticastAttribute = module.GetType(NsE, nameof(SpE.MulticastAttribute));
+            MulticastAttributes = module.GetType(NsE, nameof(SpE.MulticastAttributes));
+            MulticastInheritance = module.GetType(NsE, nameof(SpE.MulticastInheritance));
+            MulticastTargets = module.GetType(NsE, nameof(SpE.MulticastTargets));
         }
 
         /// <summary>

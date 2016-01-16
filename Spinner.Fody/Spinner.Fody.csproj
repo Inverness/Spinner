@@ -46,8 +46,11 @@
     <Compile Include="ModuleWeavingContext.cs" />
     <Compile Include="MethodBodyExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
+    <Compile Include="MulticastAttributeRegistry.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ReferenceExtensions.cs" />
+    <Compile Include="StringUtility.cs" />
+    <Compile Include="Utilities\CollectionUtility.cs" />
     <Compile Include="Utilities\LabelProcessor.cs" />
     <Compile Include="Weavers\AspectWeaver.cs" />
     <Compile Include="Weavers\EventInterceptionAspectWeaver.cs" />
