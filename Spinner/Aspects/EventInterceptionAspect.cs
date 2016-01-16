@@ -2,7 +2,7 @@
 
 namespace Spinner.Aspects
 {
-    [AttributeUsage(AttributeTargets.Event, AllowMultiple = true)]
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
     public abstract class EventInterceptionAspect : Aspect, IEventInterceptionAspect
     {
         public virtual void OnAddHandler(EventInterceptionArgs args)

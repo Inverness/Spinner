@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
 using Spinner.Fody.Analysis;
+using Spinner.Fody.Multicasting;
 using Spinner.Fody.Weavers;
 
 namespace Spinner.Fody
@@ -54,7 +55,7 @@ namespace Spinner.Fody
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             var stopwatch = new Stopwatch();
 
-            _mwc.Multicasts.InspectAssemblies();
+            _mwc.Multicasts.ProcessMulticasts();
             
             // Analyze aspect types in parallel.
 
@@ -105,7 +106,7 @@ namespace Spinner.Fody
             {
                 foreach (MethodDefinition method in type.Methods)
                 {
-                    MulticastInstance[] multicastAttributes = _mwc.Multicasts.GetMulticasts(method);
+                    IList<MulticastInstance> multicastAttributes = _mwc.Multicasts.GetMulticasts(method);
 
                     foreach (MulticastInstance mi in multicastAttributes)
                     {
@@ -139,7 +140,7 @@ namespace Spinner.Fody
             {
                 foreach (PropertyDefinition property in type.Properties)
                 {
-                    MulticastInstance[] multicastAttributes = _mwc.Multicasts.GetMulticasts(property);
+                    IList<MulticastInstance> multicastAttributes = _mwc.Multicasts.GetMulticasts(property);
                     
                     foreach (MulticastInstance a in multicastAttributes)
                     {
@@ -163,7 +164,7 @@ namespace Spinner.Fody
             {
                 foreach (EventDefinition xevent in type.Events)
                 {
-                    MulticastInstance[] multicastAttributes = _mwc.Multicasts.GetMulticasts(xevent);
+                    IList<MulticastInstance> multicastAttributes = _mwc.Multicasts.GetMulticasts(xevent);
                     
                     foreach (MulticastInstance a in multicastAttributes)
                     {

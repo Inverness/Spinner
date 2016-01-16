@@ -1,19 +1,21 @@
 using System;
+using Spinner.Extensibility;
 using Spinner.TestTarget.Aspects;
 
 namespace Spinner.TestTarget
 {
+    [BasicLoggingEia(AttributeTargetElements = MulticastTargets.Event, AttributeTargetMemberAttributes = MulticastAttributes.Public)]
     public class EventInterceptionTest
     {
         private EventHandler _customHandlers;
 
-        [BasicLoggingEia]
+        //[BasicLoggingEia]
         public event EventHandler Normal;
 
-        [BasicLoggingEia]
+        //[BasicLoggingEia]
         public static event EventHandler NormalStatic;
 
-        [BasicLoggingEia]
+        //[BasicLoggingEia]
         public event EventHandler Custom
         {
             add { _customHandlers += value; }

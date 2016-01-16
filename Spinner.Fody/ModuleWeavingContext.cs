@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Mono.Cecil;
 using Spinner.Aspects;
+using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody
 {

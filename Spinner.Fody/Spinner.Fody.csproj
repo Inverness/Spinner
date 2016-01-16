@@ -46,7 +46,10 @@
     <Compile Include="ModuleWeavingContext.cs" />
     <Compile Include="MethodBodyExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
-    <Compile Include="MulticastAttributeRegistry.cs" />
+    <Compile Include="Multicasting\MulticastAttributeRegistry.cs" />
+    <Compile Include="Multicasting\MulticastInstance.cs" />
+    <Compile Include="Multicasting\ProviderType.cs" />
+    <Compile Include="Multicasting\StringMatcher.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ReferenceExtensions.cs" />
     <Compile Include="StringUtility.cs" />
