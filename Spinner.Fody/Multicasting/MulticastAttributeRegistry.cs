@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
 using Mono.Cecil;
 using Spinner.Extensibility;
 
@@ -11,7 +13,9 @@ namespace Spinner.Fody.Multicasting
     /// </summary>
     internal class MulticastAttributeRegistry
     {
-        private static readonly IList<MulticastInstance> s_noInstances = new MulticastInstance[0]; 
+        private delegate void ResultHandler(MulticastInstance mi, ICustomAttributeProvider provider);
+
+        private static readonly IList<MulticastInstance> s_noInstances = new MulticastInstance[0];
 
         private readonly ModuleWeavingContext _mwc;
         private readonly TypeDefinition _multicastAttributeType;
@@ -44,12 +48,13 @@ namespace Spinner.Fody.Multicasting
         internal IList<MulticastInstance> GetMulticasts(ICustomAttributeProvider provider)
         {
             List<MulticastInstance> multicasts;
+            // ReSharper disable once InconsistentlySynchronizedField
             return _targets.TryGetValue(provider, out multicasts) ? multicasts : s_noInstances;
         }
 
         internal void ProcessMulticasts()
         {
-            _mwc.Multicasts.ProcessMulticasts(_mwc.Module.Assembly);
+            ProcessMulticasts(_mwc.Module.Assembly);
         }
 
         //internal void AddModule(ModuleDefinition module)
@@ -70,20 +75,49 @@ namespace Spinner.Fody.Multicasting
                 return;
             _assemblies.Add(assembly);
 
+            if (assembly.Name.Name != "Spinner" && assembly.MainModule.AssemblyReferences.All(ar => ar.Name != "Spinner"))
+                return; // not an assembly that references Spinner, so nothing to do
+
+            foreach (AssemblyNameReference ar in assembly.MainModule.AssemblyReferences)
+            {
+                // Skip some of the big ones
+                if (ar.Name.StartsWith("System.") || ar.Name == "System" || ar.Name == "mscorlib")
+                    continue;
+
+                AssemblyDefinition referencedAssembly = assembly.MainModule.AssemblyResolver.Resolve(ar);
+
+                ProcessMulticasts(referencedAssembly);
+            }
+
             if (assembly.HasCustomAttributes)
                  InstantiateMulticastAttributes(assembly, ProviderType.Assembly);
+
+            var tasks = new List<Task>();
 
             foreach (TypeDefinition t in assembly.MainModule.Types)
             {
                 if (!HasGeneratedName(t) && !HasGeneratedAttribute(t))
-                    InstantiateMulticastAttributes(t);
+                {
+                    tasks.Add(Task.Run(() => InstantiateMulticastAttributes(t)));
+                }
             }
+
+            Task.WhenAll(tasks).Wait();
         }
 
         private void ProcessMulticasts(MulticastInstance mi)
         {
             bool external = mi.Attribute.Constructor.Module != _mwc.Module;
 
+            List<Tuple<MulticastInstance, ICustomAttributeProvider>> results = null;
+
+            ResultHandler handler = (i, p) =>
+            {
+                if (results == null)
+                    results = new List<Tuple<MulticastInstance, ICustomAttributeProvider>>();
+                results.Add(Tuple.Create(i, p));
+            };
+            
             MulticastAttributes memberCompareAttrs = external
                 ? mi.TargetExternalMemberAttributes
                 : mi.TargetMemberAttributes;
@@ -91,30 +125,30 @@ namespace Spinner.Fody.Multicasting
             switch (mi.ProviderType)
             {
                 case ProviderType.Assembly:
-                    ProcessIndirectMulticasts(mi, (AssemblyDefinition) mi.Provider);
+                    ProcessIndirectMulticasts(mi, (AssemblyDefinition) mi.Provider, handler);
                     break;
                 case ProviderType.Type:
-                    ProcessIndirectMulticasts(mi, (TypeDefinition) mi.Provider);
+                    ProcessIndirectMulticasts(mi, (TypeDefinition) mi.Provider, handler);
                     break;
                 case ProviderType.Method:
                     if (memberCompareAttrs != 0)
                     {
                         var method = (MethodDefinition) mi.Provider;
                         if (method.SemanticsAttributes == MethodSemanticsAttributes.None)
-                            ProcessIndirectMulticasts(mi, method);
+                            ProcessIndirectMulticasts(mi, method, handler);
                     }
                     break;
                 case ProviderType.Property:
                     if (memberCompareAttrs != 0)
-                        ProcessIndirectMulticasts(mi, (PropertyDefinition) mi.Provider);
+                        ProcessIndirectMulticasts(mi, (PropertyDefinition) mi.Provider, handler);
                     break;
                 case ProviderType.Event:
                     if (memberCompareAttrs != 0)
-                        ProcessIndirectMulticasts(mi, (EventDefinition) mi.Provider);
+                        ProcessIndirectMulticasts(mi, (EventDefinition) mi.Provider, handler);
                     break;
                 case ProviderType.Field:
                     if (memberCompareAttrs != 0)
-                        ProcessIndirectMulticasts(mi, (FieldDefinition) mi.Provider);
+                        ProcessIndirectMulticasts(mi, (FieldDefinition) mi.Provider, handler);
                     break;
                 case ProviderType.Parameter:
                 case ProviderType.MethodReturn:
@@ -123,19 +157,36 @@ namespace Spinner.Fody.Multicasting
             }
 
             if ((mi.TargetElements & GetTargetType(mi.Provider)) != 0)
-                AddTargetProvider(mi, mi.Provider);
+                handler(mi, mi.Provider);
+
+            if (results == null)
+                return;
+
+            lock (_targets)
+            {
+                foreach (Tuple<MulticastInstance, ICustomAttributeProvider> item in results)
+                {
+                    List<MulticastInstance> current;
+                    if (!_targets.TryGetValue(item.Item2, out current))
+                    {
+                        current = new List<MulticastInstance>();
+                        _targets.Add(item.Item2, current);
+                    }
+                    current.Add(item.Item1);
+                }
+            }
         }
 
-        private void ProcessIndirectMulticasts(MulticastInstance mi, AssemblyDefinition assembly)
+        private void ProcessIndirectMulticasts(MulticastInstance mi, AssemblyDefinition assembly, ResultHandler handler)
         {
             if ((mi.TargetElements & MulticastTargets.Assembly) != 0 && mi.TargetAssemblies.IsMatch(assembly.FullName))
-                AddTargetProvider(mi, assembly);
+                handler(mi, assembly);
 
             foreach (TypeDefinition type in assembly.MainModule.Types)
-                ProcessIndirectMulticasts(mi, type);
+                ProcessIndirectMulticasts(mi, type, handler);
         }
 
-        private void ProcessIndirectMulticasts(MulticastInstance mi, TypeDefinition type)
+        private void ProcessIndirectMulticasts(MulticastInstance mi, TypeDefinition type, ResultHandler handler)
         {
             const MulticastTargets typeChildTargets =
                 MulticastTargets.AnyMember | MulticastTargets.Parameter | MulticastTargets.ReturnValue;
@@ -169,7 +220,7 @@ namespace Spinner.Fody.Multicasting
                 return;
 
             if ((mi.TargetElements & typeTargetType) != 0)
-                AddTargetProvider(mi, type);
+                handler(mi, type);
 
             MulticastAttributes memberCompareAttrs = external
                 ? mi.TargetExternalMemberAttributes
@@ -182,29 +233,35 @@ namespace Spinner.Fody.Multicasting
             if (type.HasMethods && (mi.TargetElements & methodAndChildTargets) != 0)
             {
                 foreach (MethodDefinition method in type.Methods)
-                    ProcessIndirectMulticasts(mi, method);
+                    ProcessIndirectMulticasts(mi, method, handler);
             }
 
             if (type.HasProperties && (mi.TargetElements & propertyAndChildTargets) != 0)
             {
                 foreach (PropertyDefinition property in type.Properties)
-                    ProcessIndirectMulticasts(mi, property);
+                    ProcessIndirectMulticasts(mi, property, handler);
             }
 
             if (type.HasEvents && (mi.TargetElements & eventAndChildTargets) != 0)
             {
                 foreach (EventDefinition evt in type.Events)
-                    ProcessIndirectMulticasts(mi, evt);
+                    ProcessIndirectMulticasts(mi, evt, handler);
             }
 
             if (type.HasFields && (mi.TargetElements & MulticastTargets.Field) != 0)
             {
                 foreach (FieldDefinition field in type.Fields)
-                    ProcessIndirectMulticasts(mi, field);
+                    ProcessIndirectMulticasts(mi, field, handler);
+            }
+
+            if (type.HasNestedTypes)
+            {
+                foreach (TypeDefinition nestedType in type.NestedTypes)
+                    ProcessIndirectMulticasts(mi, nestedType, handler);
             }
         }
 
-        private void ProcessIndirectMulticasts(MulticastInstance mi, MethodDefinition method)
+        private void ProcessIndirectMulticasts(MulticastInstance mi, MethodDefinition method, ResultHandler handler)
         {
             const MulticastTargets childTargets = MulticastTargets.ReturnValue | MulticastTargets.Parameter;
 
@@ -224,10 +281,10 @@ namespace Spinner.Fody.Multicasting
                 return;
 
             if ((mi.TargetElements & methodTargetType) != 0)
-                AddTargetProvider(mi, method);
+                handler(mi, method);
 
             if ((mi.TargetElements & MulticastTargets.ReturnValue) != 0)
-                AddTargetProvider(mi, method.MethodReturnType);
+                handler(mi, method.MethodReturnType);
 
             if (method.HasParameters && (mi.TargetElements & MulticastTargets.Parameter) != 0)
             {
@@ -237,13 +294,13 @@ namespace Spinner.Fody.Multicasting
 
                     if ((mi.TargetParameterAttributes & pattrs) != 0 && mi.TargetParameters.IsMatch(parameter.Name))
                     {
-                        AddTargetProvider(mi, parameter);
+                        handler(mi, parameter);
                     }
                 }
             }
         }
 
-        private void ProcessIndirectMulticasts(MulticastInstance mi, PropertyDefinition property)
+        private void ProcessIndirectMulticasts(MulticastInstance mi, PropertyDefinition property, ResultHandler handler)
         {
             if ((mi.TargetElements & (MulticastTargets.Property | MulticastTargets.Method)) == 0)
                 return;
@@ -252,19 +309,19 @@ namespace Spinner.Fody.Multicasting
                 return;
 
             if ((mi.TargetElements & MulticastTargets.Property) != 0)
-                AddTargetProvider(mi, property);
+                handler(mi, property);
 
             if ((mi.TargetElements & MulticastTargets.Method) != 0)
             {
                 if (property.GetMethod != null)
-                    ProcessIndirectMulticasts(mi, property.GetMethod);
+                    ProcessIndirectMulticasts(mi, property.GetMethod, handler);
 
                 if (property.SetMethod != null)
-                    ProcessIndirectMulticasts(mi, property.SetMethod);
+                    ProcessIndirectMulticasts(mi, property.SetMethod, handler);
             }
         }
 
-        private void ProcessIndirectMulticasts(MulticastInstance mi, EventDefinition evt)
+        private void ProcessIndirectMulticasts(MulticastInstance mi, EventDefinition evt, ResultHandler handler)
         {
             if ((mi.TargetElements & (MulticastTargets.Event | MulticastTargets.Method)) == 0)
                 return;
@@ -273,19 +330,19 @@ namespace Spinner.Fody.Multicasting
                 return;
 
             if ((mi.TargetElements & MulticastTargets.Event) != 0)
-                AddTargetProvider(mi, evt);
+                handler(mi, evt);
 
             if ((mi.TargetElements & MulticastTargets.Method) != 0)
             {
                 if (evt.AddMethod != null)
-                    ProcessIndirectMulticasts(mi, evt.AddMethod);
+                    ProcessIndirectMulticasts(mi, evt.AddMethod, handler);
 
                 if (evt.RemoveMethod != null)
-                    ProcessIndirectMulticasts(mi, evt.RemoveMethod);
+                    ProcessIndirectMulticasts(mi, evt.RemoveMethod, handler);
             }
         }
 
-        private void ProcessIndirectMulticasts(MulticastInstance mi, FieldDefinition field)
+        private void ProcessIndirectMulticasts(MulticastInstance mi, FieldDefinition field, ResultHandler handler)
         {
             if ((mi.TargetElements & MulticastTargets.Field) == 0)
                 return;
@@ -293,7 +350,7 @@ namespace Spinner.Fody.Multicasting
             if (!IsValidMemberAttributes(mi, field) || !mi.TargetMembers.IsMatch(field.Name))
                 return;
 
-            AddTargetProvider(mi, field);
+            handler(mi, field);
         }
 
         private bool IsValidMemberAttributes(MulticastInstance mi, IMemberDefinition member)
@@ -307,17 +364,6 @@ namespace Spinner.Fody.Multicasting
                 : mi.TargetMemberAttributes;
 
             return (compareAttrs & attrs) != 0;
-        }
-
-        private void AddTargetProvider(MulticastInstance mi, ICustomAttributeProvider provider)
-        {
-            List<MulticastInstance> instances;
-            if (!_targets.TryGetValue(provider, out instances))
-            {
-                instances = new List<MulticastInstance>();
-                _targets.Add(provider, instances);
-            }
-            instances.Add(mi);
         }
 
         private MulticastAttributes ComputeAttributes(TypeDefinition type)
