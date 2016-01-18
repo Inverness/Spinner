@@ -55,7 +55,7 @@ namespace Spinner.Fody
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             var stopwatch = new Stopwatch();
 
-            _mwc.Multicasts.ProcessMulticasts();
+            _mwc.Multicasts.IntantiateAndProcessMulticasts();
             
             // Analyze aspect types in parallel.
 

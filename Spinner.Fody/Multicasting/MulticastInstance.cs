@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Mono.Cecil;
 using Spinner.Extensibility;
 
@@ -6,20 +7,18 @@ namespace Spinner.Fody.Multicasting
     /// <summary>
     /// An instance of a multicast attribute that was specified on an assembly, type, or type member.
     /// </summary>
-    internal class MulticastInstance
+    internal sealed class MulticastInstance
     {
-        public readonly ICustomAttributeProvider Provider;
-
-        public readonly ProviderType ProviderType;
-
-        public readonly CustomAttribute Attribute;
-
-        public readonly TypeDefinition AttributeType;
-
-        internal MulticastInstance(ICustomAttributeProvider provider, ProviderType dt, CustomAttribute attribute, TypeDefinition attributeType)
+        internal MulticastInstance(
+            ICustomAttributeProvider origin,
+            ProviderType ot,
+            CustomAttribute attribute,
+            TypeDefinition attributeType)
         {
-            Provider = provider;
-            ProviderType = dt;
+            Target = origin;
+            TargetType = ot;
+            Origin = origin;
+            OriginType = ot;
             Attribute = attribute;
             AttributeType = attributeType;
             TargetElements = MulticastTargets.All;
@@ -86,6 +85,18 @@ namespace Spinner.Fody.Multicasting
             }
         }
 
+        public ICustomAttributeProvider Target { get; private set; }
+
+        public ProviderType TargetType { get; }
+
+        public ICustomAttributeProvider Origin { get; }
+
+        public ProviderType OriginType { get; }
+
+        public CustomAttribute Attribute { get; }
+
+        public TypeDefinition AttributeType { get; }
+        
         public bool Exclude { get; }
 
         public MulticastInheritance Inheritance { get; }
@@ -113,5 +124,14 @@ namespace Spinner.Fody.Multicasting
         public StringMatcher TargetParameters { get; }
 
         public MulticastAttributes TargetParameterAttributes { get; }
+
+        public MulticastInstance WithTarget(ICustomAttributeProvider newTarget)
+        {
+            Debug.Assert(newTarget.GetType() == Target.GetType());
+
+            var clone = (MulticastInstance) MemberwiseClone();
+            clone.Target = newTarget;
+            return clone;
+        }
     }
 }

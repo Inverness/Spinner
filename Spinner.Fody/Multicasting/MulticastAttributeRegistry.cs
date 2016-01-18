@@ -17,15 +17,6 @@ namespace Spinner.Fody.Multicasting
 
         private static readonly IList<MulticastInstance> s_noInstances = new MulticastInstance[0];
 
-        private readonly ModuleWeavingContext _mwc;
-        private readonly TypeDefinition _multicastAttributeType;
-        private readonly TypeDefinition _compilerGeneratedAttributeType;
-        
-        private readonly HashSet<AssemblyDefinition> _assemblies = new HashSet<AssemblyDefinition>(); 
-
-        private readonly Dictionary<ICustomAttributeProvider, List<MulticastInstance>> _targets =
-            new Dictionary<ICustomAttributeProvider, List<MulticastInstance>>();
-
         private static readonly Dictionary<TokenType, ProviderType> s_providerTypes =
             new Dictionary<TokenType, ProviderType>
             {
@@ -37,6 +28,22 @@ namespace Spinner.Fody.Multicasting
                 {TokenType.Field, ProviderType.Field},
                 {TokenType.Param, ProviderType.Parameter}
             };
+
+        private readonly ModuleWeavingContext _mwc;
+        private readonly TypeDefinition _multicastAttributeType;
+        private readonly TypeDefinition _compilerGeneratedAttributeType;
+        
+        private readonly HashSet<AssemblyDefinition> _instantiatedAssemblies = new HashSet<AssemblyDefinition>();
+        private readonly HashSet<AssemblyDefinition> _derivedAssemblies = new HashSet<AssemblyDefinition>();
+
+        private readonly Dictionary<ICustomAttributeProvider, List<MulticastInstance>> _targets =
+            new Dictionary<ICustomAttributeProvider, List<MulticastInstance>>();
+
+        private readonly Dictionary<ICustomAttributeProvider, List<ICustomAttributeProvider>> _derived =
+            new Dictionary<ICustomAttributeProvider, List<ICustomAttributeProvider>>();
+
+        private readonly Dictionary<ICustomAttributeProvider, List<MulticastInstance>> _instances =
+            new Dictionary<ICustomAttributeProvider, List<MulticastInstance>>(); 
 
         internal MulticastAttributeRegistry(ModuleWeavingContext mwc)
         {
@@ -52,9 +59,15 @@ namespace Spinner.Fody.Multicasting
             return _targets.TryGetValue(provider, out multicasts) ? multicasts : s_noInstances;
         }
 
-        internal void ProcessMulticasts()
+        internal void IntantiateAndProcessMulticasts()
         {
-            ProcessMulticasts(_mwc.Module.Assembly);
+            // Creates multicast attribute instances for all types in assembly and referenced assemblies. Also for
+            // types that have multicast 
+            InstantiateMulticasts(_mwc.Module.Assembly, null);
+
+            // Identify all types and assemblies that provide multicast attributes
+
+            AddDerivedProviders(_mwc.Module.Assembly);
         }
 
         //internal void AddModule(ModuleDefinition module)
@@ -69,40 +82,270 @@ namespace Spinner.Fody.Multicasting
         //    }
         //}
 
-        private void ProcessMulticasts(AssemblyDefinition assembly)
+        private void AddDerivedProviders(AssemblyDefinition assembly)
         {
-            if (_assemblies.Contains(assembly))
+            if (_derivedAssemblies.Contains(assembly))
                 return;
-            _assemblies.Add(assembly);
+            _derivedAssemblies.Add(assembly);
 
-            if (assembly.Name.Name != "Spinner" && assembly.MainModule.AssemblyReferences.All(ar => ar.Name != "Spinner"))
-                return; // not an assembly that references Spinner, so nothing to do
-
+            if (!IsSpinnerOrReferencesSpinner(assembly))
+                return;
+            
             foreach (AssemblyNameReference ar in assembly.MainModule.AssemblyReferences)
             {
                 // Skip some of the big ones
-                if (ar.Name.StartsWith("System.") || ar.Name == "System" || ar.Name == "mscorlib")
+                if (IsFrameworkAssemblyReference(ar))
                     continue;
 
                 AssemblyDefinition referencedAssembly = assembly.MainModule.AssemblyResolver.Resolve(ar);
 
-                ProcessMulticasts(referencedAssembly);
+                AddDerivedProviders(referencedAssembly);
+            }
+            
+            foreach (TypeDefinition t in assembly.MainModule.Types)
+            {
+                AddDerivedProviders(t);
+            }
+        }
+
+        private void AddDerivedProviders(TypeDefinition type)
+        {
+            List<ICustomAttributeProvider> derivedProviders;
+            
+            if (type.BaseType != null && _derived.TryGetValue(type.BaseType.Resolve(), out derivedProviders))
+                derivedProviders.Add(type);
+
+            if (type.HasInterfaces)
+            {
+                foreach (TypeReference itr in type.Interfaces)
+                {
+                    if (_derived.TryGetValue(itr.Resolve(), out derivedProviders))
+                        derivedProviders.Add(type);
+                }
+            }
+        }
+
+        private static bool IsFrameworkAssemblyReference(AssemblyNameReference ar)
+        {
+            return ar.Name.StartsWith("System.") || ar.Name == "System" || ar.Name == "mscorlib";
+        }
+
+        private static bool IsSpinnerOrReferencesSpinner(AssemblyDefinition assembly)
+        {
+            return assembly.Name.Name == "Spinner" || assembly.MainModule.AssemblyReferences.Any(ar => ar.Name == "Spinner");
+        }
+
+        private void InstantiateMulticasts(AssemblyDefinition assembly, AssemblyDefinition referencer)
+        {
+            if (_instantiatedAssemblies.Contains(assembly))
+                return;
+            _instantiatedAssemblies.Add(assembly);
+
+            if (!IsSpinnerOrReferencesSpinner(assembly))
+                return;
+
+            foreach (AssemblyNameReference ar in assembly.MainModule.AssemblyReferences)
+            {
+                // Skip some of the big ones
+                if (IsFrameworkAssemblyReference(ar))
+                    continue;
+
+                AssemblyDefinition referencedAssembly = assembly.MainModule.AssemblyResolver.Resolve(ar);
+
+                InstantiateMulticasts(referencedAssembly, assembly);
             }
 
             if (assembly.HasCustomAttributes)
-                 InstantiateMulticastAttributes(assembly, ProviderType.Assembly);
-
-            var tasks = new List<Task>();
-
+            {
+                var attrs = new List<MulticastInstance>();
+                bool hasMulticasts = InstantiateMulticasts(assembly, ProviderType.Assembly);
+                if (hasMulticasts && referencer != null)
+                    AddDerivedProvider(assembly, null);
+                OrderAndProcessAndClearMulticasts(attrs);
+            }
+            
             foreach (TypeDefinition t in assembly.MainModule.Types)
             {
                 if (!HasGeneratedName(t) && !HasGeneratedAttribute(t))
                 {
-                    tasks.Add(Task.Run(() => InstantiateMulticastAttributes(t)));
+                    InstantiateMulticasts(t);
+                }
+            }
+        }
+
+        private void InstantiateMulticasts(TypeDefinition type)
+        {
+            bool hasMulticasts = false;
+            if (type.HasCustomAttributes)
+                hasMulticasts |= InstantiateMulticasts(type, ProviderType.Type);
+
+            //TypeDefinition currentType = type;
+            //while (currentType != null)
+            //{
+            //    if (currentType.HasCustomAttributes)
+            //        GetMulticasts(type, ProviderType.Type, instances.Add, currentType, ProviderType.Type);
+
+            //    if (currentType.HasInterfaces)
+            //    {
+            //        foreach (TypeReference itr in currentType.Interfaces)
+            //        {
+            //            TypeDefinition it = itr.Resolve();
+            //            if (it.HasCustomAttributes)
+            //                GetMulticasts(type, ProviderType.Type, instances.Add, it, ProviderType.Type);
+            //        }
+            //    }
+
+            //    // TODO: Bases first
+            //    currentType = currentType.BaseType?.Resolve();
+            //}
+            
+            //OrderAndProcessAndClearMulticasts(instances);
+
+            if (type.HasMethods)
+            {
+                foreach (MethodDefinition m in type.Methods)
+                {
+                    // getters, setters, and event adders and removers are handled by their owning property/event
+                    if (m.SemanticsAttributes != MethodSemanticsAttributes.None)
+                        continue;
+
+                    if (!HasGeneratedName(m) && m.HasCustomAttributes)
+                        hasMulticasts |= InstantiateMulticasts(m, ProviderType.Method);
+
+                    if (m.HasParameters)
+                    {
+                        foreach (ParameterDefinition p in m.Parameters)
+                        {
+                            if (p.HasCustomAttributes)
+                                hasMulticasts |= InstantiateMulticasts(p, ProviderType.Parameter);
+                        }
+                    }
+
+                    if (m.MethodReturnType.HasCustomAttributes && !m.ReturnType.IsSimilar(m.Module.TypeSystem.Void))
+                        hasMulticasts |= InstantiateMulticasts(m.MethodReturnType, ProviderType.MethodReturn);
                 }
             }
 
-            Task.WhenAll(tasks).Wait();
+            if (type.HasProperties)
+            {
+                foreach (PropertyDefinition p in type.Properties)
+                {
+                    if (!HasGeneratedName(p) && p.HasCustomAttributes)
+                        hasMulticasts |= InstantiateMulticasts(p, ProviderType.Property);
+
+                    if (p.GetMethod != null)
+                        hasMulticasts |= InstantiateMulticasts(p.GetMethod, ProviderType.Method);
+
+                    if (p.SetMethod != null)
+                        hasMulticasts |= InstantiateMulticasts(p.SetMethod, ProviderType.Method);
+                }
+            }
+
+            if (type.HasEvents)
+            {
+                foreach (EventDefinition e in type.Events)
+                {
+                    if (!HasGeneratedName(e) && e.HasCustomAttributes)
+                        hasMulticasts |= InstantiateMulticasts(e, ProviderType.Event);
+
+                    if (e.AddMethod != null)
+                        hasMulticasts |= InstantiateMulticasts(e.AddMethod, ProviderType.Method);
+
+                    if (e.RemoveMethod != null)
+                        hasMulticasts |= InstantiateMulticasts(e.RemoveMethod, ProviderType.Method);
+                }
+            }
+
+            if (type.HasFields)
+            {
+                foreach (FieldDefinition f in type.Fields)
+                {
+                    if (!HasGeneratedName(f) && f.HasCustomAttributes)
+                        hasMulticasts |= InstantiateMulticasts(f, ProviderType.Field);
+                }
+            }
+
+            if (type.HasNestedTypes)
+            {
+                foreach (TypeDefinition nt in type.NestedTypes)
+                {
+                    if (!HasGeneratedName(nt) && !HasGeneratedAttribute(nt))
+                        InstantiateMulticasts(nt);
+                }
+            }
+
+            if (!hasMulticasts)
+                return;
+
+            AddDerivedProvider(type, null);
+        }
+
+        private void AddDerivedProvider(ICustomAttributeProvider baseType, ICustomAttributeProvider derivedType)
+        {
+            List<ICustomAttributeProvider> derivedTypes;
+            if (!_derived.TryGetValue(baseType, out derivedTypes))
+            {
+                derivedTypes = new List<ICustomAttributeProvider>();
+                _derived.Add(baseType, derivedTypes);
+            }
+            if (derivedType != null)
+                derivedTypes.Add(derivedType);
+        }
+
+        private void OrderAndProcessAndClearMulticasts(List<MulticastInstance> instances)
+        {
+            if (instances == null || instances.Count == 0)
+                return;
+
+            instances.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+
+            for (int i = 0; i < instances.Count; i++)
+            {
+                MulticastInstance a = instances[i];
+
+                if (a.Exclude)
+                {
+                    for (int r = instances.Count - 1; r > -1; r--)
+                    {
+                        if (instances[r].AttributeType == a.AttributeType)
+                            instances.RemoveAt(r);
+                    }
+                    i = -1; // restart from beginning
+                }
+            }
+
+            foreach (MulticastInstance mi in instances)
+                ProcessMulticasts(mi);
+
+            instances.Clear();
+        }
+
+        private bool InstantiateMulticasts(ICustomAttributeProvider origin, ProviderType originType)
+        {
+            List<MulticastInstance> results = null;
+
+            foreach (CustomAttribute a in origin.CustomAttributes)
+            {
+                TypeDefinition atype = a.AttributeType.Resolve();
+
+                if (atype == _compilerGeneratedAttributeType)
+                    break;
+
+                if (!IsMulticastAttribute(atype))
+                    continue;
+
+                var mai = new MulticastInstance(origin, originType, a, atype);
+
+                if (results == null)
+                    results = new List<MulticastInstance>();
+                results.Add(mai);
+            }
+
+            if (results == null)
+                return false;
+
+            _instances.Add(origin, results);
+            return true;
         }
 
         private void ProcessMulticasts(MulticastInstance mi)
@@ -122,33 +365,33 @@ namespace Spinner.Fody.Multicasting
                 ? mi.TargetExternalMemberAttributes
                 : mi.TargetMemberAttributes;
 
-            switch (mi.ProviderType)
+            switch (mi.TargetType)
             {
                 case ProviderType.Assembly:
-                    ProcessIndirectMulticasts(mi, (AssemblyDefinition) mi.Provider, handler);
+                    ProcessIndirectMulticasts(mi, (AssemblyDefinition) mi.Target, handler);
                     break;
                 case ProviderType.Type:
-                    ProcessIndirectMulticasts(mi, (TypeDefinition) mi.Provider, handler);
+                    ProcessIndirectMulticasts(mi, (TypeDefinition) mi.Target, handler);
                     break;
                 case ProviderType.Method:
                     if (memberCompareAttrs != 0)
                     {
-                        var method = (MethodDefinition) mi.Provider;
+                        var method = (MethodDefinition) mi.Target;
                         if (method.SemanticsAttributes == MethodSemanticsAttributes.None)
                             ProcessIndirectMulticasts(mi, method, handler);
                     }
                     break;
                 case ProviderType.Property:
                     if (memberCompareAttrs != 0)
-                        ProcessIndirectMulticasts(mi, (PropertyDefinition) mi.Provider, handler);
+                        ProcessIndirectMulticasts(mi, (PropertyDefinition) mi.Target, handler);
                     break;
                 case ProviderType.Event:
                     if (memberCompareAttrs != 0)
-                        ProcessIndirectMulticasts(mi, (EventDefinition) mi.Provider, handler);
+                        ProcessIndirectMulticasts(mi, (EventDefinition) mi.Target, handler);
                     break;
                 case ProviderType.Field:
                     if (memberCompareAttrs != 0)
-                        ProcessIndirectMulticasts(mi, (FieldDefinition) mi.Provider, handler);
+                        ProcessIndirectMulticasts(mi, (FieldDefinition) mi.Target, handler);
                     break;
                 case ProviderType.Parameter:
                 case ProviderType.MethodReturn:
@@ -156,8 +399,8 @@ namespace Spinner.Fody.Multicasting
                     break;
             }
 
-            if ((mi.TargetElements & GetTargetType(mi.Provider)) != 0)
-                handler(mi, mi.Provider);
+            if ((mi.TargetElements & GetTargetType(mi.Target)) != 0)
+                handler(mi, mi.Target);
 
             if (results == null)
                 return;
@@ -525,129 +768,6 @@ namespace Spinner.Fody.Multicasting
                 a |= MulticastAttributes.InParameter;
 
             return a;
-        }
-
-        private void InstantiateMulticastAttributes(TypeDefinition type)
-        {
-            if (type.HasCustomAttributes)
-                InstantiateMulticastAttributes(type, ProviderType.Type);
-
-            if (type.HasMethods)
-            {
-                foreach (MethodDefinition m in type.Methods)
-                {
-                    if (m.SemanticsAttributes != MethodSemanticsAttributes.None)
-                        continue;
-
-                    if (!HasGeneratedName(m) && m.HasCustomAttributes)
-                        InstantiateMulticastAttributes(m, ProviderType.Method);
-
-                    if (m.HasParameters)
-                    {
-                        foreach (ParameterDefinition p in m.Parameters)
-                        {
-                            if (p.HasCustomAttributes)
-                                InstantiateMulticastAttributes(p, ProviderType.Parameter);
-                        }
-                    }
-
-                    if (m.MethodReturnType.HasCustomAttributes)
-                        InstantiateMulticastAttributes(m.MethodReturnType, ProviderType.MethodReturn);
-                }
-            }
-
-            if (type.HasProperties)
-            {
-                foreach (PropertyDefinition p in type.Properties)
-                {
-                    if (!HasGeneratedName(p) && p.HasCustomAttributes)
-                        InstantiateMulticastAttributes(p, ProviderType.Property);
-
-                    if (p.GetMethod != null)
-                        InstantiateMulticastAttributes(p.GetMethod, ProviderType.Method);
-
-                    if (p.SetMethod != null)
-                        InstantiateMulticastAttributes(p.SetMethod, ProviderType.Method);
-                }
-            }
-
-            if (type.HasEvents)
-            {
-                foreach (EventDefinition e in type.Events)
-                {
-                    if (!HasGeneratedName(e) && e.HasCustomAttributes)
-                        InstantiateMulticastAttributes(e, ProviderType.Event);
-
-                    if (e.AddMethod != null)
-                        InstantiateMulticastAttributes(e.AddMethod, ProviderType.Method);
-
-                    if (e.RemoveMethod != null)
-                        InstantiateMulticastAttributes(e.RemoveMethod, ProviderType.Method);
-                }
-            }
-
-            if (type.HasFields)
-            {
-                foreach (FieldDefinition f in type.Fields)
-                {
-                    if (!HasGeneratedName(f) && f.HasCustomAttributes)
-                        InstantiateMulticastAttributes(f, ProviderType.Field);
-                }
-            }
-
-            if (type.HasNestedTypes)
-            {
-                foreach (TypeDefinition nt in type.NestedTypes)
-                {
-                    if (!HasGeneratedName(nt) && !HasGeneratedAttribute(nt))
-                        InstantiateMulticastAttributes(nt);
-                }
-            }
-        }
-
-        private void InstantiateMulticastAttributes(ICustomAttributeProvider provider, ProviderType dt)
-        {
-            List<MulticastInstance> instances = null;
-
-            foreach (CustomAttribute a in provider.CustomAttributes)
-            {
-                TypeDefinition atype = a.AttributeType.Resolve();
-
-                if (atype == _compilerGeneratedAttributeType)
-                    return;
-
-                if (!IsMulticastAttribute(atype))
-                    continue;
-
-                var mai = new MulticastInstance(provider, dt, a, atype);
-
-                if (instances == null)
-                    instances = new List<MulticastInstance>();
-                instances.Add(mai);
-            }
-
-            if (instances == null)
-                return;
-
-            instances.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-
-            for (int i = 0; i < instances.Count; i++)
-            {
-                MulticastInstance a = instances[i];
-
-                if (a.Exclude)
-                {
-                    for (int r = instances.Count - 1; r > -1; r--)
-                    {
-                        if (instances[r].AttributeType == a.AttributeType)
-                            instances.RemoveAt(r);
-                    }
-                    i = -1; // restart from beginning
-                }
-            }
-
-            foreach (MulticastInstance mi in instances)
-                ProcessMulticasts(mi);
         }
 
         private bool IsMulticastAttribute(TypeDefinition type)
