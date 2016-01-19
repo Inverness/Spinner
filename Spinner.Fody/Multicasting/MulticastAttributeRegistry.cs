@@ -210,6 +210,12 @@ namespace Spinner.Fody.Multicasting
                     }
                 }
             }
+
+            if (type.HasNestedTypes)
+            {
+                foreach (TypeDefinition nt in type.NestedTypes)
+                    AddDerivedProviders(nt, filter);
+            }
         }
 
         private void InstantiateMulticasts(

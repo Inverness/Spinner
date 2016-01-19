@@ -7,7 +7,7 @@ namespace Spinner.TestTarget
     [BasicLoggingEia(
         AttributeTargetElements = MulticastTargets.Event,
         AttributeTargetMemberAttributes = MulticastAttributes.Public,
-        AttributeInheritance = MulticastInheritance.Strict)
+        AttributeInheritance = MulticastInheritance.Multicast)
         ]
     public class EventInterceptionTest
     {
