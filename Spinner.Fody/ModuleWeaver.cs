@@ -27,6 +27,7 @@ namespace Spinner.Fody
         // Definition for IMethodInterceptionAspect
         private int _aspectIndexCounter;
         private ModuleWeavingContext _mwc;
+        private MulticastAttributeRegistry _multicastAttributeRegistry;
 
         public ModuleWeaver()
         {
@@ -55,7 +56,8 @@ namespace Spinner.Fody
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             var stopwatch = new Stopwatch();
 
-            _mwc.Multicasts.IntantiateAndProcessMulticasts();
+            _multicastAttributeRegistry = new MulticastAttributeRegistry(_mwc);
+            _multicastAttributeRegistry.IntantiateAndProcessMulticasts();
             
             // Analyze aspect types in parallel.
 
@@ -106,7 +108,7 @@ namespace Spinner.Fody
             {
                 foreach (MethodDefinition method in type.Methods)
                 {
-                    IList<MulticastInstance> multicastAttributes = _mwc.Multicasts.GetMulticasts(method);
+                    IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(method);
 
                     foreach (MulticastInstance mi in multicastAttributes)
                     {
@@ -140,7 +142,7 @@ namespace Spinner.Fody
             {
                 foreach (PropertyDefinition property in type.Properties)
                 {
-                    IList<MulticastInstance> multicastAttributes = _mwc.Multicasts.GetMulticasts(property);
+                    IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(property);
                     
                     foreach (MulticastInstance a in multicastAttributes)
                     {
@@ -164,7 +166,7 @@ namespace Spinner.Fody
             {
                 foreach (EventDefinition xevent in type.Events)
                 {
-                    IList<MulticastInstance> multicastAttributes = _mwc.Multicasts.GetMulticasts(xevent);
+                    IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(xevent);
                     
                     foreach (MulticastInstance a in multicastAttributes)
                     {
