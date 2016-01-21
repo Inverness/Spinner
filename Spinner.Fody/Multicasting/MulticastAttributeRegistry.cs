@@ -49,7 +49,7 @@ namespace Spinner.Fody.Multicasting
         private int _inheritOrderCounter = int.MinValue;
         private int _directOrderCounter;
 
-        internal MulticastAttributeRegistry(ModuleWeavingContext mwc)
+        private MulticastAttributeRegistry(ModuleWeavingContext mwc)
         {
             _module = mwc.Module;
             _compilerGeneratedAttributeType = mwc.Framework.CompilerGeneratedAttribute;
@@ -63,7 +63,14 @@ namespace Spinner.Fody.Multicasting
             return _targets.TryGetValue(provider, out multicasts) ? multicasts : s_noInstances;
         }
 
-        internal void IntantiateAndProcessMulticasts()
+        internal static MulticastAttributeRegistry Create(ModuleWeavingContext mwc)
+        {
+            var inst = new MulticastAttributeRegistry(mwc);
+            inst.Initialize();
+            return inst;
+        }
+
+        private void Initialize()
         {
             // Creates multicast attribute instances for all types in assembly and referenced assemblies. Also for
             // types that have multicast 
@@ -281,11 +288,14 @@ namespace Spinner.Fody.Multicasting
             {
                 foreach (MethodDefinition m in type.Methods)
                 {
+                    if (HasGeneratedName(m))
+                        continue;
+
                     // getters, setters, and event adders and removers are handled by their owning property/event
                     if (m.SemanticsAttributes != MethodSemanticsAttributes.None)
                         continue;
 
-                    if (!HasGeneratedName(m) && m.HasCustomAttributes)
+                    if (m.HasCustomAttributes)
                         InstantiateMulticasts(m, ProviderType.Method);
 
                     if (m.HasParameters)
@@ -306,7 +316,10 @@ namespace Spinner.Fody.Multicasting
             {
                 foreach (PropertyDefinition p in type.Properties)
                 {
-                    if (!HasGeneratedName(p) && p.HasCustomAttributes)
+                    if (HasGeneratedName(p))
+                        continue;
+
+                    if (p.HasCustomAttributes)
                         InstantiateMulticasts(p, ProviderType.Property);
 
                     if (p.GetMethod != null)
@@ -321,7 +334,10 @@ namespace Spinner.Fody.Multicasting
             {
                 foreach (EventDefinition e in type.Events)
                 {
-                    if (!HasGeneratedName(e) && e.HasCustomAttributes)
+                    if (HasGeneratedName(e))
+                        continue;
+
+                    if (e.HasCustomAttributes)
                         InstantiateMulticasts(e, ProviderType.Event);
 
                     if (e.AddMethod != null)

@@ -56,14 +56,21 @@ namespace Spinner.Fody
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             var stopwatch = new Stopwatch();
 
-            _multicastAttributeRegistry = new MulticastAttributeRegistry(_mwc);
-            _multicastAttributeRegistry.IntantiateAndProcessMulticasts();
+            LogInfo("Beginning attribute multicasting");
+
+            stopwatch.Start();
+
+            _multicastAttributeRegistry = MulticastAttributeRegistry.Create(_mwc);
+
+            stopwatch.Stop();
+
+            LogInfo($"Finished attribute multicasting in {stopwatch.ElapsedMilliseconds} ms");
             
             // Analyze aspect types in parallel.
 
             LogInfo("Beginning aspect feature analysis");
 
-            stopwatch.Start();
+            stopwatch.Restart();
 
             Task[] analysisTasks = types.Where(AspectFeatureAnalyzer.IsMaybeAspect)
                                         .Select(CreateAnalysisAction)
