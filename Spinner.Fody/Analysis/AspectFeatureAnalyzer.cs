@@ -19,7 +19,7 @@ namespace Spinner.Fody.Analysis
         private const char GeneratedNamePrefix = '<';
         private const int AspectInterfaceNameMinimumLength = 21;
         private const string AspectInterfaceNameSuffix = "Aspect";
-        private const string AdviceArgsNamespace = "Spinner";
+        private const string AdviceArgsNamespace = "Spinner.Aspects";
         private const string AdviceNamePrefix = "On";
         
         internal static bool IsMaybeAspect(TypeDefinition type)
