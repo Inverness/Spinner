@@ -15,6 +15,9 @@ namespace Spinner.TestTarget
 
             int two;
             mb.OneAspect(1, out two, "three");
+            mb.EntryReturnVoid(1, 2, "three");
+            int r1 = mb.EntryReturnInt(1, 2, "three");
+            string r2 = mb.EntryReturnString(1, 2, "three");
 
             var mi = new MethodInterceptionTest();
 

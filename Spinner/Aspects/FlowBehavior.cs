@@ -25,11 +25,6 @@ namespace Spinner.Aspects
         /// <summary>
         ///     Return immediately from the current method. Only available for OnEntry() and OnException().
         /// </summary>
-        Return,
-
-        /// <summary>
-        ///     Retry execution of a method after it has been interrupted. This is only available for OnException().
-        /// </summary>
-        Retry,
+        Return
     }
 }

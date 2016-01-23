@@ -161,7 +161,7 @@ namespace Spinner.Fody.Weavers
                 Ins.Create(OpCodes.Stfld, arguments)
             };
 
-            stateMachine.Body.InsertInstructions(offset, insc);
+            stateMachine.Body.InsertInstructions(offset, true, insc);
         }
 
         protected void GetArgumentContainerInfo(
@@ -239,7 +239,7 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
             }
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         protected void WriteSmCopyArgumentsToContainer(
@@ -283,7 +283,7 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
             }
 
-            stateMachine.Body.InsertInstructions(offset, insc);
+            stateMachine.Body.InsertInstructions(offset, true, insc);
         }
 
         /// <summary>
@@ -328,7 +328,8 @@ namespace Spinner.Fody.Weavers
                 }
             }
 
-            method.Body.InsertInstructions(offset, insc);
+            if (insc.Count != 0)
+                method.Body.InsertInstructions(offset, true, insc);
         }
 
         /// <summary>
@@ -351,6 +352,17 @@ namespace Spinner.Fody.Weavers
             {
                 ParameterDefinition p = method.Parameters[i];
 
+                if (p.ParameterType.IsByReference)
+                {
+                    if (!includeRef)
+                        continue;
+                }
+                else
+                {
+                    if (!includeNormal)
+                        continue;
+                }
+
                 Func<FieldDefinition, bool> isField = f => f.Name == p.Name &&
                                                            f.FieldType.IsSimilar(p.ParameterType) &&
                                                            f.FieldType.Resolve() == p.ParameterType.Resolve();
@@ -368,7 +380,7 @@ namespace Spinner.Fody.Weavers
                 insc.Add(Ins.Create(OpCodes.Stfld, smArgumentField));
             }
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         ///// <summary>
@@ -436,7 +448,7 @@ namespace Spinner.Fody.Weavers
                 jtNotNull
             };
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         /// <summary>
@@ -458,7 +470,7 @@ namespace Spinner.Fody.Weavers
                 Ins.Create(OpCodes.Callvirt, advice)
             };
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         /// <summary>
@@ -481,7 +493,7 @@ namespace Spinner.Fody.Weavers
                 notNullLabel
             };
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         protected void WriteSetMethodInfo(
@@ -514,7 +526,7 @@ namespace Spinner.Fody.Weavers
 
             insc.Add(Ins.Create(OpCodes.Callvirt, setMethod));
 
-            target.Body.InsertInstructions(offset, insc);
+            target.Body.InsertInstructions(offset, true, insc);
         }
 
         protected void CreateAspectCacheField()

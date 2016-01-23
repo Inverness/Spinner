@@ -65,6 +65,79 @@ namespace Spinner.TestTarget
             a += await GetNum(6);
         }
 
+        [LogAndReturnMba]
+        public void EntryReturnVoid(int a, int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return;
+            }
+            Console.WriteLine("Test 22");
+        }
+
+        [LogAndReturnMba]
+        public int EntryReturnInt(int a, int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return 99;
+            }
+            Console.WriteLine("Test 22");
+            return a;
+        }
+
+        [LogAndReturnMba]
+        [LogAndReturnMba]
+        public int EntryReturnIntTwo(int a, int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return 99;
+            }
+            Console.WriteLine("Test 22");
+            return a;
+        }
+
+        [LogAndReturnMba]
+        public string EntryReturnString(int a, int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return "99";
+            }
+            Console.WriteLine("Test 22");
+            return a.ToString();
+        }
+
+        [LogAndReturnMba]
+        public async Task<int> EntryReturnAsyncInt(int a, int b, string c)
+        {
+            a += await GetNum(3);
+
+            a += await GetNum(4);
+
+            if (a > 5)
+                return a;
+
+            a += await GetNum(5);
+
+            a += await GetNum(6);
+
+            return a;
+        }
+
         public IEnumerable<int> GeneratorInt(int a, int b, string c)
         {
             yield return a;

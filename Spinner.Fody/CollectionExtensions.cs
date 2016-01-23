@@ -4,6 +4,17 @@ namespace Spinner.Fody
 {
     internal static class CollectionExtensions
     {
+        internal static int AddRange<T>(this ICollection<T> collection, params T[] source)
+        {
+            int count = 0;
+            foreach (T item in source)
+            {
+                collection.Add(item);
+                count++;
+            }
+            return count;
+        }
+
         internal static int AddRange<T>(this ICollection<T> collection, IEnumerable<T> source)
         {
             int count = 0;

@@ -134,7 +134,7 @@ namespace Spinner.Fody.Weavers
                 Ins.Create(OpCodes.Callvirt, setEvent)
             };
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         private void CreateEventBindingClass()
@@ -296,7 +296,7 @@ namespace Spinner.Fody.Weavers
 
             insc.Add(Ins.Create(OpCodes.Stloc, eiaVar));
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         /// <summary>
@@ -465,7 +465,7 @@ namespace Spinner.Fody.Weavers
                     newinsc.Add(Ins.Create(OpCodes.Stsfld, _invokerDelegateField));
                     newinsc.Add(notNullLabel);
 
-                    method.Body.InsertInstructions(i, newinsc);
+                    method.Body.InsertInstructions(i, true, newinsc);
                 }
                 else
                 {
@@ -480,7 +480,7 @@ namespace Spinner.Fody.Weavers
                     newinsc.Add(notNullLabel);
                     
                     Debug.Assert(insc[i - 1].OpCode == OpCodes.Ldarg_0 || insc[i - 1].OpCode == OpCodes.Ldarg);
-                    method.Body.InsertInstructions(i - 1, newinsc);
+                    method.Body.InsertInstructions(i - 1, true, newinsc);
                 }
 
                 method.Body.UpdateOffsets();

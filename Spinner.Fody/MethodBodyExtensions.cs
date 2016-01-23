@@ -79,15 +79,15 @@ namespace Spinner.Fody
         /// <summary>
         /// Inserts instructions while fixing branch targets for the insertion index.
         /// </summary>
-        internal static int InsertInstructions(this MethodBody self, int index, params Instruction[] instructions)
+        internal static int InsertInstructions(this MethodBody self, int index, bool fixBranches, params Instruction[] instructions)
         {
-            return InsertInstructions(self, index, (IEnumerable<Instruction>) instructions);
+            return InsertInstructions(self, index, fixBranches, (IEnumerable<Instruction>) instructions);
         }
 
         /// <summary>
         /// Inserts instructions while fixing branch targets for the insertion index.
         /// </summary>
-        internal static int InsertInstructions(this MethodBody self, int index,  IEnumerable<Instruction> instructions)
+        internal static int InsertInstructions(this MethodBody self, int index, bool fixBranches, IEnumerable<Instruction> instructions)
         {
             Collection<Instruction> insc = self.Instructions;
 
@@ -100,7 +100,8 @@ namespace Spinner.Fody
 
             Instruction newIns = insc[index];
 
-            self.ReplaceBranchTargets(oldIns, newIns, index, count);
+            if (fixBranches)
+                self.ReplaceBranchTargets(oldIns, newIns, index, count);
 
             return count;
         }

@@ -131,7 +131,7 @@ namespace Spinner.Fody.Weavers
                 Ins.Create(OpCodes.Callvirt, setProperty)
             };
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
 
         private void CreatePropertyBindingClass()
@@ -346,7 +346,7 @@ namespace Spinner.Fody.Weavers
             insc.Add(Ins.Create(OpCodes.Newobj, constructor));
             insc.Add(Ins.Create(OpCodes.Stloc, iaVariable));
 
-            method.Body.InsertInstructions(offset, insc);
+            method.Body.InsertInstructions(offset, true, insc);
         }
     }
 }
