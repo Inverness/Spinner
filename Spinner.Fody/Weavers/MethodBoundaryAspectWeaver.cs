@@ -7,6 +7,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -116,18 +117,8 @@ namespace Spinner.Fody.Weavers
             int tryStartIndex = insc.Count;
 
             // Write OnEntry call
-            Ins onEntryBreakTarget = null;
             if (_aspectFeatures.Has(Features.OnEntry))
-            {
-                WriteOnEntryCall(method,
-                                 insc.Count,
-                                 false,
-                                 meaVar,
-                                 null,
-                                 returnValueVar,
-                                 argumentsVar,
-                                 out onEntryBreakTarget);
-            }
+                WriteOnEntryCall(method, insc.Count, meaVar, null);
 
             // Re-add original body
             insc.AddRange(originalInsc);
@@ -161,19 +152,13 @@ namespace Spinner.Fody.Weavers
             Ins exceptionHandlerLeaveTarget = null;
             if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
             {
-                // Since OnEntry is called from within the handler, must also leave here
-                if (onEntryBreakTarget != null)
-                {
-                    insc.Add(onEntryBreakTarget);
-                    onEntryBreakTarget = null; // So this isn't added again outside of the exception handler
-                }
-
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
                 insc.Add(Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
             }
 
             // Write exception filter and handler
 
+            Ins onExceptionContinueTarget = null;
             if (_aspectFeatures.Has(Features.OnException))
             {
                 WriteCatchExceptionHandler(method,
@@ -182,7 +167,7 @@ namespace Spinner.Fody.Weavers
                                            meaVar,
                                            null,
                                            tryStartIndex,
-                                           exceptionHandlerLeaveTarget);
+                                           out onExceptionContinueTarget);
             }
 
             // End of try block for the finally handler
@@ -198,17 +183,16 @@ namespace Spinner.Fody.Weavers
             }
 
             // End finally block
-
-            Debug.Assert(onEntryBreakTarget == null || exceptionHandlerLeaveTarget == null);
-
-            if (onEntryBreakTarget != null)
-                insc.Add(onEntryBreakTarget);
+            
             if (exceptionHandlerLeaveTarget != null)
                 insc.Add(exceptionHandlerLeaveTarget);
+            if (onExceptionContinueTarget != null)
+                insc.Add(onExceptionContinueTarget);
                 
             // Return the previously stored result
             if (returnValueVar != null)
                 insc.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
+
             insc.Add(Ins.Create(OpCodes.Ret));
         }
 
@@ -245,6 +229,9 @@ namespace Spinner.Fody.Weavers
             // Offset from the end to the return leave instruction
             int leaveEndOffset = insc.Count - bodyLeave;
 
+            // Offset from the end to the block that sets the task result
+            int resultEndOffset = insc.Count - insc.IndexOf(taskExceptionHandler.HandlerEnd);
+
             // Find the variable used to set the task result. No need to create our own.
             VariableDefinition resultVar = null;
             if (_effectiveReturnType != null)
@@ -265,20 +252,9 @@ namespace Spinner.Fody.Weavers
             // The meaVar would be used temporarily after loading from the field.
             FieldDefinition meaField;
             WriteSmMeaInit(method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
-
-            Ins onEntryBreakTarget = null;
+            
             if (_aspectFeatures.Has(Features.OnEntry))
-            {
-                // Write OnEntry call
-                WriteOnEntryCall(stateMachine,
-                                 insc.Count - initEndOffset,
-                                 true,
-                                 null,
-                                 meaField,
-                                 resultVar,
-                                 null,
-                                 out onEntryBreakTarget);
-            }
+                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
 
             // Search through the body for places to insert OnYield() and OnResume() calls
             if (_aspectFeatures.Has(Features.OnYield | Features.OnResume))
@@ -340,11 +316,6 @@ namespace Spinner.Fody.Weavers
                                     meaField,
                                     _aspectFeatures.Has(Features.ReturnValue) ? resultVar : null);
             }
-            
-            // Of returning due to OnEntry() flow behavior, break to here which will either be before the Task
-            // exception handler's leave, or the new leave we're about to write.
-            if (onEntryBreakTarget != null)
-                insc.Insert(insc.Count - leaveEndOffset, onEntryBreakTarget);
 
             // Leave the the exception handlers that will be written next.
             Ins exceptionHandlerLeaveTarget = null;
@@ -354,6 +325,7 @@ namespace Spinner.Fody.Weavers
                 insc.Insert(insc.Count - leaveEndOffset, Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
             }
 
+            Ins onExceptionContinueTarget = null;
             if (_aspectFeatures.Has(Features.OnException))
             {
                 WriteCatchExceptionHandler(_method,
@@ -362,7 +334,7 @@ namespace Spinner.Fody.Weavers
                                            null,
                                            meaField,
                                            tryStartOffset,
-                                           exceptionHandlerLeaveTarget);
+                                           out onExceptionContinueTarget);
             }
 
             if (_aspectFeatures.Has(Features.OnExit))
@@ -377,6 +349,8 @@ namespace Spinner.Fody.Weavers
                 
             if (exceptionHandlerLeaveTarget != null)
                 insc.Insert(insc.Count - leaveEndOffset, exceptionHandlerLeaveTarget);
+            if (onExceptionContinueTarget != null)
+                insc.Insert(insc.Count - leaveEndOffset, onExceptionContinueTarget);
 
             if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
             {
@@ -503,35 +477,35 @@ namespace Spinner.Fody.Weavers
 
             meaVar = method.Body.AddVariableDefinition(meaType);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
             if (method.IsStatic)
             {
-                insc.Add(Ins.Create(OpCodes.Ldnull));
+                il.Emit(OpCodes.Ldnull);
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                il.Emit(OpCodes.Ldarg_0);
                 if (method.DeclaringType.IsValueType)
                 {
-                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
-                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
+                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
+                    il.Emit(OpCodes.Box, method.DeclaringType);
                 }
             }
 
             if (argumentsVarOpt == null)
             {
-                insc.Add(Ins.Create(OpCodes.Ldnull));
+                il.Emit(OpCodes.Ldnull);
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVarOpt));
+                il.Emit(OpCodes.Ldloc, argumentsVarOpt);
             }
 
-            insc.Add(Ins.Create(OpCodes.Newobj, meaCtor));
-            insc.Add(Ins.Create(OpCodes.Stloc, meaVar));
+            il.Emit(OpCodes.Newobj, meaCtor);
+            il.Emit(OpCodes.Stloc, meaVar);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         /// <summary>
@@ -596,82 +570,72 @@ namespace Spinner.Fody.Weavers
         private void WriteOnEntryCall(
             MethodDefinition method,
             int offset,
-            bool isStateMachine,
             VariableDefinition meaVarOpt,
-            FieldReference meaFieldOpt,
-            VariableDefinition returnValueVarOpt,
-            VariableDefinition argsVarOpt,
-            out Ins breakTarget)
+            FieldReference meaFieldOpt)
         {
-            breakTarget = null;
             MethodDefinition onEntryDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnEntry, true);
             MethodReference onEntry = _mwc.SafeImport(onEntryDef);
-            Features adviceFeatures = GetFeatures(onEntryDef);
+            //Features adviceFeatures = GetFeatures(onEntryDef);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
             // Invoke OnEntry with the MEA field, variable, or null.
 
-            insc.Add(Ins.Create(OpCodes.Ldsfld, _aspectField));
+            il.Emit(OpCodes.Ldsfld, _aspectField);
 
-            if (meaFieldOpt != null)
-                insc.AddRange(Ins.Create(OpCodes.Ldarg_0), Ins.Create(OpCodes.Ldfld, meaFieldOpt));
-            else if (meaVarOpt != null)
-                insc.Add(Ins.Create(OpCodes.Ldloc, meaVarOpt));
-            else
-                insc.Add(Ins.Create(OpCodes.Ldnull));
+            il.EmitLoadVarOrField(meaVarOpt, meaFieldOpt);
 
-            insc.Add(Ins.Create(OpCodes.Callvirt, onEntry));
+            il.Emit(OpCodes.Callvirt, onEntry);
 
-            // If this advice uses flow control, need to check for FlowBehavior.Return
-            if (adviceFeatures.Has(Features.FlowControl))
-            {
-                Debug.Assert(meaVarOpt != null || meaFieldOpt != null);
+            //// If this advice uses flow control, need to check for FlowBehavior.Return
+            //if (adviceFeatures.Has(Features.FlowControl))
+            //{
+            //    Debug.Assert(meaVarOpt != null || meaFieldOpt != null);
 
-                MethodDefinition getFlowBehaviorDef = _mwc.Spinner.MethodExecutionArgs_FlowBehavior.GetMethod;
-                MethodReference getFlowBehavior = _mwc.SafeImport(getFlowBehaviorDef);
+            //    MethodDefinition getFlowBehaviorDef = _mwc.Spinner.MethodExecutionArgs_FlowBehavior.GetMethod;
+            //    MethodReference getFlowBehavior = _mwc.SafeImport(getFlowBehaviorDef);
 
-                Ins notReturningLabel = Ins.Create(OpCodes.Nop);
+            //    Ins notReturningLabel = Ins.Create(OpCodes.Nop);
 
-                if (meaFieldOpt != null)
-                    insc.AddRange(Ins.Create(OpCodes.Ldarg_0), Ins.Create(OpCodes.Ldfld, meaFieldOpt));
-                else
-                    insc.Add(Ins.Create(OpCodes.Ldloc, meaVarOpt));
-                insc.Add(Ins.Create(OpCodes.Callvirt, getFlowBehavior));
-                insc.Add(Ins.Create(OpCodes.Ldc_I4, (int) FlowBehavior.Return));
-                insc.Add(Ins.Create(OpCodes.Ceq));
-                insc.Add(Ins.Create(OpCodes.Brfalse, notReturningLabel));
+            //    if (meaFieldOpt != null)
+            //        insc.AddRange(Ins.Create(OpCodes.Ldarg_0), Ins.Create(OpCodes.Ldfld, meaFieldOpt));
+            //    else
+            //        insc.Add(Ins.Create(OpCodes.Ldloc, meaVarOpt));
+            //    insc.Add(Ins.Create(OpCodes.Callvirt, getFlowBehavior));
+            //    insc.Add(Ins.Create(OpCodes.Ldc_I4, (int) FlowBehavior.Return));
+            //    insc.Add(Ins.Create(OpCodes.Ceq));
+            //    insc.Add(Ins.Create(OpCodes.Brfalse, notReturningLabel));
 
-                // Store the ReturnValue property in the variable if necessary
-                if (returnValueVarOpt != null)
-                {
-                    MethodDefinition getReturnValueDef = _mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod;
-                    MethodReference getReturnValue = _mwc.SafeImport(getReturnValueDef);
-                    TypeReference varType = _mwc.SafeImport(returnValueVarOpt.VariableType);
+            //    // Store the ReturnValue property in the variable if necessary
+            //    if (returnValueVarOpt != null)
+            //    {
+            //        MethodDefinition getReturnValueDef = _mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod;
+            //        MethodReference getReturnValue = _mwc.SafeImport(getReturnValueDef);
+            //        TypeReference varType = _mwc.SafeImport(returnValueVarOpt.VariableType);
 
-                    if (meaFieldOpt != null)
-                        insc.AddRange(Ins.Create(OpCodes.Ldarg_0), Ins.Create(OpCodes.Ldfld, meaFieldOpt));
-                    else
-                        insc.Add(Ins.Create(OpCodes.Ldloc, meaVarOpt));
-                    insc.Add(Ins.Create(OpCodes.Callvirt, getReturnValue));
-                    if (varType.IsValueType)
-                        insc.Add(Ins.Create(OpCodes.Unbox_Any, varType));
-                    else if (!varType.IsSame(_method.Module.TypeSystem.Object))
-                        insc.Add(Ins.Create(OpCodes.Castclass, varType));
-                    insc.Add(Ins.Create(OpCodes.Stloc, returnValueVarOpt));
-                }
+            //        if (meaFieldOpt != null)
+            //            insc.AddRange(Ins.Create(OpCodes.Ldarg_0), Ins.Create(OpCodes.Ldfld, meaFieldOpt));
+            //        else
+            //            insc.Add(Ins.Create(OpCodes.Ldloc, meaVarOpt));
+            //        insc.Add(Ins.Create(OpCodes.Callvirt, getReturnValue));
+            //        if (varType.IsValueType)
+            //            insc.Add(Ins.Create(OpCodes.Unbox_Any, varType));
+            //        else if (!varType.IsSame(_method.Module.TypeSystem.Object))
+            //            insc.Add(Ins.Create(OpCodes.Castclass, varType));
+            //        insc.Add(Ins.Create(OpCodes.Stloc, returnValueVarOpt));
+            //    }
 
-                // Copy ref and out arguments from container to method. These are not allowed on state machines.
-                if (!isStateMachine)
-                    WriteCopyArgumentsFromContainer(method, offset, argsVarOpt, false, true);
+            //    // Copy ref and out arguments from container to method. These are not allowed on state machines.
+            //    if (!isStateMachine)
+            //        WriteCopyArgumentsFromContainer(method, offset, argsVarOpt, false, true);
 
-                breakTarget = Ins.Create(OpCodes.Nop);
-                insc.Add(Ins.Create(OpCodes.Br, breakTarget));
+            //    breakTarget = Ins.Create(OpCodes.Nop);
+            //    insc.Add(Ins.Create(OpCodes.Br, breakTarget));
 
-                insc.Add(notReturningLabel);
-            }
+            //    insc.Add(notReturningLabel);
+            //}
             
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         /// <summary>
@@ -826,10 +790,8 @@ namespace Spinner.Fody.Weavers
             VariableDefinition meaVar,
             FieldReference meaField,
             int tryStart,
-            Ins leaveTarget)
+            out Ins continueTarget)
         {
-            var insc = new Collection<Ins>();
-
             MethodDefinition filterExceptionDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_FilterException, true);
             MethodReference filterExcetion = _mwc.SafeImport(filterExceptionDef);
             MethodDefinition onExceptionDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnException, true);
@@ -840,96 +802,137 @@ namespace Spinner.Fody.Weavers
 
             VariableDefinition exceptionHolder = targetMethod.Body.AddVariableDefinition(exceptionType);
 
-            Ins labelFilterTrue = Ins.Create(OpCodes.Nop);
-            Ins labelFilterEnd = Ins.Create(OpCodes.Nop);
+            var il = new ILProcessorEx();
 
-            int ehTryCatchEnd = insc.Count;
-            int ehFilterStart = insc.Count;
+            Ins labelFilterTrue = il.CreateNop();
+            Ins labelFilterEnd = il.CreateNop();
 
             // Check if its actually Exception. Non-Exception types can be thrown by native code.
-            insc.Add(Ins.Create(OpCodes.Isinst, exceptionType));
-            insc.Add(Ins.Create(OpCodes.Dup));
-            insc.Add(Ins.Create(OpCodes.Brtrue, labelFilterTrue));
+            il.Emit(OpCodes.Isinst, exceptionType);
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Brtrue, labelFilterTrue);
 
             // Not an Exception, load 0 as endfilter argument
-            insc.Add(Ins.Create(OpCodes.Pop));
-            insc.Add(Ins.Create(OpCodes.Ldc_I4_0));
-            insc.Add(Ins.Create(OpCodes.Br, labelFilterEnd));
+            il.Emit(OpCodes.Pop);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Br, labelFilterEnd);
 
             // Call FilterException()
-            insc.Add(labelFilterTrue);
-            insc.Add(Ins.Create(OpCodes.Stloc, exceptionHolder));
-            insc.Add(Ins.Create(OpCodes.Ldsfld, _aspectField));
-            if (meaField != null)
-            {
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
-                insc.Add(Ins.Create(OpCodes.Ldfld, meaField));
-            }
-            else if (meaVar != null)
-                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-            else
-                insc.Add(Ins.Create(OpCodes.Ldnull));
-            insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
-            insc.Add(Ins.Create(OpCodes.Callvirt, filterExcetion));
+            il.Append(labelFilterTrue);
+            il.Emit(OpCodes.Stloc, exceptionHolder);
+            il.Emit(OpCodes.Ldsfld, _aspectField);
+            il.EmitLoadVarOrField(meaVar, meaField);
+            il.Emit(OpCodes.Ldloc, exceptionHolder);
+            il.Emit(OpCodes.Callvirt, filterExcetion);
 
             // Compare FilterException result with 0 to get the endfilter argument
-            insc.Add(Ins.Create(OpCodes.Ldc_I4_0));
-            insc.Add(Ins.Create(OpCodes.Cgt_Un));
-            insc.Add(labelFilterEnd);
-            insc.Add(Ins.Create(OpCodes.Endfilter));
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Cgt_Un);
+            il.Append(labelFilterEnd);
+            il.Emit(OpCodes.Endfilter);
 
-            int ehCatchStart = insc.Count;
+            int ehCatchStart = il.Instructions.Count;
 
-            insc.Add(Ins.Create(OpCodes.Pop)); // Exception already stored
+            il.Emit(OpCodes.Pop); // Exception already stored
 
             // Call OnException()
-            if (meaVar != null)
+            if (meaVar != null || meaField != null)
             {
+                //Features onExceptionFeatures = GetFeatures(onExceptionDef);
                 MethodReference getException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.GetMethod);
                 MethodReference setException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
-                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                insc.Add(Ins.Create(OpCodes.Ldloc, exceptionHolder));
-                insc.Add(Ins.Create(OpCodes.Callvirt, setException));
+                il.EmitLoadVarOrField(meaVar, meaField);
+                il.Emit(OpCodes.Ldloc, exceptionHolder);
+                il.Emit(OpCodes.Callvirt, setException);
 
-                insc.Add(Ins.Create(OpCodes.Ldsfld, _aspectField));
-                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                insc.Add(Ins.Create(OpCodes.Callvirt, onException));
+                il.Emit(OpCodes.Ldsfld, _aspectField);
+                il.EmitLoadVarOrField(meaVar, meaField);
+                il.Emit(OpCodes.Callvirt, onException);
 
-                Ins labelCaught = Ins.Create(OpCodes.Nop);
+                //if (onExceptionFeatures.Has(Features.FlowControl))
+                //{
+                //    MethodReference getFlowBehavior = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_FlowBehavior.GetMethod);
+
+                //    returnTarget = il.CreateNop();
+                    
+                //    Ins continueCase = il.CreateNop();
+                //    Ins rethrowCase = il.CreateNop();
+                //    Ins returnCase = il.CreateNop();
+
+                //    il.EmitLoadVarOrField(meaVar, meaField);
+                //    il.Emit(OpCodes.Callvirt, getFlowBehavior);
+                    
+                //    il.Emit(OpCodes.Switch, new[] {rethrowCase, continueCase, rethrowCase, returnCase});
+                //    il.Emit(OpCodes.Br, rethrowCase); // fallthrough
+
+                //    il.Append(continueCase);
+                //    il.Emit(OpCodes.Leave, continueTarget); // TEMP!!!
+
+                //    il.Append(rethrowCase);
+                //    il.Emit(OpCodes.Rethrow);
+
+                //    il.Append(returnCase);
+
+                //    // Store the ReturnValue property in the variable if necessary
+                //    if (returnValueVarOpt != null)
+                //    {
+                //        MethodDefinition getReturnValueDef = _mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod;
+                //        MethodReference getReturnValue = _mwc.SafeImport(getReturnValueDef);
+                //        TypeReference varType = _mwc.SafeImport(returnValueVarOpt.VariableType);
+
+                //        il.EmitLoadVarOrField(meaVar, meaField);
+                //        il.Emit(OpCodes.Callvirt, getReturnValue);
+                //        if (varType.IsValueType)
+                //            il.Emit(OpCodes.Unbox_Any, varType);
+                //        else if (!varType.IsSame(_method.Module.TypeSystem.Object))
+                //            il.Emit(OpCodes.Castclass, varType);
+                //        il.Emit(OpCodes.Stloc, returnValueVarOpt);
+                //    }
+
+                //    il.Emit(OpCodes.Leave, returnTarget);
+                //}
+                //else
+                //{
+                //    il.Emit(OpCodes.Rethrow);
+                //}
+
+                Ins labelCaught = il.CreateNop();
 
                 // If the Exception property was set to null, return normally, otherwise rethrow
-                insc.Add(Ins.Create(OpCodes.Ldloc, meaVar));
-                insc.Add(Ins.Create(OpCodes.Callvirt, getException));
-                insc.Add(Ins.Create(OpCodes.Dup));
-                insc.Add(Ins.Create(OpCodes.Brfalse, labelCaught));
+                // Changeing the exception object will not throw the new value, instead the OnException() advice
+                // should throw.
+                il.EmitLoadVarOrField(meaVar, meaField);
+                il.Emit(OpCodes.Callvirt, getException);
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Brfalse, labelCaught);
 
-                insc.Add(Ins.Create(OpCodes.Rethrow));
+                il.Emit(OpCodes.Rethrow);
 
-                insc.Add(labelCaught);
-                insc.Add(Ins.Create(OpCodes.Pop));
+                il.Append(labelCaught);
+                il.Emit(OpCodes.Pop);
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldsfld, _aspectField));
-                insc.Add(Ins.Create(OpCodes.Ldnull));
-                insc.Add(Ins.Create(OpCodes.Callvirt, onException));
+                il.Emit(OpCodes.Ldsfld, _aspectField);
+                il.Emit(OpCodes.Ldnull);
+                il.Emit(OpCodes.Callvirt, onException);
             }
-            insc.Add(Ins.Create(OpCodes.Leave, leaveTarget));
+            continueTarget = il.CreateNop();
+            il.Emit(OpCodes.Leave, continueTarget);
 
-            int ehCatchEnd = insc.Count;
+            int ehCatchEnd = il.Instructions.Count;
+            il.Emit(OpCodes.Nop); // so ehCatchEnd has an instruction
 
-            insc.Add(Ins.Create(OpCodes.Nop));
-
-            targetMethod.Body.Instructions.InsertRange(offset, insc);
+            targetMethod.Body.Instructions.InsertRange(offset, il.Instructions);
 
             targetMethod.Body.ExceptionHandlers.Add(new ExceptionHandler(ExceptionHandlerType.Filter)
             {
                 TryStart = targetMethod.Body.Instructions[tryStart],
-                TryEnd = insc[ehTryCatchEnd],
-                FilterStart = insc[ehFilterStart],
-                HandlerStart = insc[ehCatchStart],
-                HandlerEnd = insc[ehCatchEnd],
+                TryEnd = il.Instructions[0],
+                FilterStart = il.Instructions[0],
+                HandlerStart = il.Instructions[ehCatchStart],
+                HandlerEnd = il.Instructions[ehCatchEnd],
                 CatchType = exceptionType
             });
         }

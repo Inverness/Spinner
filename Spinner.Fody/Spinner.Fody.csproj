@@ -54,9 +54,11 @@
     <Compile Include="ReferenceExtensions.cs" />
     <Compile Include="StringUtility.cs" />
     <Compile Include="Utilities\CollectionUtility.cs" />
+    <Compile Include="Utilities\ILProcessorEx.cs" />
     <Compile Include="Utilities\LabelProcessor.cs" />
     <Compile Include="Weavers\AspectWeaver.cs" />
     <Compile Include="Weavers\EventInterceptionAspectWeaver.cs" />
+    <Compile Include="Weavers\ILProcessorExtensions.cs" />
     <Compile Include="Weavers\MethodBoundaryAspectWeaver.cs" />
     <Compile Include="Weavers\MethodInterceptionAspectWeaver.cs" />
     <Compile Include="Weavers\NameGenerator.cs" />

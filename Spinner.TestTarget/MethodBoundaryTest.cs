@@ -36,6 +36,35 @@ namespace Spinner.TestTarget
             return a;
         }
 
+        [ExceptionControlMba]
+        public int ExceptionFlowBehaviorInt(int a, out int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return 99;
+            }
+            Console.WriteLine("Test 22");
+            return a;
+        }
+
+        [ExceptionControlMba]
+        [ExceptionControlMba]
+        public int ExceptionFlowBehaviorIntTwo(int a, out int b, string c)
+        {
+            b = 20;
+            Console.WriteLine("test: " + (a + b) + " --- " + c);
+            if (a > 3)
+            {
+                Console.WriteLine("test 99");
+                return 99;
+            }
+            Console.WriteLine("Test 22");
+            return a;
+        }
+
         [BasicLoggingMba]
         public async Task<int> AsyncInt(int a, int b, string c)
         {
@@ -64,6 +93,41 @@ namespace Spinner.TestTarget
             
             a += await GetNum(6);
         }
+
+        [ExceptionControlMba]
+        public async Task<int> ExceptionFlowBehaviorAsyncInt(int a, int b, string c)
+        {
+            a += await GetNum(3);
+
+            a += await GetNum(4);
+
+            if (a > 5)
+                return a;
+
+            a += await GetNum(5);
+
+            a += await GetNum(6);
+
+            return a;
+        }
+
+        //[ExceptionControlMba]
+        //[ExceptionControlMba]
+        //public async Task<int> ExceptionFlowBehaviorAsyncIntTwo(int a, int b, string c)
+        //{
+        //    a += await GetNum(3);
+
+        //    a += await GetNum(4);
+
+        //    if (a > 5)
+        //        return a;
+
+        //    a += await GetNum(5);
+
+        //    a += await GetNum(6);
+
+        //    return a;
+        //}
 
         [LogAndReturnMba]
         public void EntryReturnVoid(int a, int b, string c)
