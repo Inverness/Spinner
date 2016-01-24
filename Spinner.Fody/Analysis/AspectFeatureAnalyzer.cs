@@ -260,6 +260,9 @@ namespace Spinner.Fody.Analysis
                 case AspectKind.PropertyInterception:
                     baseType = _mwc.Spinner.IPropertyInterceptionAspect;
                     break;
+                case AspectKind.EventInterception:
+                    baseType = _mwc.Spinner.IEventInterceptionAspect;
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(ak), ak, null);
             }

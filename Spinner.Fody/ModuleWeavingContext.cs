@@ -43,12 +43,15 @@ namespace Spinner.Fody
                 {Spinner.AdviceArgs_Instance.SetMethod, Features.Instance},
                 {Spinner.MethodArgs_Arguments.GetMethod, Features.GetArguments},
                 {Spinner.PropertyInterceptionArgs_Index.GetMethod, Features.GetArguments},
+                {Spinner.EventInterceptionArgs_Arguments.GetMethod, Features.GetArguments},
                 {Spinner.Arguments_set_Item, Features.SetArguments},
                 {Spinner.Arguments_SetValue, Features.SetArguments},
                 {Spinner.Arguments_SetValueT, Features.SetArguments},
                 {Spinner.MethodExecutionArgs_FlowBehavior.SetMethod, Features.FlowControl},
                 {Spinner.MethodExecutionArgs_ReturnValue.GetMethod, Features.ReturnValue},
                 {Spinner.MethodExecutionArgs_ReturnValue.SetMethod, Features.ReturnValue},
+                {Spinner.EventInterceptionArgs_ReturnValue.GetMethod, Features.ReturnValue},
+                {Spinner.EventInterceptionArgs_ReturnValue.SetMethod, Features.ReturnValue},
                 {Spinner.MethodExecutionArgs_YieldValue.GetMethod, Features.YieldValue},
                 {Spinner.MethodExecutionArgs_YieldValue.SetMethod, Features.YieldValue},
                 {Spinner.MethodArgs_Method.GetMethod, Features.MemberInfo},
@@ -68,7 +71,10 @@ namespace Spinner.Fody
                 {Spinner.IMethodBoundaryAspect_OnResume, Features.OnResume},
                 {Spinner.IMethodInterceptionAspect_OnInvoke, Features.None},
                 {Spinner.IPropertyInterceptionAspect_OnGetValue, Features.None},
-                {Spinner.IPropertyInterceptionAspect_OnSetValue, Features.None}
+                {Spinner.IPropertyInterceptionAspect_OnSetValue, Features.None},
+                {Spinner.IEventInterceptionAspect_OnAddHandler, Features.None},
+                {Spinner.IEventInterceptionAspect_OnRemoveHandler, Features.None},
+                {Spinner.IEventInterceptionAspect_OnInvokeHandler, Features.None}
             };
         }
 
