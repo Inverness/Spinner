@@ -3,6 +3,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -122,32 +123,30 @@ namespace Spinner.Fody.Weavers
             }
 
             _miaVar = method.Body.AddVariableDefinition(miaType);
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
             if (method.IsStatic)
             {
-                insc.Add(Ins.Create(OpCodes.Ldnull));
+                il.Emit(OpCodes.Ldnull);
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                il.Emit(OpCodes.Ldarg_0);
                 if (method.DeclaringType.IsValueType)
                 {
-                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
-                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
+                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
+                    il.Emit(OpCodes.Box, method.DeclaringType);
                 }
             }
 
-            insc.Add(argumentsVariable == null
-                ? Ins.Create(OpCodes.Ldnull)
-                : Ins.Create(OpCodes.Ldloc, argumentsVariable));
+            il.EmitLoadOrNull(argumentsVariable, null);
             
-            insc.Add(Ins.Create(OpCodes.Ldsfld, _bindingInstanceField));
+            il.Emit(OpCodes.Ldsfld, _bindingInstanceField);
 
-            insc.Add(Ins.Create(OpCodes.Newobj, constructor));
-            insc.Add(Ins.Create(OpCodes.Stloc, _miaVar));
+            il.Emit(OpCodes.Newobj, constructor);
+            il.Emit(OpCodes.Stloc, _miaVar);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         private void CreateMethodBindingClass()
@@ -187,7 +186,7 @@ namespace Spinner.Fody.Weavers
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));
 
-            ILProcessor bil = invokeMethod.Body.GetILProcessor();
+            var il = new ILProcessorEx(invokeMethod.Body);
 
             GenericInstanceType argumentContainerType;
             FieldReference[] argumentContainerFields;
@@ -197,20 +196,20 @@ namespace Spinner.Fody.Weavers
             VariableDefinition argsContainer = null;
             if (_method.Parameters.Count != 0)
             {
-                argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
+                argsContainer = invokeMethod.Body.AddVariableDefinition(argumentContainerType);
 
-                bil.Emit(OpCodes.Ldarg_2);
-                bil.Emit(OpCodes.Castclass, argumentContainerType);
-                bil.Emit(OpCodes.Stloc, argsContainer);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Castclass, argumentContainerType);
+                il.Emit(OpCodes.Stloc, argsContainer);
             }
 
             // Load the instance for the method call
             if (!_method.IsStatic)
             {
                 // Must use unbox instead of unbox.any here so that the call is made on the value inside the box.
-                bil.Emit(OpCodes.Ldarg_1);
-                bil.Emit(OpCodes.Ldind_Ref);
-                bil.Emit(_method.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass, _method.DeclaringType);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldind_Ref);
+                il.Emit(_method.DeclaringType.IsValueType ? OpCodes.Unbox : OpCodes.Castclass, _method.DeclaringType);
             }
 
             // Load arguments or addresses directly from the arguments container
@@ -218,16 +217,16 @@ namespace Spinner.Fody.Weavers
             {
                 bool byRef = _method.Parameters[i].ParameterType.IsByReference;
 
-                bil.Emit(OpCodes.Ldloc, argsContainer);
-                bil.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
+                il.Emit(OpCodes.Ldloc, argsContainer);
+                il.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
             }
 
             if (_method.IsStatic || _method.DeclaringType.IsValueType)
-                bil.Emit(OpCodes.Call, _original);
+                il.Emit(OpCodes.Call, _original);
             else
-                bil.Emit(OpCodes.Callvirt, _original);
+                il.Emit(OpCodes.Callvirt, _original);
 
-            bil.Emit(OpCodes.Ret);
+            il.Emit(OpCodes.Ret);
         }
     }
 }

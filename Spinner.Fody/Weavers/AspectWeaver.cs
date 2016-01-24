@@ -5,6 +5,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -123,9 +124,11 @@ namespace Spinner.Fody.Weavers
             
             argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
 
-            var insc = method.Body.Instructions;
-            insc.Insert(offset, Ins.Create(OpCodes.Newobj, constructor));
-            insc.Insert(offset + 1, Ins.Create(OpCodes.Stloc, argumentsVariable));
+            var il = new ILProcessorEx();
+            il.Emit(OpCodes.Newobj, constructor);
+            il.Emit(OpCodes.Stloc, argumentsVariable);
+
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         protected void WriteSmArgumentContainerInit(
@@ -218,7 +221,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentContainerFields;
             GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
@@ -227,19 +230,20 @@ namespace Spinner.Fody.Weavers
 
                 TypeReference parameterType = method.Parameters[i].ParameterType;
 
-                insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVariable));
-                insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters[i]));
+                il.Emit(OpCodes.Ldloc, argumentsVariable);
+                il.Emit(OpCodes.Ldarg, method.Parameters[i]);
                 if (parameterType.IsByReference)
                 {
-                    insc.Add(parameterType.GetElementType().IsValueType
-                        ? Ins.Create(OpCodes.Ldobj, parameterType.GetElementType())
-                        : Ins.Create(OpCodes.Ldind_Ref));
+                    if (parameterType.GetElementType().IsValueType)
+                        il.Emit(OpCodes.Ldobj, parameterType.GetElementType());
+                    else
+                        il.Emit(OpCodes.Ldind_Ref);
                 }
 
-                insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
+                il.Emit(OpCodes.Stfld, argumentContainerFields[i]);
             }
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         protected void WriteSmCopyArgumentsToContainer(
@@ -257,7 +261,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentContainerFields;
             GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
             
             for (int i = 0; i < effectiveParameterCount; i++)
             {
@@ -274,14 +278,15 @@ namespace Spinner.Fody.Weavers
                 if (smArgumentField == null)
                     continue;
 
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
-                insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerField));
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
-                insc.Add(Ins.Create(OpCodes.Ldfld, smArgumentField));
-                insc.Add(Ins.Create(OpCodes.Stfld, argumentContainerFields[i]));
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, argumentContainerField);
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, smArgumentField);
+                il.Emit(OpCodes.Stfld, argumentContainerFields[i]);
             }
 
-            stateMachine.Body.InsertInstructions(offset, true, insc);
+            if (il.Instructions.Count != 0)
+                stateMachine.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         /// <summary>
@@ -298,7 +303,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentContainerFields;
             GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
                 TypeReference parameterType = method.Parameters[i].ParameterType;
@@ -308,26 +313,27 @@ namespace Spinner.Fody.Weavers
                     if (!includeRef)
                         continue;
                     
-                    insc.Add(Ins.Create(OpCodes.Ldarg, method.Parameters[i]));
-                    insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVariable));
-                    insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
-                    insc.Add(parameterType.GetElementType().IsValueType
-                        ? Ins.Create(OpCodes.Stobj, parameterType.GetElementType())
-                        : Ins.Create(OpCodes.Stind_Ref));
+                    il.Emit(OpCodes.Ldarg, method.Parameters[i]);
+                    il.Emit(OpCodes.Ldloc, argumentsVariable);
+                    il.Emit(OpCodes.Ldfld, argumentContainerFields[i]);
+                    if (parameterType.GetElementType().IsValueType)
+                        il.Emit(OpCodes.Stobj, parameterType.GetElementType());
+                    else
+                        il.Emit(OpCodes.Stind_Ref);
                 }
                 else
                 {
                     if (!includeNormal)
                         continue;
 
-                    insc.Add(Ins.Create(OpCodes.Ldloc, argumentsVariable));
-                    insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
-                    insc.Add(Ins.Create(OpCodes.Starg, method.Parameters[i]));
+                    il.Emit(OpCodes.Ldloc, argumentsVariable);
+                    il.Emit(OpCodes.Ldfld, argumentContainerFields[i]);
+                    il.Emit(OpCodes.Starg, method.Parameters[i]);
                 }
             }
 
-            if (insc.Count != 0)
-                method.Body.InsertInstructions(offset, true, insc);
+            if (il.Instructions.Count != 0)
+                method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         /// <summary>
@@ -345,7 +351,7 @@ namespace Spinner.Fody.Weavers
             FieldReference[] argumentContainerFields;
             GetArgumentContainerInfo(method, out argumentContainerType, out argumentContainerFields);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
             for (int i = 0; i < GetEffectiveParameterCount(method); i++)
             {
                 ParameterDefinition p = method.Parameters[i];
@@ -369,14 +375,15 @@ namespace Spinner.Fody.Weavers
                 if (smArgumentField == null)
                     continue;
 
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
-                insc.Add(Ins.Create(OpCodes.Dup));
-                insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerField));
-                insc.Add(Ins.Create(OpCodes.Ldfld, argumentContainerFields[i]));
-                insc.Add(Ins.Create(OpCodes.Stfld, smArgumentField));
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Ldfld, argumentContainerField);
+                il.Emit(OpCodes.Ldfld, argumentContainerFields[i]);
+                il.Emit(OpCodes.Stfld, smArgumentField);
             }
 
-            method.Body.InsertInstructions(offset, true, insc);
+            if (il.Instructions.Count != 0)
+                method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         ///// <summary>
@@ -504,25 +511,17 @@ namespace Spinner.Fody.Weavers
             MethodReference setMethod = _mwc.SafeImport(_mwc.Spinner.MethodArgs_Method.SetMethod);
             TypeReference methodInfo = _mwc.SafeImport(_mwc.Framework.MethodInfo);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
-            if (maFieldOpt != null)
-            {
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
-                insc.Add(Ins.Create(OpCodes.Ldfld, maFieldOpt));
-            }
-            else
-            {
-                insc.Add(Ins.Create(OpCodes.Ldloc, maVarOpt));
-            }
+            il.EmitLoadOrNull(maVarOpt, maFieldOpt);
 
-            insc.Add(Ins.Create(OpCodes.Ldtoken, method));
-            insc.Add(Ins.Create(OpCodes.Call, getMethodFromHandle));
-            insc.Add(Ins.Create(OpCodes.Castclass, methodInfo));
+            il.Emit(OpCodes.Ldtoken, method);
+            il.Emit(OpCodes.Call, getMethodFromHandle);
+            il.Emit(OpCodes.Castclass, methodInfo);
 
-            insc.Add(Ins.Create(OpCodes.Callvirt, setMethod));
+            il.Emit(OpCodes.Callvirt, setMethod);
 
-            target.Body.InsertInstructions(offset, true, insc);
+            target.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         protected void CreateAspectCacheField()
@@ -554,10 +553,10 @@ namespace Spinner.Fody.Weavers
 
             var method = new MethodDefinition(".ctor", attrs, _mwc.Module.TypeSystem.Void);
 
-            Collection<Ins> i = method.Body.Instructions;
-            i.Add(Ins.Create(OpCodes.Ldarg_0));
-            i.Add(Ins.Create(OpCodes.Call, baseCtor));
-            i.Add(Ins.Create(OpCodes.Ret));
+            var il = new ILProcessorEx(method.Body.Instructions);
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Call, baseCtor);
+            il.Emit(OpCodes.Ret);
 
             return method;
         }

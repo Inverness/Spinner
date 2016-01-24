@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Spinner.Fody.Utilities;
@@ -11,23 +10,21 @@ namespace Spinner.Fody.Weavers
     internal static class ILProcessorExtensions
     {
         /// <summary>
-        /// Emits advice args load from a var, state machine field, or null if neither is provided.
+        /// Loads a variable, instance field, or null.
         /// </summary>
-        internal static void EmitLoadAdviceArgs(
+        internal static void EmitLoadOrNull(
             this ILProcessorEx il,
             VariableDefinition varOpt,
-            FieldReference fieldOpt)
+            FieldReference ifield)
         {
-            Debug.Assert(varOpt == null || fieldOpt == null);
-
-            if (fieldOpt != null)
-            {
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldfld, fieldOpt);
-            }
-            else if (varOpt != null)
+            if (varOpt != null)
             {
                 il.Emit(OpCodes.Ldloc, varOpt);
+            }
+            else if (ifield != null)
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, ifield);
             }
             else
             {

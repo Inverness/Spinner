@@ -575,7 +575,7 @@ namespace Spinner.Fody.Weavers
             // Invoke OnEntry with the MEA field, variable, or null.
 
             il.Emit(OpCodes.Ldsfld, _aspectField);
-            il.EmitLoadAdviceArgs(meaVarOpt, meaFieldOpt);
+            il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
             il.Emit(OpCodes.Callvirt, onEntry);
 
             //// If this advice uses flow control, need to check for FlowBehavior.Return
@@ -716,7 +716,7 @@ namespace Spinner.Fody.Weavers
             {
                 MethodReference setReturnValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
 
-                il.EmitLoadAdviceArgs(meaVar, meaField);
+                il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Ldloc, returnVar);
                 if (returnVarType.IsValueType)
                     il.Emit(OpCodes.Box, returnVarType);
@@ -726,7 +726,7 @@ namespace Spinner.Fody.Weavers
             // Call OnSuccess()
 
             il.Emit(OpCodes.Ldsfld, _aspectField);
-            il.EmitLoadAdviceArgs(meaVar, meaField);
+            il.EmitLoadOrNull(meaVar, meaField);
             il.Emit(OpCodes.Callvirt, onSuccess);
 
             // Set resultVar to ReturnValue
@@ -735,7 +735,7 @@ namespace Spinner.Fody.Weavers
             {
                 MethodReference getReturnValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
 
-                il.EmitLoadAdviceArgs(meaVar, meaField);
+                il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Callvirt, getReturnValue);
                 if (returnVarType.IsValueType)
                     il.Emit(OpCodes.Unbox_Any, returnVarType);
@@ -782,7 +782,7 @@ namespace Spinner.Fody.Weavers
             il.Append(labelFilterTrue);
             il.Emit(OpCodes.Stloc, exceptionHolder);
             il.Emit(OpCodes.Ldsfld, _aspectField);
-            il.EmitLoadAdviceArgs(meaVar, meaField);
+            il.EmitLoadOrNull(meaVar, meaField);
             il.Emit(OpCodes.Ldloc, exceptionHolder);
             il.Emit(OpCodes.Callvirt, filterExcetion);
 
@@ -803,12 +803,12 @@ namespace Spinner.Fody.Weavers
                 //MethodReference getException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.GetMethod);
                 MethodReference setException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
-                il.EmitLoadAdviceArgs(meaVar, meaField);
+                il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Ldloc, exceptionHolder);
                 il.Emit(OpCodes.Callvirt, setException);
 
                 il.Emit(OpCodes.Ldsfld, _aspectField);
-                il.EmitLoadAdviceArgs(meaVar, meaField);
+                il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Callvirt, onException);
 
                 //if (onExceptionFeatures.Has(Features.FlowControl))
@@ -917,7 +917,7 @@ namespace Spinner.Fody.Weavers
 
             // Call OnExit()
             il.Emit(OpCodes.Ldsfld, _aspectField);
-            il.EmitLoadAdviceArgs(meaVar, meaField);
+            il.EmitLoadOrNull(meaVar, meaField);
             il.Emit(OpCodes.Callvirt, onExit);
             il.Emit(OpCodes.Endfinally);
 
@@ -985,7 +985,7 @@ namespace Spinner.Fody.Weavers
                 // Invoke OnYield()
 
                 il.Emit(OpCodes.Ldsfld, _aspectField);
-                il.EmitLoadAdviceArgs(null, meaField);
+                il.EmitLoadOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onYield);
 
                 //// Set YieldValue to null so we don't keep the object alive. altering the YieldValue is not permitted
@@ -1019,7 +1019,7 @@ namespace Spinner.Fody.Weavers
                 }
 
                 il.Emit(OpCodes.Ldsfld, _aspectField);
-                il.EmitLoadAdviceArgs(null, meaField);
+                il.EmitLoadOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onResume);
 
                 // Unbox the YieldValue and store it back in the result. Changing it is permitted here.
