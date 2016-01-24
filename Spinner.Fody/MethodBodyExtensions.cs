@@ -162,6 +162,18 @@ namespace Spinner.Fody
                     if (operand.OpCode == OpCodes.Nop)
                         breaks.Add(ins);
                 }
+                else if (ot == OperandType.InlineSwitch)
+                {
+                    var operand = (Instruction[]) ins.Operand;
+                    for (int s = 0; s < operand.Length; s++)
+                    {
+                        if (operand[s].OpCode == OpCodes.Nop)
+                        {
+                            breaks.Add(ins);
+                            break;
+                        }
+                    }
+                }
                 else if (ins.OpCode == OpCodes.Nop)
                 {
                     if (excluded != null && excluded.Contains(ins))
@@ -194,9 +206,22 @@ namespace Spinner.Fody
             // Update breaks to point to instructions that follow the no-ops
             foreach (Instruction ins in breaks)
             {
-                Instruction next = newInstructions[(Instruction) ins.Operand];
-                if (next != null)
-                    ins.Operand = next;
+                if (ins.OpCode.OperandType == OperandType.InlineSwitch)
+                {
+                    var operands = (Instruction[]) ins.Operand;
+                    for (int i = 0; i < operands.Length; i++)
+                    {
+                        Instruction next = newInstructions[operands[i]];
+                        if (next != null)
+                            operands[i] = next;
+                    }
+                }
+                else
+                {
+                    Instruction next = newInstructions[(Instruction) ins.Operand];
+                    if (next != null)
+                        ins.Operand = next;
+                }
             }
 
             if (!self.HasExceptionHandlers)
