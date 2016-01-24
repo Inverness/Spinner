@@ -11,9 +11,9 @@ namespace Spinner.Fody.Weavers
     internal static class ILProcessorExtensions
     {
         /// <summary>
-        /// Loads a variable, instance field, or null
+        /// Emits advice args load from a var, state machine field, or null if neither is provided.
         /// </summary>
-        internal static void EmitLoadVarOrField(
+        internal static void EmitLoadAdviceArgs(
             this ILProcessorEx il,
             VariableDefinition varOpt,
             FieldReference fieldOpt)
@@ -33,6 +33,23 @@ namespace Spinner.Fody.Weavers
             {
                 il.Emit(OpCodes.Ldnull);
             }
+        }
+
+        /// <summary>
+        /// Emits box if the type is a value type.
+        /// </summary>
+        internal static void EmitValueTypeBox(this ILProcessorEx il, TypeReference type)
+        {
+            if (type.IsValueType)
+                il.Emit(OpCodes.Box, type);
+        }
+
+        /// <summary>
+        /// Emits castclass or unbox.any depending on whether or not the type is a value type.
+        /// </summary>
+        internal static void EmitCastOrUnbox(this ILProcessorEx il, TypeReference type)
+        {
+            il.Emit(type.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, type);
         }
     }
 }

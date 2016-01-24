@@ -11,12 +11,12 @@ namespace Spinner.Fody
         /// <summary>
         /// Replaces all occurances of an instruction as an operand and in exception handlers.
         /// </summary>
-        /// <param name="self"></param>
-        /// <param name="oldValue"></param>
-        /// <param name="newValue"></param>
-        /// <param name="excludeStart"></param>
-        /// <param name="excludeCount"></param>
-        internal static void ReplaceBranchTargets(this MethodBody self, Instruction oldValue, Instruction newValue, int excludeStart, int excludeCount)
+        internal static void ReplaceInstructionOperands(
+            this MethodBody self,
+            Instruction oldValue,
+            Instruction newValue,
+            int excludeStart,
+            int excludeCount)
         {
             int excludeEnd = excludeStart + excludeCount;
             for (int i = 0; i < self.Instructions.Count; i++)
@@ -48,15 +48,20 @@ namespace Spinner.Fody
             foreach (ExceptionHandler eh in self.ExceptionHandlers)
             {
                 int index;
-                if (eh.TryStart == oldValue && ((index = self.Instructions.IndexOf(eh.TryStart)) < excludeStart || index > excludeEnd))
+                if (eh.TryStart == oldValue &&
+                    ((index = self.Instructions.IndexOf(eh.TryStart)) < excludeStart || index >= excludeEnd))
                     eh.TryStart = newValue;
-                if (eh.TryEnd == oldValue && ((index = self.Instructions.IndexOf(eh.TryEnd)) < excludeStart || index > excludeEnd))
+                if (eh.TryEnd == oldValue &&
+                    ((index = self.Instructions.IndexOf(eh.TryEnd)) < excludeStart || index >= excludeEnd))
                     eh.TryEnd = newValue;
-                if (eh.HandlerStart == oldValue && ((index = self.Instructions.IndexOf(eh.HandlerStart)) < excludeStart || index > excludeEnd))
+                if (eh.HandlerStart == oldValue &&
+                    ((index = self.Instructions.IndexOf(eh.HandlerStart)) < excludeStart || index >= excludeEnd))
                     eh.HandlerStart = newValue;
-                if (eh.HandlerEnd == oldValue && ((index = self.Instructions.IndexOf(eh.HandlerEnd)) < excludeStart || index > excludeEnd))
+                if (eh.HandlerEnd == oldValue &&
+                    ((index = self.Instructions.IndexOf(eh.HandlerEnd)) < excludeStart || index >= excludeEnd))
                     eh.HandlerEnd = newValue;
-                if (eh.FilterStart == oldValue && ((index = self.Instructions.IndexOf(eh.FilterStart)) < excludeStart || index > excludeEnd))
+                if (eh.FilterStart == oldValue &&
+                    ((index = self.Instructions.IndexOf(eh.FilterStart)) < excludeStart || index >= excludeEnd))
                     eh.FilterStart = newValue;
             }
         }
@@ -79,15 +84,15 @@ namespace Spinner.Fody
         /// <summary>
         /// Inserts instructions while fixing branch targets for the insertion index.
         /// </summary>
-        internal static int InsertInstructions(this MethodBody self, int index, bool fixBranches, params Instruction[] instructions)
+        internal static int InsertInstructions(this MethodBody self, int index, bool fixOffsets, params Instruction[] instructions)
         {
-            return InsertInstructions(self, index, fixBranches, (IEnumerable<Instruction>) instructions);
+            return InsertInstructions(self, index, fixOffsets, (IEnumerable<Instruction>) instructions);
         }
 
         /// <summary>
         /// Inserts instructions while fixing branch targets for the insertion index.
         /// </summary>
-        internal static int InsertInstructions(this MethodBody self, int index, bool fixBranches, IEnumerable<Instruction> instructions)
+        internal static int InsertInstructions(this MethodBody self, int index, bool fixOffsets, IEnumerable<Instruction> instructions)
         {
             Collection<Instruction> insc = self.Instructions;
 
@@ -100,8 +105,8 @@ namespace Spinner.Fody
 
             Instruction newIns = insc[index];
 
-            if (fixBranches)
-                self.ReplaceBranchTargets(oldIns, newIns, index, count);
+            if (fixOffsets)
+                self.ReplaceInstructionOperands(oldIns, newIns, index, count);
 
             return count;
         }
@@ -112,7 +117,7 @@ namespace Spinner.Fody
 
             self.Instructions[index] = ins;
 
-            self.ReplaceBranchTargets(oldIns, ins, index, 1);
+            self.ReplaceInstructionOperands(oldIns, ins, index, 1);
         }
 
         /// <summary>

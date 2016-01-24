@@ -52,7 +52,6 @@
     <Compile Include="Aspects\BasicLoggingMia.cs" />
     <Compile Include="Aspects\BasicLogginaPia.cs" />
     <Compile Include="Aspects\ExceptionControlMba.cs" />
-    <Compile Include="Aspects\LogAndReturnMba.cs" />
     <Compile Include="Aspects\PropertyNameLoggingPia.cs" />
     <Compile Include="EventInterceptionTest.cs" />
     <Compile Include="MethodBoundaryTest.cs" />
