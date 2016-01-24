@@ -266,9 +266,7 @@ namespace Spinner.Fody.Weavers
 
                 ParameterDefinition p = method.Parameters[i];
 
-                Func<FieldDefinition, bool> isField = f => f.Name == p.Name &&
-                                                           f.FieldType.IsSimilar(p.ParameterType) &&
-                                                           f.FieldType.Resolve() == p.ParameterType.Resolve();
+                Func<FieldDefinition, bool> isField = f => f.Name == p.Name && f.FieldType.IsSame(p.ParameterType);
 
                 FieldReference smArgumentField = stateMachine.DeclaringType.Fields.FirstOrDefault(isField);
 
@@ -363,9 +361,7 @@ namespace Spinner.Fody.Weavers
                         continue;
                 }
 
-                Func<FieldDefinition, bool> isField = f => f.Name == p.Name &&
-                                                           f.FieldType.IsSimilar(p.ParameterType) &&
-                                                           f.FieldType.Resolve() == p.ParameterType.Resolve();
+                Func<FieldDefinition, bool> isField = f => f.Name == p.Name && f.FieldType.IsSame(p.ParameterType);
 
                 FieldReference smArgumentField = stateMachine.DeclaringType.Fields.FirstOrDefault(isField);
 
@@ -592,12 +588,12 @@ namespace Spinner.Fody.Weavers
                     {
                         TypeReference atype = a.AttributeType;
 
-                        if (atype.IsSimilar(analyzedAttrType) && atype.Resolve() == analyzedAttrType)
+                        if (atype.IsSame(analyzedAttrType))
                         {
                             return (Features) (uint) a.ConstructorArguments.First().Value;
                         }
 
-                        if (atype.IsSimilar(attrType) && atype.Resolve() == attrType)
+                        if (atype.IsSame(attrType))
                         {
                             features = (Features) (uint) a.ConstructorArguments.First().Value;
                             // Continue in case AnalyzedFeaturesAttribute is found.
@@ -634,12 +630,12 @@ namespace Spinner.Fody.Weavers
                     {
                         TypeReference atype = a.AttributeType;
 
-                        if (atype.IsSimilar(analyzedAttrType) && atype.Resolve() == analyzedAttrType)
+                        if (atype.IsSame(analyzedAttrType))
                         {
                             return (Features) (uint) a.ConstructorArguments.First().Value;
                         }
 
-                        if (atype.IsSimilar(attrType) && atype.Resolve() == attrType)
+                        if (atype.IsSame(attrType))
                         {
                             features = (Features) (uint) a.ConstructorArguments.First().Value;
                             // Continue in case AnalyzedFeaturesAttribute is found on same type.

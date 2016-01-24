@@ -198,6 +198,9 @@ namespace Spinner.Fody.Weavers
                 // TODO: Manual event add
 
                 bil.Emit(OpCodes.Ret);
+
+                //MethodDefinition baseMethod = _mwc.Spinner.EventBinding.GetMethod(bmethod, true);
+                //bmethod.Overrides.Add(_mwc.SafeImport(baseMethod));
             }
 
             {
@@ -251,10 +254,13 @@ namespace Spinner.Fody.Weavers
 
                 bil.Emit(OpCodes.Callvirt, delegateInvokeMethod);
 
-                if (delegateInvokeMethod.ReturnType.IsSimilar(module.TypeSystem.Void))
+                if (delegateInvokeMethod.ReturnType.IsSame(module.TypeSystem.Void))
                     bil.Emit(OpCodes.Ldnull);
 
                 bil.Emit(OpCodes.Ret);
+
+                //MethodDefinition baseMethod = _mwc.Spinner.EventBinding.GetMethod(bmethod, true);
+                //bmethod.Overrides.Add(_mwc.SafeImport(baseMethod));
             }
         }
 
@@ -417,6 +423,9 @@ namespace Spinner.Fody.Weavers
             // Create a field that will be used to cache the invoker's delegate in the future
         }
 
+        /// <summary>
+        /// Rewrites loads from the event backing field containing the delegate to the new invoker delegate field.
+        /// </summary>
         private void RewriteEventBackingFieldReferences(MethodDefinition method)
         {
             bool isStatic = _evtBackingField.IsStatic;
@@ -430,16 +439,15 @@ namespace Spinner.Fody.Weavers
 
             for (int i = 0; i < insc.Count; i++)
             {
-                Ins ins = insc[i];
-                if (ins.OpCode != loadOpCode)
+                if (insc[i].OpCode != loadOpCode)
                     continue;
 
-                var fr = (FieldReference) ins.Operand;
-                if (!fr.IsSimilar(_evtBackingField) || fr.Resolve() != _evtBackingField)
+                var fr = (FieldReference) insc[i].Operand;
+                if (!fr.IsSame(_evtBackingField))
                     continue;
-                
+
                 // Replace with reference to new field
-                ins.Operand = _invokerDelegateField;
+                insc[i].Operand = _invokerDelegateField;
 
                 // Lazily initialize some stuff the first time work needs to be done
                 if (newinsc == null)
@@ -482,8 +490,6 @@ namespace Spinner.Fody.Weavers
                     Debug.Assert(insc[i - 1].OpCode == OpCodes.Ldarg_0 || insc[i - 1].OpCode == OpCodes.Ldarg);
                     method.Body.InsertInstructions(i - 1, true, newinsc);
                 }
-
-                method.Body.UpdateOffsets();
 
                 newinsc.Clear();
             }

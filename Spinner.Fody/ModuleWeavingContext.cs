@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Mono.Cecil;
 using Spinner.Aspects;
-using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody
 {
@@ -12,8 +11,19 @@ namespace Spinner.Fody
     /// </summary>
     internal class ModuleWeavingContext
     {
+        /// <summary>
+        /// The module currently being weaved.
+        /// </summary>
         internal readonly ModuleDefinition Module;
+
+        /// <summary>
+        /// Well known Spinner members.
+        /// </summary>
         internal readonly WellKnownSpinnerMembers Spinner;
+
+        /// <summary>
+        /// Well known .NET members.
+        /// </summary>
         internal readonly WellKnownFrameworkMembers Framework;
 
         private readonly ModuleWeaver _weaver;

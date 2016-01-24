@@ -13,15 +13,30 @@ namespace Spinner.Fody.Analysis
     /// Analyzies aspect types and advice methods to see what AdviceArgs features they use. This allows the aspect
     /// weaver to exclude code generation that will not be used by the aspect.
     /// </summary>
-    internal static class AspectFeatureAnalyzer
+    internal class AspectFeatureAnalyzer
     {
         // Constants used to optimize various parts of analysis.
         private const char GeneratedNamePrefix = '<';
-        private const int AspectInterfaceNameMinimumLength = 21;
+        private const int AspectInterfaceNameMinimumLength = 20;
         private const string AspectInterfaceNameSuffix = "Aspect";
         private const string AdviceArgsNamespace = "Spinner.Aspects";
         private const string AdviceNamePrefix = "On";
-        
+
+        private readonly ModuleWeavingContext _mwc;
+        private readonly TypeDefinition _type;
+        private readonly AspectKind _aspectKind;
+        private readonly TypeDefinition[] _inheritanceList; 
+
+        private AspectFeatureAnalyzer(ModuleWeavingContext mwc, TypeDefinition type, AspectKind aspectKind, TypeDefinition[] inheritanceList)
+        {
+            _mwc = mwc;
+            _type = type;
+            _aspectKind = aspectKind;
+            _inheritanceList = inheritanceList;
+
+            Debug.Assert(inheritanceList.Last() == type);
+        }
+
         internal static bool IsMaybeAspect(TypeDefinition type)
         {
             return type.IsClass &&
@@ -42,32 +57,33 @@ namespace Spinner.Fody.Analysis
             Debug.Assert(IsMaybeAspect(type), "this should be checked before starting analysis");
 
             // Identify the fundamental aspect kind and inheritance list
-            AspectKind? ak = null;
-            List<TypeDefinition> types = null;
-            GetAspectKindAndTypes(mwc, type, ref ak, ref types);
+            AspectKind? kind = null;
+            List<TypeDefinition> inheritanceList = null;
+            GetAspectInfo(mwc, type, ref kind, ref inheritanceList);
 
             // The type might not actually be an aspect.
-            if (!ak.HasValue)
-                return;
+            if (kind.HasValue)
+                new AspectFeatureAnalyzer(mwc, type, kind.Value, inheritanceList.ToArray()).Analyze();
+        }
 
-            Debug.Assert(types.Last() == type);
-
+        private void Analyze()
+        {
             // Method and type feature flags are inherited
             var inheritedMethodFeatures = new Dictionary<MethodDefinition, Features>();
             var inheritedTypeFeatures = Features.None;
 
-            foreach (TypeDefinition t in types)
+            foreach (TypeDefinition t in _inheritanceList)
             {
-                if (mwc.Spinner.IsEmptyAdviceBase(t) || !t.HasMethods)
+                if (_mwc.Spinner.IsEmptyAdviceBase(t) || !t.HasMethods)
                     continue;
-                
+
                 // Do not analyze the same type more than once.
                 lock (t)
                 {
-                    if (HasAttribute(t, mwc.Spinner.AnalyzedFeaturesAttribute))
+                    if (HasAttribute(t, _mwc.Spinner.AnalyzedFeaturesAttribute))
                         continue;
 
-                    mwc.LogDebug($"Analyzing features for aspect type {t.Name}");
+                    _mwc.LogDebug($"Analyzing features for aspect type {t.Name}");
 
                     foreach (MethodDefinition m in t.Methods)
                     {
@@ -81,27 +97,27 @@ namespace Spinner.Fody.Analysis
 
                         // Get the base definition from the aspect interface that is being implemented or overridden.
                         Features typeFeatures;
-                        MethodDefinition baseDefinition = GetBaseDefinition(mwc, m, ak.Value, out typeFeatures);
+                        MethodDefinition baseDefinition = GetBaseDefinition(m, _aspectKind, out typeFeatures);
                         if (baseDefinition == null)
                             continue;
 
-                        inheritedTypeFeatures |= typeFeatures;
-
-                        // Inherit features from base classes.
+                        // Join method features inherited from the overriden method with those analyzed now.
                         Features methodFeatures;
                         inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
 
-                        methodFeatures |= AnalyzeAdvice(mwc, m);
-                        inheritedTypeFeatures |= methodFeatures;
+                        methodFeatures |= AnalyzeAdvice(m);
 
                         inheritedMethodFeatures[baseDefinition] = methodFeatures;
 
-                        AddAnalyzedFeaturesAttribute(mwc, m, methodFeatures);
+                        AddAnalyzedFeaturesAttribute(m, methodFeatures);
+
+                        // Add type and method level features that this advice uses.
+                        inheritedTypeFeatures |= typeFeatures | methodFeatures;
                     }
 
-                    AddAnalyzedFeaturesAttribute(mwc, t, inheritedTypeFeatures);
+                    AddAnalyzedFeaturesAttribute(t, inheritedTypeFeatures);
 
-                    Debug.Assert(HasAttribute(t, mwc.Spinner.AnalyzedFeaturesAttribute));
+                    Debug.Assert(HasAttribute(t, _mwc.Spinner.AnalyzedFeaturesAttribute));
                 }
             }
         }
@@ -109,7 +125,7 @@ namespace Spinner.Fody.Analysis
         /// <summary>
         /// Analyze an advice's body to see what features it uses.
         /// </summary>
-        private static Features AnalyzeAdvice(ModuleWeavingContext mwc, MethodDefinition method)
+        private Features AnalyzeAdvice(MethodDefinition method)
         {
             Debug.Assert(!method.IsStatic && method.HasParameters);
 
@@ -127,7 +143,7 @@ namespace Spinner.Fody.Analysis
                     continue;
 
                 Features mf;
-                if (mwc.MethodFeatures.TryGetValue(mr.Resolve(), out mf))
+                if (_mwc.MethodFeatures.TryGetValue(mr.Resolve(), out mf))
                     features |= mf;
             }
 
@@ -137,24 +153,27 @@ namespace Spinner.Fody.Analysis
         /// <summary>
         /// Determines the kind of aspect the type implements and the list of inherited classes containing advices.
         /// </summary>
-        private static void GetAspectKindAndTypes(
+        private static void GetAspectInfo(
             ModuleWeavingContext mwc,
             TypeDefinition type,
             ref AspectKind? ak,
-            ref List<TypeDefinition> types)
+            ref List<TypeDefinition> inheritanceList)
         {
+            // Recursively invoke this on bases first
             TypeDefinition baseType = type.BaseType?.Resolve();
             if (baseType != null && !mwc.Spinner.IsEmptyAdviceBase(type) && baseType != mwc.Framework.Attribute)
-                GetAspectKindAndTypes(mwc, baseType, ref ak, ref types);
+                GetAspectInfo(mwc, baseType, ref ak, ref inheritanceList);
 
+            // Try to determine the aspect kind from the current type
             if (!ak.HasValue)
                 ak = GetAspectKind(mwc, type);
 
+            // If aspect kind was determined by current type or a base type, add it to the list.
             if (ak.HasValue)
             {
-                if (types == null)
-                    types = new List<TypeDefinition>();
-                types.Add(type);
+                if (inheritanceList == null)
+                    inheritanceList = new List<TypeDefinition>();
+                inheritanceList.Add(type);
             }
         }
 
@@ -186,6 +205,8 @@ namespace Spinner.Fody.Analysis
                     return AspectKind.MethodInterception;
                 if (idef == spinner.IPropertyInterceptionAspect)
                     return AspectKind.PropertyInterception;
+                if (idef == spinner.IEventInterceptionAspect)
+                    return AspectKind.EventInterception;
             }
 
             return null;
@@ -194,13 +215,12 @@ namespace Spinner.Fody.Analysis
         /// <summary>
         /// Add the AnalyzedFeaturesAttribute() to a target type or method.
         /// </summary>
-        private static void AddAnalyzedFeaturesAttribute(
-            ModuleWeavingContext mwc,
+        private void AddAnalyzedFeaturesAttribute(
             ICustomAttributeProvider target,
             Features features)
         {
-            var attr = new CustomAttribute(mwc.SafeImport(mwc.Spinner.AnalyzedFeaturesAttribute_ctor));
-            attr.ConstructorArguments.Add(new CustomAttributeArgument(mwc.Spinner.Features, (uint) features));
+            var attr = new CustomAttribute(_mwc.SafeImport(_mwc.Spinner.AnalyzedFeaturesAttribute_ctor));
+            attr.ConstructorArguments.Add(new CustomAttributeArgument(_mwc.Spinner.Features, (uint) features));
             target.CustomAttributes.Add(attr);
         }
 
@@ -212,7 +232,7 @@ namespace Spinner.Fody.Analysis
             for (int c = 0; c < target.CustomAttributes.Count; c++)
             {
                 TypeReference at = target.CustomAttributes[c].AttributeType;
-                if (at.IsSimilar(attributeType) && at.Resolve() == attributeType.Resolve())
+                if (at.IsSame(attributeType))
                     return true;
             }
 
@@ -222,8 +242,7 @@ namespace Spinner.Fody.Analysis
         /// <summary>
         /// Get base definition from one of the aspect interfaces that is being implemented.
         /// </summary>
-        private static MethodDefinition GetBaseDefinition(
-            ModuleWeavingContext mwc,
+        private MethodDefinition GetBaseDefinition(
             MethodDefinition method,
             AspectKind ak,
             out Features typeFeature)
@@ -233,13 +252,13 @@ namespace Spinner.Fody.Analysis
             switch (ak)
             {
                 case AspectKind.MethodBoundary:
-                    baseType = mwc.Spinner.IMethodBoundaryAspect;
+                    baseType = _mwc.Spinner.IMethodBoundaryAspect;
                     break;
                 case AspectKind.MethodInterception:
-                    baseType = mwc.Spinner.IMethodInterceptionAspect;
+                    baseType = _mwc.Spinner.IMethodInterceptionAspect;
                     break;
                 case AspectKind.PropertyInterception:
-                    baseType = mwc.Spinner.IPropertyInterceptionAspect;
+                    baseType = _mwc.Spinner.IPropertyInterceptionAspect;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(ak), ak, null);
@@ -252,7 +271,7 @@ namespace Spinner.Fody.Analysis
                 return null;
             }
 
-            typeFeature = mwc.TypeFeatures[baseMethod];
+            typeFeature = _mwc.TypeFeatures[baseMethod];
             return baseMethod;
         }
     }

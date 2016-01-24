@@ -57,12 +57,9 @@ namespace Spinner.Fody
         }
 
         /// <summary>
-        /// Checks if two type references have the same name, namespace, and generic parameter count.
+        /// Does a fast check if two references are for the same definition.
         /// </summary>
-        /// <param name="self"></param>
-        /// <param name="other"></param>
-        /// <returns></returns>
-        internal static bool IsSimilar(this TypeReference self, TypeReference other)
+        internal static bool IsSame(this TypeReference self, TypeReference other)
         {
             if (ReferenceEquals(self, other))
                 return true;
@@ -76,10 +73,13 @@ namespace Spinner.Fody
             if (self.HasGenericParameters && (self.GenericParameters.Count != other.GenericParameters.Count))
                 return false;
 
-            return true;
+            return self.Resolve() == other.Resolve();
         }
 
-        internal static bool IsSimilar(this FieldReference self, FieldReference other)
+        /// <summary>
+        /// Does a fast check if two references are for the same definition.
+        /// </summary>
+        internal static bool IsSame(this FieldReference self, FieldReference other)
         {
             if (ReferenceEquals(self, other))
                 return true;
@@ -87,13 +87,13 @@ namespace Spinner.Fody
             if (self.Name != other.Name)
                 return false;
 
-            if (!self.FieldType.IsSimilar(other.FieldType))
+            if (!self.FieldType.IsSame(other.FieldType))
                 return false;
 
-            if (!self.DeclaringType.IsSimilar(other.DeclaringType))
+            if (!self.DeclaringType.IsSame(other.DeclaringType))
                 return false;
 
-            return true;
+            return self.Resolve() == other.Resolve();
         }
 
         /// <summary>

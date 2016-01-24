@@ -8,6 +8,7 @@ namespace Spinner.Aspects
     {
         MethodBoundary,
         MethodInterception,
-        PropertyInterception
+        PropertyInterception,
+        EventInterception
     }
 }

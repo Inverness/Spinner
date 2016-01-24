@@ -137,12 +137,11 @@ namespace Spinner.Fody.Weavers
                 Ins labelSuccess = Ins.Create(OpCodes.Nop);
 
                 // Need to rewrite returns if we're adding an exception handler or need a success block
-                RewriteReturns(method,
-                               tryStartIndex,
-                               method.Body.Instructions.Count - 1,
-                               returnValueVar,
-                               labelSuccess,
-                               _aspectFeatures.Has(Features.OnSuccess));
+                ReplaceReturnsWithBreaks(method,
+                                         tryStartIndex,
+                                         method.Body.Instructions.Count - 1,
+                                         returnValueVar,
+                                         labelSuccess);
 
                 insc.Add(labelSuccess);
 
@@ -328,11 +327,10 @@ namespace Spinner.Fody.Weavers
 
                 // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
                 // They will be replaced by breaks to labelSuccess.
-                RewriteSmLeaves(stateMachine,
-                                tryStartOffset,
-                                insc.Count - leaveEndOffset - 1,
-                                labelSuccess,
-                                false);
+                RewriteAsyncReturnsWithBreaks(stateMachine,
+                                              tryStartOffset,
+                                              insc.Count - leaveEndOffset - 1,
+                                              labelSuccess);
 
                 insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
 
@@ -658,7 +656,7 @@ namespace Spinner.Fody.Weavers
                     insc.Add(Ins.Create(OpCodes.Callvirt, getReturnValue));
                     if (varType.IsValueType)
                         insc.Add(Ins.Create(OpCodes.Unbox_Any, varType));
-                    else if (!varType.IsSimilar(_method.Module.TypeSystem.Object))
+                    else if (!varType.IsSame(_method.Module.TypeSystem.Object))
                         insc.Add(Ins.Create(OpCodes.Castclass, varType));
                     insc.Add(Ins.Create(OpCodes.Stloc, returnValueVarOpt));
                 }
@@ -676,19 +674,19 @@ namespace Spinner.Fody.Weavers
             method.Body.InsertInstructions(offset, true, insc);
         }
 
-        private static void RewriteReturns(
+        /// <summary>
+        /// Replaces return instructions with breaks. If the method is not void, stores the result of the return
+        /// expression in returnVar first.
+        /// </summary>
+        private static void ReplaceReturnsWithBreaks(
             MethodDefinition method,
             int startIndex,
             int endIndex,
             VariableDefinition returnVar,
-            Ins brTarget,
-            bool skipLast)
+            Ins breakTarget)
         {
-            var insc = method.Body.Instructions;
+            Collection<Ins> insc = method.Body.Instructions;
 
-            // Find the jump target for leaves that are normal returns
-
-            // Replace returns with a break or leave 
             for (int i = startIndex; i <= endIndex; i++)
             {
                 Ins ins = insc[i];
@@ -698,35 +696,28 @@ namespace Spinner.Fody.Weavers
 
                 if (returnVar != null)
                 {
-                    Ins insStoreReturnValue = Ins.Create(OpCodes.Stloc, returnVar);
-
-                    method.Body.ReplaceInstruction(i, insStoreReturnValue);
-
-                    // Do not write a jump to the very next instruction
-                    if (i == endIndex && skipLast)
-                        break;
-
-                    insc.Insert(++i, Ins.Create(OpCodes.Br, brTarget));
+                    method.Body.ReplaceInstruction(i, Ins.Create(OpCodes.Stloc, returnVar));
+                    
+                    insc.Insert(++i, Ins.Create(OpCodes.Br, breakTarget));
                     endIndex++;
                 }
                 else
                 {
                     // Need to replace with Nop if last so branch targets aren't broken.
-                    Ins newIns = i == endIndex && skipLast ? Ins.Create(OpCodes.Nop) : Ins.Create(OpCodes.Br, brTarget);
-
-                    method.Body.ReplaceInstruction(i, newIns);
+                    method.Body.ReplaceInstruction(i, Ins.Create(OpCodes.Br, breakTarget));
                 }
             }
         }
 
-        private static void RewriteSmLeaves(
+        /// <summary>
+        /// Rewrites return leaves in an async state machine body into breaks.
+        /// </summary>
+        private static void RewriteAsyncReturnsWithBreaks(
             MethodDefinition method,
             int startIndex,
             int endIndex,
-            Ins brTarget,
-            bool skipLast)
+            Ins breakTarget)
         {
-            // Assumes macros have been simplified
             MethodBody body = method.Body;
 
             // This is the target for leave instructions that will go on to set the task result.
@@ -738,12 +729,9 @@ namespace Spinner.Fody.Weavers
 
                 if (!ReferenceEquals(ins.Operand, leaveTarget))
                     continue;
-                Debug.Assert(ins.OpCode == OpCodes.Leave);
+                Debug.Assert(ins.OpCode == OpCodes.Leave, "instructions must have been simplified already");
 
-                // Need to replace with Nop if last so branch targets aren't broken.
-                Ins newIns = i == endIndex && skipLast ? Ins.Create(OpCodes.Nop) : Ins.Create(OpCodes.Br, brTarget);
-
-                body.ReplaceInstruction(i, newIns);
+                body.ReplaceInstruction(i, Ins.Create(OpCodes.Br, breakTarget));
             }
         }
 
@@ -1175,13 +1163,13 @@ namespace Spinner.Fody.Weavers
                 foreach (CustomAttribute a in method.CustomAttributes)
                 {
                     TypeReference atype = a.AttributeType;
-                    if (atype.IsSimilar(asmType) && atype.Resolve() == asmType)
+                    if (atype.IsSame(asmType))
                     {
                         var type = (TypeDefinition) a.ConstructorArguments.First().Value;
                         stateMachine = type.Methods.Single(m => m.Name == "MoveNext");
                         return StateMachineKind.Async;
                     }
-                    if (atype.IsSimilar(ismType) && atype.Resolve() == ismType)
+                    if (atype.IsSame(ismType))
                     {
                         var type = (TypeDefinition) a.ConstructorArguments.First().Value;
                         stateMachine = type.Methods.Single(m => m.Name == "MoveNext");

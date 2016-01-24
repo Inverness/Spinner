@@ -307,7 +307,7 @@ namespace Spinner.Fody.Multicasting
                         }
                     }
 
-                    if (m.MethodReturnType.HasCustomAttributes && !m.ReturnType.IsSimilar(m.Module.TypeSystem.Void))
+                    if (m.MethodReturnType.HasCustomAttributes && !m.ReturnType.IsSame(m.Module.TypeSystem.Void))
                         InstantiateMulticasts(m.MethodReturnType, ProviderType.MethodReturn);
                 }
             }
@@ -875,7 +875,7 @@ namespace Spinner.Fody.Multicasting
             TypeReference current = type.BaseType;
             while (current != null)
             {
-                if (current.IsSimilar(m))
+                if (current.IsSame(m))
                     return true;
 
                 current = current.Resolve().BaseType;
