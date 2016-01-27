@@ -51,36 +51,36 @@ namespace Spinner.Fody.Weavers
             method.Body.Variables.Clear();
             method.Body.ExceptionHandlers.Clear();
 
-            Collection<Ins> insc = method.Body.Instructions;
+            var il = new ILProcessorEx(method.Body);
 
             //WriteOutArgumentInit(il);
 
             VariableDefinition argumentsVariable;
-            WriteArgumentContainerInit(method, insc.Count, out argumentsVariable);
+            WriteArgumentContainerInit(method, il.Count, out argumentsVariable);
 
-            WriteCopyArgumentsToContainer(method, insc.Count, argumentsVariable, true);
+            WriteCopyArgumentsToContainer(method, il.Count, argumentsVariable, true);
 
-            WriteAspectInit(method, insc.Count);
+            WriteAspectInit(method, il.Count);
 
-            WriteBindingInit(method, insc.Count);
+            WriteBindingInit(method, il.Count);
             
-            WriteMiaInit(method, insc.Count, argumentsVariable);
+            WriteMiaInit(method, il.Count, argumentsVariable);
 
             if (_aspectFeatures.Has(Features.MemberInfo))
-                WriteSetMethodInfo(method, null, insc.Count, _miaVar, null);
+                WriteSetMethodInfo(method, null, il.Count, _miaVar, null);
 
             MethodReference adviceBase = _mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
-            WriteCallAdvice(method, insc.Count, adviceBase, _miaVar);
+            WriteCallAdvice(method, il.Count, adviceBase, _miaVar);
 
             // Copy out and ref arguments from container
-            WriteCopyArgumentsFromContainer(method, insc.Count, argumentsVariable, false, true);
+            WriteCopyArgumentsFromContainer(method, il.Count, argumentsVariable, false, true);
 
             if (_returnValueField != null)
             {
-                insc.Add(Ins.Create(OpCodes.Ldloc, _miaVar));
-                insc.Add(Ins.Create(OpCodes.Ldfld, _returnValueField));
+                il.Emit(OpCodes.Ldloc, _miaVar);
+                il.Emit(OpCodes.Ldfld, _returnValueField);
             }
-            insc.Add(Ins.Create(OpCodes.Ret));
+            il.Emit(OpCodes.Ret);
 
             // Fix labels and optimize
 

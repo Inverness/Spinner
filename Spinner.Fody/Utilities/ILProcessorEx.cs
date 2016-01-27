@@ -33,7 +33,9 @@ namespace Spinner.Fody.Utilities
             //_offset = instructions.Count;
         }
 
-        public Collection<Instruction> Instructions => _instructions; 
+        public Collection<Instruction> Instructions => _instructions;
+
+        public int Count => _instructions.Count;
 
         //public int Offset
         //{
