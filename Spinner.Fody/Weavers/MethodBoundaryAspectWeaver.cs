@@ -966,7 +966,7 @@ namespace Spinner.Fody.Weavers
                     throw new InvalidOperationException("unable to determine expression type");
 
                 il.Emit(OpCodes.Dup);
-                il.EmitValueTypeBox(awaitableType);
+                il.EmitBoxIfValueType(awaitableType);
                 il.Emit(OpCodes.Stloc, awaitableVar);
 
                 offset += stateMachine.Body.InsertInstructions(getAwaiterOffset, true, il.Instructions);
@@ -1014,7 +1014,7 @@ namespace Spinner.Fody.Weavers
                     il.Emit(OpCodes.Ldarg_0);
                     il.Emit(OpCodes.Ldfld, meaField);
                     il.Emit(OpCodes.Ldloc, resultVar);
-                    il.EmitValueTypeBox(resultVar.VariableType);
+                    il.EmitBoxIfValueType(resultVar.VariableType);
                     il.Emit(OpCodes.Callvirt, setYieldValue);
                 }
 

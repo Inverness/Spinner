@@ -35,7 +35,7 @@ namespace Spinner.Fody.Weavers
         /// <summary>
         /// Emits box if the type is a value type.
         /// </summary>
-        internal static void EmitValueTypeBox(this ILProcessorEx il, TypeReference type)
+        internal static void EmitBoxIfValueType(this ILProcessorEx il, TypeReference type)
         {
             if (type.IsValueType)
                 il.Emit(OpCodes.Box, type);

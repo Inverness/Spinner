@@ -1,10 +1,8 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Mono.Collections.Generic;
 using Spinner.Aspects;
 using Spinner.Fody.Utilities;
-using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
 {

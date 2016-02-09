@@ -40,7 +40,7 @@ namespace Spinner.Fody
 
         public void Execute()
         {
-            LogInfo($"Beginning aspect weaving for {ModuleDefinition.Assembly.FullName}");
+            LogInfo($"---- Beginning aspect weaving for: {ModuleDefinition.Assembly.FullName} ----");
 
             AssemblyNameReference spinnerName = ModuleDefinition.AssemblyReferences.FirstOrDefault(a => a.Name == "Spinner");
 
@@ -57,7 +57,7 @@ namespace Spinner.Fody
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
             var stopwatch = new Stopwatch();
 
-            LogInfo("Beginning attribute multicasting");
+            LogInfo("Beginning attribute multicasting...");
 
             stopwatch.Start();
 
@@ -69,12 +69,12 @@ namespace Spinner.Fody
             
             // Analyze aspect types in parallel.
 
-            LogInfo("Beginning aspect feature analysis");
+            LogInfo("Beginning aspect feature analysis...");
 
             stopwatch.Restart();
 
-            Task[] analysisTasks = types.Where(AspectFeatureAnalyzer.IsMaybeAspect)
-                                        .Select(CreateAnalysisAction)
+            Task[] analysisTasks = types.Select(CreateAnalysisAction)
+                                        .Where(a => a != null)
                                         .Select(Task.Run)
                                         .ToArray();
 
@@ -85,7 +85,7 @@ namespace Spinner.Fody
 
             LogInfo($"Finished feature analysis for {analysisTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
 
-            LogInfo("Beginning aspect weaving");
+            LogInfo("Beginning aspect weaving...");
 
             stopwatch.Restart();
 
@@ -103,7 +103,7 @@ namespace Spinner.Fody
 
             stopwatch.Stop();
 
-            LogInfo($"Finished aspect weaving for {weaveTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms.");
+            LogInfo($"Finished aspect weaving for {weaveTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
         }
 
         private Action CreateWeaveAction(TypeDefinition type)
@@ -237,6 +237,9 @@ namespace Spinner.Fody
 
         private Action CreateAnalysisAction(TypeDefinition type)
         {
+            if (!AspectFeatureAnalyzer.IsMaybeAspect(type))
+                return null;
+
             return () =>
             {
                 try

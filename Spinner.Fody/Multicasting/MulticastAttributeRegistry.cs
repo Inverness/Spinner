@@ -29,6 +29,7 @@ namespace Spinner.Fody.Multicasting
                 {TokenType.Param, ProviderType.Parameter}
             };
 
+        private readonly ModuleWeavingContext _mwc;
         private readonly ModuleDefinition _module;
         private readonly TypeDefinition _compilerGeneratedAttributeType;
         private readonly TypeDefinition _multicastAttributeType;
@@ -51,6 +52,7 @@ namespace Spinner.Fody.Multicasting
 
         private MulticastAttributeRegistry(ModuleWeavingContext mwc)
         {
+            _mwc = mwc;
             _module = mwc.Module;
             _compilerGeneratedAttributeType = mwc.Framework.CompilerGeneratedAttribute;
             _multicastAttributeType = mwc.Spinner.MulticastAttribute;
@@ -123,6 +125,8 @@ namespace Spinner.Fody.Multicasting
                         }
 
                         mis.Item2.Add(nmi);
+
+                        _mwc.LogDebug($"Multicast Inheritance: AttributeType: {mi.AttributeType}, Origin: {mi.Origin}, Inheritor: {d}");
                     }
                 }
             }
