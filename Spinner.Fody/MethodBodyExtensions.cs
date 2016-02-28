@@ -216,15 +216,15 @@ namespace Spinner.Fody
                     var operands = (Instruction[]) ins.Operand;
                     for (int i = 0; i < operands.Length; i++)
                     {
-                        Instruction next = newInstructions[operands[i]];
-                        if (next != null)
+                        Instruction next;
+                        if (newInstructions.TryGetValue(operands[i], out next) && next != null)
                             operands[i] = next;
                     }
                 }
                 else
                 {
-                    Instruction next = newInstructions[(Instruction) ins.Operand];
-                    if (next != null)
+                    Instruction next;
+                    if (newInstructions.TryGetValue((Instruction) ins.Operand, out next) && next != null)
                         ins.Operand = next;
                 }
             }
