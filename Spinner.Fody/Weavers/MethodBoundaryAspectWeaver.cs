@@ -25,7 +25,7 @@ namespace Spinner.Fody.Weavers
     {
         private readonly MethodDefinition _method;
         private MethodDefinition _stateMachine;
-        private TypeDefinition _effectiveReturnType;
+        private TypeReference _effectiveReturnType;
 
         private MethodBoundaryAspectWeaver(
             ModuleWeavingContext mwc,
@@ -53,9 +53,9 @@ namespace Spinner.Fody.Weavers
             switch (stateMachineKind)
             {
                 case StateMachineKind.None:
-                    _effectiveReturnType = _method.ReturnType == _mwc.Module.TypeSystem.Void
-                        ? null
-                        : _method.ReturnType.Resolve();
+                    _effectiveReturnType = _method.ReturnType != _mwc.Module.TypeSystem.Void
+                        ? _mwc.SafeImport(_method.ReturnType)
+                        : null;
 
                     _method.Body.SimplifyMacros();
                     // Preserve existing Nops in a debug build. These are used for optimal breakpoint placement.
@@ -68,12 +68,13 @@ namespace Spinner.Fody.Weavers
                     break;
 
                 case StateMachineKind.Iterator:
-                    throw new NotSupportedException();
+                    _mwc.LogWarning("Skipping unsupported iterator method: " + _method);
+                    break;
 
                 case StateMachineKind.Async:
                     // void for Task and T for Task<T>
                     _effectiveReturnType = _method.ReturnType.IsGenericInstance
-                        ? ((GenericInstanceType) _method.ReturnType).GenericArguments.Single().Resolve()
+                        ? _mwc.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
                         : null;
 
                     _stateMachine.Body.SimplifyMacros();
