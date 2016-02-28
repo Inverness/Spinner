@@ -248,7 +248,10 @@ namespace Spinner.Fody.Weavers
             // The meaVar would be used temporarily after loading from the field.
             FieldDefinition meaField;
             WriteSmMeaInit(method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
-            
+
+            if (_aspectFeatures.Has(Features.MemberInfo))
+                WriteSetMethodInfo(method, stateMachine, insc.Count - initEndOffset, null, meaField);
+
             if (_aspectFeatures.Has(Features.OnEntry))
                 WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
 

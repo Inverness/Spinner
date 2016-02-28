@@ -950,18 +950,18 @@ namespace Spinner.Fody.Multicasting
 
         private static bool HasGeneratedName(IMemberDefinition def)
         {
-            return def.Name.StartsWith("<");
+            return def.Name.StartsWith("<") || def.Name.StartsWith("CS$");
         }
 
         private bool HasGeneratedAttribute(ICustomAttributeProvider target)
         {
-            if (!target.HasCustomAttributes)
-                return false;
-
-            foreach (CustomAttribute a in target.CustomAttributes)
+            if (target.HasCustomAttributes)
             {
-                if (a.AttributeType.Resolve() == _compilerGeneratedAttributeType)
-                    return true;
+                foreach (CustomAttribute a in target.CustomAttributes)
+                {
+                    if (a.AttributeType.IsSame(_compilerGeneratedAttributeType))
+                        return true;
+                }
             }
 
             return false;
