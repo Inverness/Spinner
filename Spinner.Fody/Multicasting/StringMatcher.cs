@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Spinner.Fody.Multicasting
@@ -35,6 +36,7 @@ namespace Spinner.Fody.Multicasting
             return new RegexMatcher(new Regex(StringUtility.WildcardToRegex(pattern)));
         }
 
+        [DebuggerDisplay("*")]
         private sealed class AnyMatcherType : StringMatcher
         {
             public override bool IsMatch(string value)
@@ -43,6 +45,7 @@ namespace Spinner.Fody.Multicasting
             }
         }
 
+        [DebuggerDisplay("{_value}")]
         private sealed class EqualityMatcher : StringMatcher
         {
             private readonly string _value;
@@ -58,6 +61,7 @@ namespace Spinner.Fody.Multicasting
             }
         }
 
+        [DebuggerDisplay("{_value}*")]
         private sealed class PrefixMatcher : StringMatcher
         {
             private readonly string _value;
@@ -73,6 +77,7 @@ namespace Spinner.Fody.Multicasting
             }
         }
 
+        [DebuggerDisplay("(regex)")]
         private sealed class RegexMatcher : StringMatcher
         {
             private readonly Regex _regex;

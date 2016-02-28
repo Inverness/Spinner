@@ -74,32 +74,25 @@ namespace Spinner.Fody.Multicasting
 
         private void Initialize()
         {
+            //
             // Creates multicast attribute instances for all types in assembly and referenced assemblies. Also for
             // types that have multicast 
+            //
+
             var filter = new HashSet<ICustomAttributeProvider>();
             InstantiateMulticasts(_module.Assembly, null, filter);
 
+            //
             // Identify all types and assemblies that provide multicast attributes
+            //
+
             filter.Clear();
             AddDerivedProviders(_module.Assembly, null, filter);
 
+            //
             // Create new instances where inheritance is allowed
-            InheritMulticasts();
+            //
 
-            // Apply multicasts in the order the instances were created
-            var initLists = _instances.Values.ToList();
-            initLists.Sort((a, b) => a.Item1.CompareTo(b.Item1));
-
-            foreach (Tuple<int, List<MulticastInstance>> group in initLists)
-                UpdateMulticastTargets(group.Item2);
-
-            // No longer need this data
-            _derived = null;
-            _instances = null;
-        }
-
-        private void InheritMulticasts()
-        {
             foreach (KeyValuePair<ICustomAttributeProvider, Tuple<int, List<MulticastInstance>>> item in _instances.ToList())
             {
                 List<ICustomAttributeProvider> derivedList;
@@ -130,6 +123,55 @@ namespace Spinner.Fody.Multicasting
                     }
                 }
             }
+
+            //
+            // Apply multicasts in the order the instances were created
+            //
+
+            var initLists = _instances.Values.ToList();
+            initLists.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+
+            foreach (Tuple<int, List<MulticastInstance>> group in initLists)
+                UpdateMulticastTargets(group.Item2);
+
+            //
+            // Apply ordering and exclusions
+            //
+
+            foreach (KeyValuePair<ICustomAttributeProvider, List<MulticastInstance>> item in _targets)
+            {
+                List<MulticastInstance> instances = item.Value;
+
+                if (instances.Count > 1)
+                {
+                    // Remove duplicates inherited from same origin and order by priority
+                    // LINQ ensures that things remain in the original order where possible
+                    List<MulticastInstance> newInstances = instances.Distinct().OrderBy(i => i.Priority).ToList();
+                    instances.Clear();
+                    instances.AddRange(newInstances);
+                }
+                
+                // Apply exclusions
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    MulticastInstance a = instances[i];
+
+                    if (a.Exclude)
+                    {
+                        for (int r = instances.Count - 1; r > -1; r--)
+                        {
+                            if (instances[r].AttributeType == a.AttributeType)
+                                instances.RemoveAt(r);
+                        }
+
+                        i = -1;
+                    }
+                }
+            }
+
+            // No longer need this data
+            _derived = null;
+            _instances = null;
         }
 
         private void AddDerivedProviders(
@@ -425,35 +467,11 @@ namespace Spinner.Fody.Multicasting
         /// <param name="instances"></param>
         private void UpdateMulticastTargets(List<MulticastInstance> instances)
         {
-            if (instances == null || instances.Count == 0)
-                return;
-
-            if (instances.Count > 1)
+            if (instances != null && instances.Count != 0)
             {
-                // Remove duplicates inherited from same origin and order by priority
-                // LINQ ensures that things remain in the original order where possible
-                instances = instances.Distinct().OrderBy(i => i.Priority).ToList();
+                foreach (MulticastInstance mi in instances)
+                    UpdateMulticastTargets(mi);
             }
-
-            // Apply exclusions
-            for (int i = 0; i < instances.Count; i++)
-            {
-                MulticastInstance a = instances[i];
-
-                if (a.Exclude)
-                {
-                    for (int r = instances.Count - 1; r > -1; r--)
-                    {
-                        if (instances[r].AttributeType == a.AttributeType)
-                            instances.RemoveAt(r);
-                    }
-
-                    Debug.Assert(instances[i] == a);
-                }
-            }
-
-            foreach (MulticastInstance mi in instances)
-                UpdateMulticastTargets(mi);
         }
 
         private void InstantiateMulticasts(ICustomAttributeProvider origin, ProviderType originType)

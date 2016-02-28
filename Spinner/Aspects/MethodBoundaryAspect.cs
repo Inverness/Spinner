@@ -5,7 +5,7 @@ namespace Spinner.Aspects
     /// <summary>
     /// A default implementation of IMethodBoundaryAspect.
     /// </summary>
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property | AttributeTargets.Event, AllowMultiple = true, Inherited = false)]
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = true, Inherited = false)]
     public abstract class MethodBoundaryAspect : Aspect, IMethodBoundaryAspect
     {
         public virtual void OnEntry(MethodExecutionArgs args)
