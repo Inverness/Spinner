@@ -9,6 +9,7 @@ using Mono.Cecil.Rocks;
 using Spinner.Aspects;
 using Spinner.Fody.Analysis;
 using Spinner.Fody.Multicasting;
+using Spinner.Fody.Utilities;
 using Spinner.Fody.Weavers;
 
 namespace Spinner.Fody
@@ -110,12 +111,22 @@ namespace Spinner.Fody
         {
             List<Tuple<IMemberDefinition, TypeDefinition, AspectKind>> aspects = null;
 
+            // State machine weaving is handled by its owning method. Trying to treat state machines as their own type
+            // causes threading issues with the declaring type's weaver.
+
+            char typeChar;
+            if (NameUtility.TryParseGeneratedName(type.Name, out typeChar) && typeChar == 'd')
+                return null;
+
             // Use HasX properties to avoid on-demand allocation of the collections.
             
             if (type.HasMethods)
             {
                 foreach (MethodDefinition method in type.Methods)
                 {
+                    if (!method.HasBody)
+                        continue;
+
                     IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(method);
 
                     foreach (MulticastInstance mi in multicastAttributes)
