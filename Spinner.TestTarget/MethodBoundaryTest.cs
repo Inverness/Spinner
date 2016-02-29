@@ -129,6 +129,7 @@ namespace Spinner.TestTarget
             return a;
         }
 
+        [BasicLoggingMba]
         public IEnumerable<int> GeneratorInt(int a, int b, string c)
         {
             yield return a;

@@ -68,7 +68,18 @@ namespace Spinner.Fody.Weavers
                     break;
 
                 case StateMachineKind.Iterator:
-                    _mwc.LogWarning("Skipping unsupported iterator method: " + _method);
+                    _effectiveReturnType = _method.ReturnType.IsGenericInstance
+                        ? _mwc.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
+                        : _method.Module.TypeSystem.Object;
+
+                    _stateMachine.Body.SimplifyMacros();
+                    existingNops = new HashSet<Ins>(_stateMachine.Body.Instructions.Where(i => i.OpCode == OpCodes.Nop));
+
+                    WeaveIteratorMethod();
+
+                    _stateMachine.Body.RemoveNops(existingNops);
+                    _stateMachine.Body.OptimizeMacros();
+                    _stateMachine.Body.UpdateOffsets();
                     break;
 
                 case StateMachineKind.Async:
@@ -117,7 +128,7 @@ namespace Spinner.Fody.Weavers
                 WriteSetMethodInfo(method, null, insc.Count, meaVar, null);
 
             // Exception handlers will start before OnEntry().
-            int tryStartIndex = insc.Count;
+            int tryStartOffset = insc.Count;
 
             // Write OnEntry call
             if (_aspectFeatures.Has(Features.OnEntry))
@@ -132,7 +143,7 @@ namespace Spinner.Fody.Weavers
 
                 // Need to rewrite returns if we're adding an exception handler or need a success block
                 ReplaceReturnsWithBreaks(method,
-                                         tryStartIndex,
+                                         tryStartOffset,
                                          method.Body.Instructions.Count - 1,
                                          returnValueVar,
                                          labelSuccess);
@@ -168,7 +179,7 @@ namespace Spinner.Fody.Weavers
                                            insc.Count,
                                            meaVar,
                                            null,
-                                           tryStartIndex);
+                                           tryStartOffset);
             }
 
             // End of try block for the finally handler
@@ -180,7 +191,8 @@ namespace Spinner.Fody.Weavers
                                              insc.Count,
                                              meaVar,
                                              null,
-                                             tryStartIndex);
+                                             tryStartOffset,
+                                             null);
             }
 
             // End finally block
@@ -206,27 +218,26 @@ namespace Spinner.Fody.Weavers
             
             Collection<Ins> insc = stateMachine.Body.Instructions;
 
-            // Find the start of the body, which will be the first instruction after the first set of branch
-            // instructions
-            int tryStartIndex = insc.IndexOf(taskExceptionHandler.TryStart);
-            int firstBranch = Seek(insc, tryStartIndex, IsBranching);
-            int bodyBegin = Seek(insc, firstBranch, i => !IsBranching(i));
-
-            // Find the instruction to leave the body and set the task result. This will be the instruction right
-            // before the TryEnd.
-            int tryEndIndex = insc.IndexOf(taskExceptionHandler.TryEnd);
-            int bodyLeave = tryEndIndex - 1;
-            Debug.Assert(insc[bodyLeave].OpCode == OpCodes.Leave);
-
             // Start the try block in the same place as the state machine. This prevents the need to mess with
             // existing breaks
             int tryStartOffset = insc.IndexOf(taskExceptionHandler.TryStart);
 
+            // Find the start of the body, which will be the first instruction after the first set of branch
+            // instructions
+            int firstBranchOffset = Seek(insc, tryStartOffset, IsBranching);
+            int bodyBeginOffset = Seek(insc, firstBranchOffset, i => !IsBranching(i));
+
+            // Find the instruction to leave the body and set the task result. This will be the instruction right
+            // before the TryEnd.
+            int tryEndOffset = insc.IndexOf(taskExceptionHandler.TryEnd);
+            int bodyLeaveOffset = tryEndOffset - 1;
+            Debug.Assert(insc[bodyLeaveOffset].OpCode == OpCodes.Leave);
+            
             // The offset from the end to where initialization code will go.
-            int initEndOffset = insc.Count - bodyBegin;
+            int initEndOffset = insc.Count - bodyBeginOffset;
 
             // Offset from the end to the return leave instruction
-            int leaveEndOffset = insc.Count - bodyLeave;
+            int leaveEndOffset = insc.Count - bodyLeaveOffset;
 
             // Find the variable used to set the task result. No need to create our own.
             VariableDefinition resultVar = null;
@@ -352,7 +363,8 @@ namespace Spinner.Fody.Weavers
                                              insc.Count - leaveEndOffset,
                                              null,
                                              meaField,
-                                             tryStartOffset);
+                                             tryStartOffset,
+                                             null);
             }
 
             if (exceptionHandlerLeaveTarget != null)
@@ -365,9 +377,134 @@ namespace Spinner.Fody.Weavers
                 stateMachine.Body.ExceptionHandlers.Add(taskExceptionHandler);
             }
         }
-        
-        private static void WeaveIteratorMethod()
+
+        private void WeaveIteratorMethod()
         {
+            MethodDefinition method = _method;
+            MethodDefinition stateMachine = _stateMachine;
+            Collection<Ins> insc = stateMachine.Body.Instructions;
+            
+            // Discover where the body begins by examining branching instructions
+
+            int tryStartOffset = 0;
+            int firstBranchOffset = Seek(insc, tryStartOffset, IsBranching);
+            Ins firstBranch = insc[firstBranchOffset];
+
+            int bodyBeginOffset;
+            if (firstBranch.OpCode == OpCodes.Switch)
+            {
+                Ins nextBranch = ((Ins[]) firstBranch.Operand)[0];
+                Debug.Assert(IsBranching(nextBranch));
+                bodyBeginOffset = insc.IndexOf((Ins) nextBranch.Operand);
+            }
+            else
+            {
+                Ins nextBranch = (Ins) firstBranch.Operand;
+                Debug.Assert(IsBranching(nextBranch));
+                bodyBeginOffset = insc.IndexOf((Ins) nextBranch.Operand);
+            }
+
+            int initEndOffset = insc.Count - bodyBeginOffset;
+            
+            // Begin writing init code
+
+            WriteAspectInit(stateMachine, insc.Count - initEndOffset);
+
+            FieldDefinition arguments = null;
+            if (_aspectFeatures.Has(Features.GetArguments))
+            {
+                WriteSmArgumentContainerInit(method, stateMachine, insc.Count - initEndOffset, out arguments);
+                WriteSmCopyArgumentsToContainer(method, stateMachine, insc.Count - initEndOffset, arguments, true);
+            }
+
+            // The meaVar would be used temporarily after loading from the field.
+            FieldDefinition meaField;
+            WriteSmMeaInit(method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
+
+            if (_aspectFeatures.Has(Features.MemberInfo))
+                WriteSetMethodInfo(method, stateMachine, insc.Count - initEndOffset, null, meaField);
+
+            if (_aspectFeatures.Has(Features.OnEntry))
+                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
+
+            // TODO: Yield and Resume
+
+            VariableDefinition hasNextVar = null;
+            if (_aspectFeatures.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
+            {
+                hasNextVar = _stateMachine.Body.AddVariableDefinition(_stateMachine.Module.TypeSystem.Boolean);
+
+                Ins labelSuccess = Ins.Create(OpCodes.Nop);
+
+                // Need to rewrite returns if we're adding an exception handler or need a success block
+                ReplaceReturnsWithBreaks(stateMachine,
+                                         tryStartOffset,
+                                         insc.Count - 1,
+                                         hasNextVar,
+                                         labelSuccess);
+
+                insc.Add(labelSuccess);
+
+                // Write success block
+
+                if (_aspectFeatures.Has(Features.OnSuccess))
+                {
+                    // TODO: Insert this into branches that set false instead of checking here
+                    Ins notFinishedLabel = Ins.Create(OpCodes.Nop);
+
+                    var il = new ILProcessorEx(insc);
+                    il.Emit(OpCodes.Ldloc, hasNextVar);
+                    il.Emit(OpCodes.Brtrue, notFinishedLabel);
+
+                    WriteSuccessHandler(stateMachine, insc.Count, null, meaField, null);
+
+                    il.Append(notFinishedLabel);
+                }
+            }
+
+            // Need to leave the exception block
+            Ins exceptionHandlerLeaveTarget = null;
+            if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
+            {
+                exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
+                insc.Add(Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
+            }
+
+            // Write exception filter and handler
+
+            if (_aspectFeatures.Has(Features.OnException))
+            {
+                WriteCatchExceptionHandler(method,
+                                           stateMachine,
+                                           insc.Count,
+                                           null,
+                                           meaField,
+                                           tryStartOffset);
+            }
+
+            // End of try block for the finally handler
+
+            if (_aspectFeatures.Has(Features.OnExit))
+            {
+                WriteFinallyExceptionHandler(method,
+                                             stateMachine,
+                                             insc.Count,
+                                             null,
+                                             meaField,
+                                             tryStartOffset,
+                                             hasNextVar);
+            }
+
+            // End finally block
+
+            if (exceptionHandlerLeaveTarget != null)
+                insc.Add(exceptionHandlerLeaveTarget);
+
+            // Return the previously stored result
+            if (hasNextVar != null)
+                insc.Add(Ins.Create(OpCodes.Ldloc, hasNextVar));
+
+            insc.Add(Ins.Create(OpCodes.Ret));
         }
 
         private static bool GetAwaitInfo(
@@ -708,28 +845,28 @@ namespace Spinner.Fody.Weavers
         private void WriteSuccessHandler(
             MethodDefinition method,
             int offset,
-            VariableDefinition meaVar,
-            FieldReference meaField,
-            VariableDefinition returnVar)
+            VariableDefinition meaVarOpt,
+            FieldReference meaFieldOpt,
+            VariableDefinition returnVarOpt)
         {
             MethodReference onSuccess =
                 _mwc.SafeImport(_aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnSuccess, true));
 
             // For state machines, the return var type would need to be imported
             TypeReference returnVarType = null;
-            if (returnVar != null)
-                returnVarType = _mwc.SafeImport(returnVar.VariableType);
+            if (returnVarOpt != null)
+                returnVarType = _mwc.SafeImport(returnVarOpt.VariableType);
 
             var il = new ILProcessorEx();
 
             // Set ReturnValue to returnVar
 
-            if (returnVar != null && (meaVar != null || meaField != null))
+            if (returnVarOpt != null && (meaVarOpt != null || meaFieldOpt != null))
             {
                 MethodReference setReturnValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
 
-                il.EmitLoadOrNull(meaVar, meaField);
-                il.Emit(OpCodes.Ldloc, returnVar);
+                il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
+                il.Emit(OpCodes.Ldloc, returnVarOpt);
                 if (returnVarType.IsValueType)
                     il.Emit(OpCodes.Box, returnVarType);
                 il.Emit(OpCodes.Callvirt, setReturnValue);
@@ -738,20 +875,20 @@ namespace Spinner.Fody.Weavers
             // Call OnSuccess()
 
             il.Emit(OpCodes.Ldsfld, _aspectField);
-            il.EmitLoadOrNull(meaVar, meaField);
+            il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
             il.Emit(OpCodes.Callvirt, onSuccess);
 
             // Set resultVar to ReturnValue
 
-            if (returnVar != null && (meaVar != null || meaField != null))
+            if (returnVarOpt != null && (meaVarOpt != null || meaFieldOpt != null))
             {
                 MethodReference getReturnValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
 
-                il.EmitLoadOrNull(meaVar, meaField);
+                il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Callvirt, getReturnValue);
                 if (returnVarType.IsValueType)
                     il.Emit(OpCodes.Unbox_Any, returnVarType);
-                il.Emit(OpCodes.Stloc, returnVar);
+                il.Emit(OpCodes.Stloc, returnVarOpt);
             }
 
             method.Body.InsertInstructions(offset, true, il.Instructions);
@@ -918,7 +1055,8 @@ namespace Spinner.Fody.Weavers
             int offset,
             VariableDefinition meaVar,
             FieldReference meaField,
-            int tryStart)
+            int tryStart,
+            VariableDefinition hasNextVarOpt)
         {
             MethodDefinition onExitDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnExit, true);
             MethodReference onExit = _mwc.SafeImport(onExitDef);
@@ -927,10 +1065,24 @@ namespace Spinner.Fody.Weavers
 
             var il = new ILProcessorEx();
 
+            // For iterators, OnExit() can only be called if the iterator is done
+            Ins hasNextTrueLabel = null;
+            if (hasNextVarOpt != null)
+            {
+                hasNextTrueLabel = Ins.Create(OpCodes.Nop);
+
+                il.Emit(OpCodes.Ldloc, hasNextVarOpt);
+                il.Emit(OpCodes.Brtrue, hasNextTrueLabel);
+            }
+
             // Call OnExit()
             il.Emit(OpCodes.Ldsfld, _aspectField);
             il.EmitLoadOrNull(meaVar, meaField);
             il.Emit(OpCodes.Callvirt, onExit);
+
+            if (hasNextVarOpt != null)
+                il.Append(hasNextTrueLabel);
+
             il.Emit(OpCodes.Endfinally);
 
             int ehFinallyEnd = il.Instructions.Count;
@@ -1184,7 +1336,7 @@ namespace Spinner.Fody.Weavers
 
         private static int GetExceptionHandlerIndex(MethodBody body, int offset)
         {
-            if (body.HasExceptionHandlers)
+            if (body.HasExceptionHandlers && offset < body.Instructions.Count)
             {
                 for (int i = 0; i < body.ExceptionHandlers.Count; i++)
                 {
