@@ -7,6 +7,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
@@ -26,20 +27,24 @@ namespace Spinner.Fody.Weavers
         private readonly MethodDefinition _method;
         private MethodDefinition _stateMachine;
         private TypeReference _effectiveReturnType;
+        private readonly bool _applyToStateMachine;
 
         private MethodBoundaryAspectWeaver(
             ModuleWeavingContext mwc,
             TypeDefinition aspectType,
             int aspectIndex,
-            MethodDefinition aspectTarget)
+            MethodDefinition aspectTarget,
+            MulticastInstance mi
+            )
             : base(mwc, aspectType, aspectIndex, aspectTarget)
         {
             _method = aspectTarget;
+            _applyToStateMachine = mi.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.ApplyToStateMachine)) as bool? ?? true;
         }
 
-        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index)
+        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index, MulticastInstance mi)
         {
-            new MethodBoundaryAspectWeaver(mwc, aspect, index, method).Weave();
+            new MethodBoundaryAspectWeaver(mwc, aspect, index, method, mi).Weave();
         }
 
         protected override void Weave()
@@ -47,7 +52,9 @@ namespace Spinner.Fody.Weavers
             CreateAspectCacheField();
 
             // State machines are very different and have their own weaving methods.
-            StateMachineKind stateMachineKind = GetStateMachineInfo(_method, out _stateMachine);
+            StateMachineKind stateMachineKind = _applyToStateMachine
+                                                    ? GetStateMachineInfo(_method, out _stateMachine)
+                                                    : StateMachineKind.None;
 
             HashSet<Ins> existingNops;
             switch (stateMachineKind)

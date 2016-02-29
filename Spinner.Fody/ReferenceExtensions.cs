@@ -154,5 +154,33 @@ namespace Spinner.Fody
 
         //    return true;
         //}
+
+        internal static CustomAttributeArgument? GetNamedArgument(this CustomAttribute self, string name)
+        {
+            if (self.HasProperties)
+            {
+                foreach (CustomAttributeNamedArgument p in self.Properties)
+                {
+                    if (p.Name == name)
+                        return p.Argument;
+                }
+            }
+
+            if (self.HasFields)
+            {
+                foreach (CustomAttributeNamedArgument f in self.Fields)
+                {
+                    if (f.Name == name)
+                        return f.Argument;
+                }
+            }
+
+            return null;
+        }
+
+        internal static object GetNamedArgumentValue(this CustomAttribute self, string name)
+        {
+            return self.GetNamedArgument(name)?.Value;
+        }
     }
 }

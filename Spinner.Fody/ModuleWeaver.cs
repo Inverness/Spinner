@@ -109,7 +109,7 @@ namespace Spinner.Fody
 
         private Action CreateWeaveAction(TypeDefinition type)
         {
-            List<Tuple<IMemberDefinition, TypeDefinition, AspectKind>> aspects = null;
+            List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>> aspects = null;
 
             // State machine weaving is handled by its owning method. Trying to treat state machines as their own type
             // causes threading issues with the declaring type's weaver.
@@ -138,8 +138,8 @@ namespace Spinner.Fody
                             Debug.Assert(method.HasBody);
 
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, AspectKind.MethodBoundary));
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, AspectKind.MethodBoundary, mi));
 
                             LogDebug($"Found aspect {atype.Name} for {method}");
                         }
@@ -148,8 +148,8 @@ namespace Spinner.Fody
                             Debug.Assert(method.HasBody);
 
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, AspectKind.MethodInterception));
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, AspectKind.MethodInterception, mi));
 
                             LogDebug($"Found aspect {atype.Name} for {method}");
                         }
@@ -172,8 +172,8 @@ namespace Spinner.Fody
                             Debug.Assert(property.GetMethod != null || property.SetMethod != null);
 
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) property, atype, AspectKind.PropertyInterception));
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) property, atype, AspectKind.PropertyInterception, a));
 
                             LogDebug($"Found aspect {atype.Name} for {property}");
                         }
@@ -194,8 +194,8 @@ namespace Spinner.Fody
                         if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
                         {
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) xevent, atype, AspectKind.EventInterception));
+                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) xevent, atype, AspectKind.EventInterception, a));
 
                             LogDebug($"Found aspect {atype.Name} for {xevent}");
                         }
@@ -210,7 +210,7 @@ namespace Spinner.Fody
             {
                 LogInfo($"Weaving {aspects.Count} aspects for {type}");
 
-                foreach (Tuple<IMemberDefinition, TypeDefinition, AspectKind> a in aspects)
+                foreach (Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance> a in aspects)
                 {
                     int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
 
@@ -219,7 +219,7 @@ namespace Spinner.Fody
                         switch (a.Item3)
                         {
                             case AspectKind.MethodBoundary:
-                                MethodBoundaryAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
+                                MethodBoundaryAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex, a.Item4);
                                 break;
                             case AspectKind.MethodInterception:
                                 MethodInterceptionAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);

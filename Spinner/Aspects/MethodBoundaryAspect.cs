@@ -8,6 +8,13 @@ namespace Spinner.Aspects
     [AttributeUsage(AttributeTargets.All, AllowMultiple = true, Inherited = false)]
     public abstract class MethodBoundaryAspect : Aspect, IMethodBoundaryAspect
     {
+        protected MethodBoundaryAspect()
+        {
+            ApplyToStateMachine = true;
+        }
+
+        public bool ApplyToStateMachine { get; set; }
+
         public virtual void OnEntry(MethodExecutionArgs args)
         {
 
