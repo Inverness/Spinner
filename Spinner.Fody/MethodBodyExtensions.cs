@@ -237,15 +237,15 @@ namespace Spinner.Fody
             foreach (ExceptionHandler eh in self.ExceptionHandlers)
             {
                 Instruction nins;
-                if (newInstructions.TryGetValue(eh.TryStart, out nins))
+                if (eh.TryStart != null && newInstructions.TryGetValue(eh.TryStart, out nins) && nins != null)
                     eh.TryStart = nins;
-                if (newInstructions.TryGetValue(eh.TryEnd, out nins))
+                if (eh.TryEnd != null && newInstructions.TryGetValue(eh.TryEnd, out nins) && nins != null)
                     eh.TryEnd = nins;
-                if (newInstructions.TryGetValue(eh.HandlerStart, out nins))
+                if (eh.HandlerStart != null && newInstructions.TryGetValue(eh.HandlerStart, out nins) && nins != null)
                     eh.HandlerStart = nins;
-                if (newInstructions.TryGetValue(eh.HandlerEnd, out nins))
+                if (eh.HandlerEnd != null && newInstructions.TryGetValue(eh.HandlerEnd, out nins) && nins != null)
                     eh.HandlerEnd = nins;
-                if (eh.FilterStart != null && newInstructions.TryGetValue(eh.FilterStart, out nins))
+                if (eh.FilterStart != null && newInstructions.TryGetValue(eh.FilterStart, out nins) && nins != null)
                     eh.FilterStart = nins;
             }
         }
