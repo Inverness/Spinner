@@ -6,6 +6,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Multicasting;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -30,17 +31,17 @@ namespace Spinner.Fody.Weavers
 
         private EventInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
-            TypeDefinition aspectType,
+            MulticastInstance mi,
             int aspectIndex,
             EventDefinition aspectTarget)
-            : base(mwc, aspectType, aspectIndex, aspectTarget)
+            : base(mwc, mi, aspectIndex, aspectTarget)
         {
             _evt = aspectTarget;
         }
 
-        internal static void Weave(ModuleWeavingContext mwc, EventDefinition evt, TypeDefinition aspect, int index)
+        internal static void Weave(ModuleWeavingContext mwc, EventDefinition evt, MulticastInstance attribute, int index)
         {
-            new EventInterceptionAspectWeaver(mwc, aspect, index, evt).Weave();
+            new EventInterceptionAspectWeaver(mwc, attribute, index, evt).Weave();
         }
 
         protected override void Weave()

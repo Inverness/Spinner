@@ -10,10 +10,10 @@ namespace Spinner.Aspects
     {
         protected MethodBoundaryAspect()
         {
-            ApplyToStateMachine = true;
+            AttributeApplyToStateMachine = true;
         }
 
-        public bool ApplyToStateMachine { get; set; }
+        public bool AttributeApplyToStateMachine { get; set; }
 
         public virtual void OnEntry(MethodExecutionArgs args)
         {

@@ -5,6 +5,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Multicasting;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
@@ -20,18 +21,18 @@ namespace Spinner.Fody.Weavers
 
         private PropertyInterceptionAspectWeaver(
             ModuleWeavingContext mwc,
-            TypeDefinition aspectType,
+            MulticastInstance mi,
             int aspectIndex,
             PropertyDefinition aspectTarget)
-            : base(mwc, aspectType, aspectIndex, aspectTarget)
+            : base(mwc, mi, aspectIndex, aspectTarget)
         {
             _property = aspectTarget;
             Debug.Assert(_property.GetMethod != null || _property.SetMethod != null);
         }
 
-        internal static void Weave(ModuleWeavingContext mwc, PropertyDefinition property, TypeDefinition aspect, int index)
+        internal static void Weave(ModuleWeavingContext mwc, PropertyDefinition property, MulticastInstance mi, int index)
         {
-            new PropertyInterceptionAspectWeaver(mwc, aspect, index, property).Weave();
+            new PropertyInterceptionAspectWeaver(mwc, mi, index, property).Weave();
         }
 
         protected override void Weave()

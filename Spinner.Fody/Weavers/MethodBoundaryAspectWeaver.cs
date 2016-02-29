@@ -31,20 +31,19 @@ namespace Spinner.Fody.Weavers
 
         private MethodBoundaryAspectWeaver(
             ModuleWeavingContext mwc,
-            TypeDefinition aspectType,
+            MulticastInstance mi,
             int aspectIndex,
-            MethodDefinition aspectTarget,
-            MulticastInstance mi
+            MethodDefinition aspectTarget
             )
-            : base(mwc, aspectType, aspectIndex, aspectTarget)
+            : base(mwc, mi, aspectIndex, aspectTarget)
         {
             _method = aspectTarget;
-            _applyToStateMachine = mi.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.ApplyToStateMachine)) as bool? ?? true;
+            _applyToStateMachine = mi.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
         }
 
-        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, TypeDefinition aspect, int index, MulticastInstance mi)
+        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, MulticastInstance attribute, int index)
         {
-            new MethodBoundaryAspectWeaver(mwc, aspect, index, method, mi).Weave();
+            new MethodBoundaryAspectWeaver(mwc, attribute, index, method).Weave();
         }
 
         protected override void Weave()

@@ -1,10 +1,11 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
@@ -24,6 +25,7 @@ namespace Spinner.Fody.Weavers
         protected readonly int _aspectIndex;
         protected readonly IMemberDefinition _aspectTarget;
         protected readonly Features _aspectFeatures;
+        protected readonly MulticastInstance _mi;
 
         protected FieldDefinition _aspectField;
         protected TypeDefinition _bindingClass;
@@ -32,12 +34,13 @@ namespace Spinner.Fody.Weavers
 
         protected AspectWeaver(
             ModuleWeavingContext mwc,
-            TypeDefinition aspectType,
+            MulticastInstance mi,
             int aspectIndex,
             IMemberDefinition aspectTarget)
         {
             _mwc = mwc;
-            _aspectType = aspectType;
+            _mi = mi;
+            _aspectType = mi.AttributeType;
             _aspectIndex = aspectIndex;
             _aspectTarget = aspectTarget;
             _aspectFeatures = GetFeatures(_aspectType);
@@ -440,18 +443,78 @@ namespace Spinner.Fody.Weavers
             MethodDefinition ctorDef = _aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
             MethodReference ctor = _mwc.SafeImport(ctorDef);
 
+            // Figure out if the attribute has any arguments that need to be initialized
+            CustomAttribute attr = _mi.Attribute;
+
+            int argCount = attr.HasConstructorArguments ? attr.ConstructorArguments.Count : 0;
+            int propCount = attr.HasProperties ? attr.Properties.Count : 0;
+            int fieldCount = attr.HasFields ? attr.Fields.Count : 0;
+
             Ins jtNotNull = Ins.Create(OpCodes.Nop);
 
-            var insc = new[]
-            {
-                Ins.Create(OpCodes.Ldsfld, _aspectField),
-                Ins.Create(OpCodes.Brtrue, jtNotNull),
-                Ins.Create(OpCodes.Newobj, ctor),
-                Ins.Create(OpCodes.Stsfld, _aspectField),
-                jtNotNull
-            };
+            var il = new ILProcessorEx();
+            il.Emit(OpCodes.Ldsfld, _aspectField);
+            il.Emit(OpCodes.Brtrue, jtNotNull);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            if (argCount != 0)
+            {
+                for (int i = 0; i < attr.ConstructorArguments.Count; i++)
+                    EmitAttributeArgument(il, attr.ConstructorArguments[i]);
+            }
+
+            il.Emit(OpCodes.Newobj, ctor);
+            il.Emit(OpCodes.Stsfld, _aspectField);
+            il.Append(jtNotNull);
+
+            method.Body.InsertInstructions(offset, true, il.Instructions);
+        }
+
+        protected void EmitAttributeArgument(ILProcessorEx il, CustomAttributeArgument arg)
+        {
+            TypeSystem ts = _mi.Attribute.AttributeType.Module.TypeSystem;
+
+            if (arg.Type.IsSame(ts.Boolean))
+            {
+                il.Emit((bool) arg.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+            }
+            else if (arg.Type.IsSame(ts.Int32))
+            {
+                il.Emit(OpCodes.Ldc_I4, (int) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.Double))
+            {
+                il.Emit(OpCodes.Ldc_R8, (double) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.String))
+            {
+                il.Emit(OpCodes.Ldstr, (string) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.Int64))
+            {
+                il.Emit(OpCodes.Ldc_I8, (long) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.TypedReference))
+            {
+                MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
+                il.Emit(OpCodes.Ldtoken, (TypeReference) arg.Value);
+                il.Emit(OpCodes.Call, getTypeFromHandle);
+            }
+            else if (arg.Type.IsSame(ts.Int16))
+            {
+                il.Emit(OpCodes.Ldc_I4, (short) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.Byte))
+            {
+                il.Emit(OpCodes.Ldc_I4, (byte) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.Char))
+            {
+                il.Emit(OpCodes.Ldc_I4, (char) arg.Value);
+            }
+            else if (arg.Type.IsSame(ts.Single))
+            {
+                il.Emit(OpCodes.Ldc_R4, (float) arg.Value);
+            }
         }
 
         /// <summary>

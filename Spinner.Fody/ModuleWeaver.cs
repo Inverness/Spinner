@@ -109,7 +109,7 @@ namespace Spinner.Fody
 
         private Action CreateWeaveAction(TypeDefinition type)
         {
-            List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>> aspects = null;
+            List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>> aspects = null;
 
             // State machine weaving is handled by its owning method. Trying to treat state machines as their own type
             // causes threading issues with the declaring type's weaver.
@@ -138,8 +138,8 @@ namespace Spinner.Fody
                             Debug.Assert(method.HasBody);
 
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, AspectKind.MethodBoundary, mi));
+                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) method, mi, AspectKind.MethodBoundary));
 
                             LogDebug($"Found aspect {atype.Name} for {method}");
                         }
@@ -148,8 +148,8 @@ namespace Spinner.Fody
                             Debug.Assert(method.HasBody);
 
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) method, atype, AspectKind.MethodInterception, mi));
+                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) method, mi, AspectKind.MethodInterception));
 
                             LogDebug($"Found aspect {atype.Name} for {method}");
                         }
@@ -163,17 +163,17 @@ namespace Spinner.Fody
                 {
                     IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(property);
                     
-                    foreach (MulticastInstance a in multicastAttributes)
+                    foreach (MulticastInstance mi in multicastAttributes)
                     {
-                        TypeDefinition atype = a.AttributeType;
+                        TypeDefinition atype = mi.AttributeType;
 
                         if (IsAspectAttribute(atype, _mwc.Spinner.IPropertyInterceptionAspect))
                         {
                             Debug.Assert(property.GetMethod != null || property.SetMethod != null);
 
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) property, atype, AspectKind.PropertyInterception, a));
+                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) property, mi, AspectKind.PropertyInterception));
 
                             LogDebug($"Found aspect {atype.Name} for {property}");
                         }
@@ -187,15 +187,15 @@ namespace Spinner.Fody
                 {
                     IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(xevent);
                     
-                    foreach (MulticastInstance a in multicastAttributes)
+                    foreach (MulticastInstance mi in multicastAttributes)
                     {
-                        TypeDefinition atype = a.AttributeType;
+                        TypeDefinition atype = mi.AttributeType;
 
                         if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
                         {
                             if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) xevent, atype, AspectKind.EventInterception, a));
+                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+                            aspects.Add(Tuple.Create((IMemberDefinition) xevent, mi, AspectKind.EventInterception));
 
                             LogDebug($"Found aspect {atype.Name} for {xevent}");
                         }
@@ -210,7 +210,7 @@ namespace Spinner.Fody
             {
                 LogInfo($"Weaving {aspects.Count} aspects for {type}");
 
-                foreach (Tuple<IMemberDefinition, TypeDefinition, AspectKind, MulticastInstance> a in aspects)
+                foreach (Tuple<IMemberDefinition, MulticastInstance, AspectKind> a in aspects)
                 {
                     int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
 
@@ -219,7 +219,7 @@ namespace Spinner.Fody
                         switch (a.Item3)
                         {
                             case AspectKind.MethodBoundary:
-                                MethodBoundaryAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex, a.Item4);
+                                MethodBoundaryAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
                                 break;
                             case AspectKind.MethodInterception:
                                 MethodInterceptionAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
@@ -236,7 +236,7 @@ namespace Spinner.Fody
                     }
                     catch (Exception ex)
                     {
-                        LogError($"Exception while weaving aspect {a.Item2.Name} for member {a.Item1}: {ex.GetType().Name}: {ex.Message}");
+                        LogError($"Exception while weaving aspect {a.Item2.AttributeType.Name} for member {a.Item1}: {ex.GetType().Name}: {ex.Message}");
                         LogError(ex.StackTrace);
                         throw;
                     }
