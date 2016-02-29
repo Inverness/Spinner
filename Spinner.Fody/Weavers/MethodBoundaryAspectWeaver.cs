@@ -300,12 +300,19 @@ namespace Spinner.Fody.Weavers
             {
                 Ins labelSuccess = Ins.Create(OpCodes.Nop);
 
+                // If a MethodBoundaryAspect has already been applied to this state machine then
+                // we might need to use a leave instead of a break
+                bool isCrossEh = HasDifferentExceptionHandlers(stateMachine.Body,
+                                                               insc.Count - leaveEndOffset - 1,
+                                                               insc.Count - leaveEndOffset);
+
                 // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
                 // They will be replaced by breaks to labelSuccess.
                 RewriteAsyncReturnsWithBreaks(stateMachine,
                                               tryStartOffset,
                                               insc.Count - leaveEndOffset - 1,
-                                              labelSuccess);
+                                              labelSuccess,
+                                              isCrossEh ? OpCodes.Leave : OpCodes.Br);
 
                 insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
 
@@ -675,7 +682,8 @@ namespace Spinner.Fody.Weavers
             MethodDefinition method,
             int startIndex,
             int endIndex,
-            Ins breakTarget)
+            Ins breakTarget,
+            OpCode breakOpCode)
         {
             MethodBody body = method.Body;
 
@@ -690,7 +698,7 @@ namespace Spinner.Fody.Weavers
                     continue;
                 Debug.Assert(ins.OpCode == OpCodes.Leave, "instructions must have been simplified already");
 
-                body.ReplaceInstruction(i, Ins.Create(OpCodes.Br, breakTarget));
+                body.ReplaceInstruction(i, Ins.Create(breakOpCode, breakTarget));
             }
         }
 
@@ -1167,6 +1175,30 @@ namespace Spinner.Fody.Weavers
             }
 
             return false;
+        }
+
+        private static bool HasDifferentExceptionHandlers(MethodBody body, int offsetA, int offsetB)
+        {
+            return GetExceptionHandlerIndex(body, offsetA) != GetExceptionHandlerIndex(body, offsetB);
+        }
+
+        private static int GetExceptionHandlerIndex(MethodBody body, int offset)
+        {
+            if (body.HasExceptionHandlers)
+            {
+                for (int i = 0; i < body.ExceptionHandlers.Count; i++)
+                {
+                    ExceptionHandler eh = body.ExceptionHandlers[i];
+
+                    if (offset >= body.Instructions.IndexOf(eh.TryStart) &&
+                        offset <= body.Instructions.IndexOf(eh.HandlerEnd) - 1)
+                    {
+                        return i;
+                    }
+                }
+            }
+
+            return -1;
         }
     }
 }
