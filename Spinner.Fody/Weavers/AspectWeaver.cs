@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -18,6 +19,7 @@ namespace Spinner.Fody.Weavers
     {
         protected const string BindingInstanceFieldName = "Instance";
         protected const string StateMachineThisFieldName = "<>4__this";
+        private const string MulticastAttributePropertyPrefix = "Attribute";
 
         // ReSharper disable InconsistentNaming
         protected readonly ModuleWeavingContext _mwc;
@@ -439,10 +441,6 @@ namespace Spinner.Fody.Weavers
             MethodDefinition method,
             int offset)
         {
-            // NOTE: Aspect type can't be generic since its declared by an attribute
-            MethodDefinition ctorDef = _aspectType.GetConstructors().Single(m => !m.IsStatic && m.Parameters.Count == 0);
-            MethodReference ctor = _mwc.SafeImport(ctorDef);
-
             // Figure out if the attribute has any arguments that need to be initialized
             CustomAttribute attr = _mi.Attribute;
 
@@ -456,13 +454,56 @@ namespace Spinner.Fody.Weavers
             il.Emit(OpCodes.Ldsfld, _aspectField);
             il.Emit(OpCodes.Brtrue, jtNotNull);
 
-            if (argCount != 0)
+            MethodReference ctor;
+            if (argCount == 0)
             {
+                // NOTE: Aspect type can't be generic since its declared by an attribute
+                ctor = _mwc.SafeImport(_aspectType.GetConstructor(0));
+            }
+            else
+            {
+                List<TypeReference> argTypes = attr.ConstructorArguments.Select(c => c.Type).ToList();
+                
+                ctor = _mwc.SafeImport(_aspectType.GetConstructor(argTypes));
+
                 for (int i = 0; i < attr.ConstructorArguments.Count; i++)
                     EmitAttributeArgument(il, attr.ConstructorArguments[i]);
             }
 
             il.Emit(OpCodes.Newobj, ctor);
+
+            if (fieldCount != 0)
+            {
+                for (int i = 0; i < attr.Fields.Count; i++)
+                {
+                    CustomAttributeNamedArgument na = attr.Fields[i];
+
+                    FieldReference field = _mwc.SafeImport(_aspectType.GetField(na.Name, true));
+
+                    il.Emit(OpCodes.Dup);
+                    EmitAttributeArgument(il, na.Argument);
+                    il.Emit(OpCodes.Stfld, field);
+                }
+            }
+
+            if (propCount != 0)
+            {
+                for (int i = 0; i < attr.Properties.Count; i++)
+                {
+                    CustomAttributeNamedArgument na = attr.Properties[i];
+
+                    // Skip attribute properties that are not needed at runtime
+                    if (na.Name.StartsWith(MulticastAttributePropertyPrefix))
+                        continue;
+
+                    MethodReference setter = _mwc.SafeImport(_aspectType.GetProperty(na.Name, true).SetMethod);
+
+                    il.Emit(OpCodes.Dup);
+                    EmitAttributeArgument(il, na.Argument);
+                    il.Emit(OpCodes.Callvirt, setter);
+                }
+            }
+
             il.Emit(OpCodes.Stsfld, _aspectField);
             il.Append(jtNotNull);
 
@@ -471,49 +512,71 @@ namespace Spinner.Fody.Weavers
 
         protected void EmitAttributeArgument(ILProcessorEx il, CustomAttributeArgument arg)
         {
-            TypeSystem ts = _mi.Attribute.AttributeType.Module.TypeSystem;
-
-            if (arg.Type.IsSame(ts.Boolean))
+            if (arg.Value == null)
+            {
+                il.Emit(OpCodes.Ldnull);
+            }
+            else if (arg.Value is bool)
             {
                 il.Emit((bool) arg.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
             }
-            else if (arg.Type.IsSame(ts.Int32))
+            else if (arg.Value is char)
+            {
+                il.Emit(OpCodes.Ldc_I4, (char) arg.Value);
+            }
+            else if (arg.Value is byte)
+            {
+                il.Emit(OpCodes.Ldc_I4, (byte) arg.Value);
+            }
+            else if (arg.Value is sbyte)
+            {
+                il.Emit(OpCodes.Ldc_I4, (sbyte) arg.Value);
+            }
+            else if (arg.Value is short)
+            {
+                il.Emit(OpCodes.Ldc_I4, (short) arg.Value);
+            }
+            else if (arg.Value is ushort)
+            {
+                il.Emit(OpCodes.Ldc_I4, (ushort) arg.Value);
+            }
+            else if (arg.Value is int)
             {
                 il.Emit(OpCodes.Ldc_I4, (int) arg.Value);
             }
-            else if (arg.Type.IsSame(ts.Double))
+            else if (arg.Value is uint)
             {
-                il.Emit(OpCodes.Ldc_R8, (double) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (int) (uint) arg.Value);
             }
-            else if (arg.Type.IsSame(ts.String))
-            {
-                il.Emit(OpCodes.Ldstr, (string) arg.Value);
-            }
-            else if (arg.Type.IsSame(ts.Int64))
+            else if (arg.Value is long)
             {
                 il.Emit(OpCodes.Ldc_I8, (long) arg.Value);
             }
-            else if (arg.Type.IsSame(ts.TypedReference))
+            else if (arg.Value is ulong)
+            {
+                il.Emit(OpCodes.Ldc_I8, (long) (ulong) arg.Value);
+            }
+            else if (arg.Value is float)
+            {
+                il.Emit(OpCodes.Ldc_R4, (float) arg.Value);
+            }
+            else if (arg.Value is double)
+            {
+                il.Emit(OpCodes.Ldc_R8, (double) arg.Value);
+            }
+            else if (arg.Value is string)
+            {
+                il.Emit(OpCodes.Ldstr, (string) arg.Value);
+            }
+            else if (arg.Value is TypeReference)
             {
                 MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
                 il.Emit(OpCodes.Ldtoken, (TypeReference) arg.Value);
                 il.Emit(OpCodes.Call, getTypeFromHandle);
             }
-            else if (arg.Type.IsSame(ts.Int16))
+            else
             {
-                il.Emit(OpCodes.Ldc_I4, (short) arg.Value);
-            }
-            else if (arg.Type.IsSame(ts.Byte))
-            {
-                il.Emit(OpCodes.Ldc_I4, (byte) arg.Value);
-            }
-            else if (arg.Type.IsSame(ts.Char))
-            {
-                il.Emit(OpCodes.Ldc_I4, (char) arg.Value);
-            }
-            else if (arg.Type.IsSame(ts.Single))
-            {
-                il.Emit(OpCodes.Ldc_R4, (float) arg.Value);
+                throw new ArgumentOutOfRangeException(nameof(arg), arg.Value.GetType().Name);
             }
         }
 

@@ -7,7 +7,7 @@ namespace Spinner.TestTarget
 {
     public class MethodBoundaryTest
     {
-        [BasicLoggingMba]
+        [BasicLoggingMba(55)]
         public int OneAspect(int a, out int b, string c)
         {
             b = 20;

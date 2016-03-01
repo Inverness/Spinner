@@ -117,6 +117,99 @@ namespace Spinner.Fody
             return null;
         }
 
+        internal static MethodDefinition GetConstructor(this TypeDefinition self, int argc)
+        {
+            if (self.HasMethods)
+            {
+                for (int i = 0; i < self.Methods.Count; i++)
+                {
+                    MethodDefinition m = self.Methods[i];
+
+                    if (argc == (m.HasParameters ? m.Parameters.Count : 0) && !m.IsStatic && m.IsConstructor)
+                        return m;
+                }
+            }
+
+            return null;
+        }
+
+        internal static MethodDefinition GetConstructor(this TypeDefinition self, IList<TypeReference> paramTypes)
+        {
+            if (self.HasMethods)
+            {
+                for (int i = 0; i < self.Methods.Count; i++)
+                {
+                    MethodDefinition m = self.Methods[i];
+
+                    if (paramTypes.Count != (m.HasParameters ? m.Parameters.Count : 0) || m.IsStatic || !m.IsConstructor)
+                        continue;
+
+                    bool typeMatch = true;
+                    for (int t = 0; t < paramTypes.Count; t++)
+                    {
+                        if (!m.Parameters[t].ParameterType.IsSame(paramTypes[t]))
+                        {
+                            typeMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (!typeMatch)
+                        continue;
+
+                    return m;
+                }
+            }
+
+            return null;
+        }
+
+        internal static FieldDefinition GetField(this TypeDefinition self, string name, bool inherited)
+        {
+            TypeDefinition current = self;
+            while (current != null)
+            {
+                if (current.HasFields)
+                {
+                    for (int i = 0; i < current.Fields.Count; i++)
+                    {
+                        if (current.Fields[i].Name == name)
+                            return current.Fields[i];
+                    }
+                }
+
+                if (!inherited)
+                    break;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return null;
+        }
+
+        internal static PropertyDefinition GetProperty(this TypeDefinition self, string name, bool inherited)
+        {
+            TypeDefinition current = self;
+            while (current != null)
+            {
+                if (current.HasProperties)
+                {
+                    for (int i = 0; i < current.Properties.Count; i++)
+                    {
+                        if (current.Properties[i].Name == name)
+                            return current.Properties[i];
+                    }
+                }
+
+                if (!inherited)
+                    break;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return null;
+        }
+
         //internal static bool IsSame(this MethodReference self, MethodReference other)
         //{
         //    if (ReferenceEquals(self, other))

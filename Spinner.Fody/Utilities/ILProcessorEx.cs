@@ -102,6 +102,11 @@ namespace Spinner.Fody.Utilities
         //    return Instruction.Create(opcode, value);
         //}
 
+        public Instruction Create(OpCode opcode, int value)
+        {
+            return Instruction.Create(opcode, value);
+        }
+
         public Instruction Create(OpCode opcode, long value)
         {
             return Instruction.Create(opcode, value);

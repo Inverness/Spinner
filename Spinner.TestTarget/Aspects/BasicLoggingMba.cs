@@ -5,9 +5,21 @@ namespace Spinner.TestTarget.Aspects
 {
     public class BasicLoggingMba : MethodBoundaryAspect
     {
+        public BasicLoggingMba()
+        {
+            
+        }
+
+        public BasicLoggingMba(int a)
+        {
+            SuffixInt = a;
+        }
+
+        public int SuffixInt { get; }
+
         public override void OnEntry(MethodExecutionArgs args)
         {
-            Console.WriteLine(GetType().Name + " OnEntry called");
+            Console.WriteLine(GetType().Name + " OnEntry called " + SuffixInt);
         }
 
         public override void OnSuccess(MethodExecutionArgs args)
