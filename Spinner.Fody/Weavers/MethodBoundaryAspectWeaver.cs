@@ -111,12 +111,10 @@ namespace Spinner.Fody.Weavers
         {
             MethodDefinition method = _method;
             Collection<Ins> insc = method.Body.Instructions;
+            
+            // Will be reinserted later. This is a bit more efficient than doing repeated insertions at the beginning.
             var originalInsc = new Collection<Ins>(insc);
             insc.Clear();
-
-            VariableDefinition returnValueVar = null;
-            if (_effectiveReturnType != null)
-                returnValueVar = _method.Body.AddVariableDefinition(_effectiveReturnType);
 
             WriteAspectInit(_method, insc.Count);
 
@@ -143,18 +141,27 @@ namespace Spinner.Fody.Weavers
             // Re-add original body
             insc.AddRange(originalInsc);
 
+            // Supporting OnSuccess, OnException, or OnExit requires rewriting the body of the method to redirect
+            // return statements so that they:
+            // 1. Save the return expression result to a local
+            // 2. Break to a new block of code that calls OnSuccess() if necessary
+            // 3. Leave the exception handler to code that returns the value stored in the previously mentioned local
+
+            VariableDefinition returnValueVar = null;
             if (_aspectFeatures.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
             {
-                Ins labelSuccess = Ins.Create(OpCodes.Nop);
+                if (_effectiveReturnType != null)
+                    returnValueVar = _method.Body.AddVariableDefinition(_effectiveReturnType);
 
-                // Need to rewrite returns if we're adding an exception handler or need a success block
+                Ins successLabel = Ins.Create(OpCodes.Nop);
+                
                 ReplaceReturnsWithBreaks(method,
                                          tryStartOffset,
                                          method.Body.Instructions.Count - 1,
                                          returnValueVar,
-                                         labelSuccess);
+                                         successLabel);
 
-                insc.Add(labelSuccess);
+                insc.Add(successLabel);
 
                 // Write success block
 
@@ -217,96 +224,100 @@ namespace Spinner.Fody.Weavers
         {
             MethodDefinition method = _method;
             MethodDefinition stateMachine = _stateMachine;
-
-            // The last exception handler is used for setting the returning task state.
-            // This is needed to identify insertion points.
-            ExceptionHandler taskExceptionHandler = stateMachine.Body.ExceptionHandlers.Last();
-            
             Collection<Ins> insc = stateMachine.Body.Instructions;
 
-            // Start the try block in the same place as the state machine. This prevents the need to mess with
-            // existing breaks
-            int tryStartOffset = insc.IndexOf(taskExceptionHandler.TryStart);
+            // All async state machines have an outer exception handler that is used to set the task's state if an
+            // exception occurrs inside of it. This means that the method body is already set up to break to a leave
+            // instruction at the end of the try block rather than returning directly.
+            // All generated code will be placed inside of this task exception handler.
 
-            // Find the start of the body, which will be the first instruction after the first set of branch
-            // instructions
-            int firstBranchOffset = Seek(insc, tryStartOffset, IsBranching);
-            int bodyBeginOffset = Seek(insc, firstBranchOffset, i => !IsBranching(i));
-
-            // Find the instruction to leave the body and set the task result. This will be the instruction right
-            // before the TryEnd.
-            int tryEndOffset = insc.IndexOf(taskExceptionHandler.TryEnd);
-            int bodyLeaveOffset = tryEndOffset - 1;
-            Debug.Assert(insc[bodyLeaveOffset].OpCode == OpCodes.Leave);
+            ExceptionHandler taskExceptionHandler = stateMachine.Body.ExceptionHandlers.Last();
             
-            // The offset from the end to where initialization code will go.
-            int initEndOffset = insc.Count - bodyBeginOffset;
+            // Get the offset to where init code will go, which is before the logical body. This can be found by 
+            // searching for the first non-branching instruction after the first set of branching instructions.
+            int offTryStart = insc.IndexOf(taskExceptionHandler.TryStart);
+            int offFirstBranch = Seek(insc, offTryStart, IsBranching);
+            int offBodyBegin = Seek(insc, offFirstBranch, i => !IsBranching(i));
+            int eoffInit = insc.Count - offBodyBegin;
 
-            // Offset from the end to the return leave instruction
-            int leaveEndOffset = insc.Count - bodyLeaveOffset;
+            // Find the instruction to leave the body and set the task result. This will be the last instruction
+            // in the try block.
+            int offTryEnd = insc.IndexOf(taskExceptionHandler.TryEnd);
+            int offBodyLeave = offTryEnd - 1;
+            Debug.Assert(insc[offBodyLeave].OpCode == OpCodes.Leave);
+            int eoffLeave = insc.Count - offBodyLeave;
 
             // Find the variable used to set the task result. No need to create our own.
+            // This should be the first stloc before the leave.
             VariableDefinition resultVar = null;
             if (_effectiveReturnType != null)
             {
-                int resultStore = SeekR(insc, insc.Count - leaveEndOffset, i => i.OpCode == OpCodes.Stloc);
+                int resultStore = SeekR(insc, insc.Count - eoffLeave, i => i.OpCode == OpCodes.Stloc);
                 resultVar = (VariableDefinition) insc[resultStore].Operand;
             }
+            
+            // Write initialization code and OnEntry() call
 
-            WriteAspectInit(stateMachine, insc.Count - initEndOffset);
+            WriteAspectInit(stateMachine, insc.Count - eoffInit);
 
             FieldDefinition arguments = null;
             if (_aspectFeatures.Has(Features.GetArguments))
             {
-                WriteSmArgumentContainerInit(method, stateMachine, insc.Count - initEndOffset, out arguments);
-                WriteSmCopyArgumentsToContainer(method, stateMachine, insc.Count - initEndOffset, arguments, true);
+                WriteSmArgumentContainerInit(method, stateMachine, insc.Count - eoffInit, out arguments);
+                WriteSmCopyArgumentsToContainer(method, stateMachine, insc.Count - eoffInit, arguments, true);
             }
-
-            // The meaVar would be used temporarily after loading from the field.
+            
             FieldDefinition meaField;
-            WriteSmMeaInit(method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
+            WriteSmMeaInit(method, stateMachine, arguments, insc.Count - eoffInit, out meaField);
 
             if (_aspectFeatures.Has(Features.MemberInfo))
-                WriteSetMethodInfo(method, stateMachine, insc.Count - initEndOffset, null, meaField);
+                WriteSetMethodInfo(method, stateMachine, insc.Count - eoffInit, null, meaField);
 
             if (_aspectFeatures.Has(Features.OnEntry))
-                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
+                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, null, meaField);
 
-            // Search through the body for places to insert OnYield() and OnResume() calls
+            // Write OnYield() and OnResume() calls. This is done by searching the body for the offsets of await
+            // method calls like GetAwaiter(), get_IsCompleted(), and GetResult(), and then writing instructions
+            // and those offsets before searching the next part of the body.
+            // TODO: Fix OnEntry() and OnYield() will be called in opposite orders with multiple aspects
+
             if (_aspectFeatures.Has(Features.OnYield | Features.OnResume))
             {
-                int awaitSearchStart = insc.Count - initEndOffset;
+                int offSearchStart = insc.Count - eoffInit;
                 VariableDefinition awaitableStorage = null;
 
-                while (awaitSearchStart < insc.Count - leaveEndOffset)
+                while (offSearchStart < insc.Count - eoffLeave)
                 {
-                    int awaitable;
-                    int callYield;
-                    int callResume;
-                    VariableDefinition awaitResultVar;
-                    bool found = GetAwaitInfo(stateMachine,
-                                              awaitSearchStart,
-                                              insc.Count - leaveEndOffset,
-                                              out awaitable,
-                                              out callYield,
-                                              out callResume,
-                                              out awaitResultVar);
+                    int eoffAwaitable;
+                    int eoffYield;
+                    int eoffResume;
+                    VariableDefinition awaitResultVarOpt;
+
+                    bool found = GetAwaitOffsets(stateMachine,
+                                                 offSearchStart,
+                                                 insc.Count - eoffLeave,
+                                                 out eoffAwaitable,
+                                                 out eoffYield,
+                                                 out eoffResume,
+                                                 out awaitResultVarOpt);
 
                     if (!found)
                         break;
 
-                    awaitSearchStart = callResume + 1;
+                    offSearchStart = insc.Count - eoffResume + 1;
 
+                    // This variable is used to capture the awaitable object from the stack so YieldValue can be set
+                    // before the await
                     if (awaitableStorage == null)
                         awaitableStorage = stateMachine.Body.AddVariableDefinition(stateMachine.Module.TypeSystem.Object);
 
                     WriteYieldAndResume(stateMachine,
-                                        awaitable,
-                                        callYield,
-                                        callResume,
+                                        eoffAwaitable,
+                                        eoffYield,
+                                        eoffResume,
                                         meaField,
                                         awaitableStorage,
-                                        awaitResultVar);
+                                        awaitResultVarOpt);
                 }
             }
 
@@ -315,26 +326,26 @@ namespace Spinner.Fody.Weavers
 
             if (_aspectFeatures.Has(Features.OnSuccess))
             {
-                Ins labelSuccess = Ins.Create(OpCodes.Nop);
-
                 // If a MethodBoundaryAspect has already been applied to this state machine then
-                // we might need to use a leave instead of a break
+                // we might need to use a leave instead of a break if control must cross an exception handler
                 bool isCrossEh = HasDifferentExceptionHandlers(stateMachine.Body,
-                                                               insc.Count - leaveEndOffset - 1,
-                                                               insc.Count - leaveEndOffset);
+                                                               insc.Count - eoffLeave - 1,
+                                                               insc.Count - eoffLeave);
+
+                Ins labelSuccess = Ins.Create(OpCodes.Nop);
 
                 // Rewrite all leaves that go to the SetResult() area, but not the ones that return after an await.
                 // They will be replaced by breaks to labelSuccess.
                 RewriteAsyncReturnsWithBreaks(stateMachine,
-                                              tryStartOffset,
-                                              insc.Count - leaveEndOffset - 1,
+                                              offTryStart,
+                                              insc.Count - eoffLeave - 1,
                                               labelSuccess,
                                               isCrossEh ? OpCodes.Leave : OpCodes.Br);
 
-                insc.Insert(insc.Count - leaveEndOffset, labelSuccess);
+                insc.Insert(insc.Count - eoffLeave, labelSuccess);
 
                 WriteSuccessHandler(stateMachine,
-                                    insc.Count - leaveEndOffset,
+                                    insc.Count - eoffLeave,
                                     null,
                                     meaField,
                                     _aspectFeatures.Has(Features.ReturnValue) ? resultVar : null);
@@ -347,7 +358,7 @@ namespace Spinner.Fody.Weavers
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
 
                 // Must fix offsets here since there could be an EH HandlerEnd that points to the current position.
-                stateMachine.Body.InsertInstructions(insc.Count - leaveEndOffset,
+                stateMachine.Body.InsertInstructions(insc.Count - eoffLeave,
                                                      true,
                                                      Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
             }
@@ -356,25 +367,25 @@ namespace Spinner.Fody.Weavers
             {
                 WriteCatchExceptionHandler(_method,
                                            _stateMachine,
-                                           insc.Count - leaveEndOffset,
+                                           insc.Count - eoffLeave,
                                            null,
                                            meaField,
-                                           tryStartOffset);
+                                           offTryStart);
             }
 
             if (_aspectFeatures.Has(Features.OnExit))
             {
                 WriteFinallyExceptionHandler(_method,
                                              _stateMachine,
-                                             insc.Count - leaveEndOffset,
+                                             insc.Count - eoffLeave,
                                              null,
                                              meaField,
-                                             tryStartOffset,
+                                             offTryStart,
                                              null);
             }
 
             if (exceptionHandlerLeaveTarget != null)
-                insc.Insert(insc.Count - leaveEndOffset, exceptionHandlerLeaveTarget);
+                insc.Insert(insc.Count - eoffLeave, exceptionHandlerLeaveTarget);
 
             if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
             {
@@ -434,6 +445,11 @@ namespace Spinner.Fody.Weavers
                 WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
 
             // TODO: Yield and Resume
+
+            // Due to the way iterators work, calls to OnSuccess() and OnExit() must be made by checking the boolean
+            // that is returned for MoveNext(). When false, OnSuccess() and OnExit() are called.
+            // If an exception occurs, OnException() will be called but OnExit() will not. This is because iterators
+            // can have exceptions occur but that doesn't stop them from being resumed.
 
             VariableDefinition hasNextVar = null;
             if (_aspectFeatures.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
@@ -513,71 +529,71 @@ namespace Spinner.Fody.Weavers
             insc.Add(Ins.Create(OpCodes.Ret));
         }
 
-        private static bool GetAwaitInfo(
+        /// <summary>
+        /// Searches a range of instructions to get the offsets for awaitable capture, OnYield() call, and OnResume() call
+        /// </summary>
+        private static bool GetAwaitOffsets(
             MethodDefinition stateMachine,
             int start,
             int end,
-            out int awaitable,
-            out int callYield,
-            out int callResume,
-            out VariableDefinition resultVar)
+            out int eoffAwaitable,
+            out int eoffYield,
+            out int eoffResume,
+            out VariableDefinition resultVarOpt)
         {
             Collection<Ins> insc = stateMachine.Body.Instructions;
 
-            awaitable = -1;
-            callYield = -1;
-            callResume = -1;
-            resultVar = null;
+            eoffAwaitable = -1;
+            eoffYield = -1;
+            eoffResume = -1;
+            resultVarOpt = null;
 
             // Identify yield and resume points by looking for calls to a get_IsCompleted property and a GetResult
             // method. These can be defined on any type due to how awaitables work. IsCompleted is required to be
             // a property, not a field.
-            TypeDefinition awaiterType = null;
+            TypeReference awaiterType = null;
             for (int i = start; i < end; i++)
             {
-                Ins ins = insc[i];
+                OpCode opcode = insc[i].OpCode;
 
-                if (ins.OpCode != OpCodes.Call && ins.OpCode != OpCodes.Callvirt)
+                if (opcode != OpCodes.Call && opcode != OpCodes.Callvirt)
                     continue;
 
-                var mr = (MethodReference) ins.Operand;
+                var mr = (MethodReference) insc[i].Operand;
 
-                if (awaitable == -1 && mr.Name == "GetAwaiter")
+                if (eoffAwaitable == -1 && mr.Name == "GetAwaiter")
                 {
-                    awaitable = i;
+                    // The awaitable will be on the stack just before this call
+                    eoffAwaitable = insc.Count - i;
                 }
-                else if (awaitable != -1 && callYield == -1 && mr.Name == "get_IsCompleted")
+                else if (eoffAwaitable != -1 && eoffYield == -1 && mr.Name == "get_IsCompleted")
                 {
                     // Yield points will be after the branch instruction that acts on the IsCompleted result.
                     // This way OnYield() is only called if an await is actually necessary.
 
                     Debug.Assert(IsBranching(insc[i + 1]) && !IsBranching(insc[i + 2]));
 
-                    callYield = i + 2;
+                    eoffYield = insc.Count - i + 2;
 
-                    awaiterType = mr.DeclaringType.Resolve();
+                    awaiterType = mr.DeclaringType;
                 }
-                else if (callYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.Resolve() == awaiterType)
+                else if (eoffYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.IsSame(awaiterType))
                 {
                     if (mr.ReturnType == mr.Module.TypeSystem.Void)
                     {
-                        callResume = i + 1;
+                        // Resume after GetResult() is called, which will be a void method for Task
+                        eoffResume = insc.Count - i + 1;
                     }
                     else
                     {
                         // Release builds initialize the awaiter before storing the GetResult() result, so the
-                        // stloc can not be assumed to be the next instruction.
-                        int n;
-                        for (n = i + 1; n < end; n++)
-                        {
-                            if (insc[n].OpCode == OpCodes.Stloc)
-                            {
-                                resultVar = (VariableDefinition) insc[n].Operand;
-                                break;
-                            }
-                        }
+                        // stloc can not be assumed to be the very next instruction.
+                        int n = Seek(insc, i + 1, x => x.OpCode == OpCodes.Stloc);
+                        Debug.Assert(n < end);
 
-                        callResume = n + 1;
+                        resultVarOpt = (VariableDefinition) insc[n].Operand;
+
+                        eoffResume = insc.Count - n + 1;
                     }
                     return true;
                 }
@@ -858,11 +874,6 @@ namespace Spinner.Fody.Weavers
             MethodReference onSuccess =
                 _mwc.SafeImport(_aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnSuccess, true));
 
-            // For state machines, the return var type would need to be imported
-            TypeReference returnVarType = null;
-            if (returnVarOpt != null)
-                returnVarType = _mwc.SafeImport(returnVarOpt.VariableType);
-
             var il = new ILProcessorEx();
 
             // Set ReturnValue to returnVar
@@ -873,8 +884,7 @@ namespace Spinner.Fody.Weavers
 
                 il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Ldloc, returnVarOpt);
-                if (returnVarType.IsValueType)
-                    il.Emit(OpCodes.Box, returnVarType);
+                il.EmitBoxIfValueType(returnVarOpt.VariableType);
                 il.Emit(OpCodes.Callvirt, setReturnValue);
             }
 
@@ -892,8 +902,7 @@ namespace Spinner.Fody.Weavers
 
                 il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Callvirt, getReturnValue);
-                if (returnVarType.IsValueType)
-                    il.Emit(OpCodes.Unbox_Any, returnVarType);
+                il.EmitCastOrUnbox(returnVarOpt.VariableType);
                 il.Emit(OpCodes.Stloc, returnVarOpt);
             }
 
@@ -1034,6 +1043,7 @@ namespace Spinner.Fody.Weavers
                 il.Emit(OpCodes.Ldnull);
                 il.Emit(OpCodes.Callvirt, onException);
             }
+
             il.Emit(OpCodes.Rethrow);
 
             int ehCatchEnd = il.Instructions.Count;
@@ -1110,28 +1120,29 @@ namespace Spinner.Fody.Weavers
 
         private void WriteYieldAndResume(
             MethodDefinition stateMachine,
-            int getAwaiterOffset,
-            int yieldOffset,
-            int resumeOffset,
+            int eoffAwaitable,
+            int eoffYield,
+            int eoffResume,
             FieldReference meaField,
             VariableDefinition awaitableVar,
-            VariableDefinition resultVar
+            VariableDefinition resultVarOpt
             )
         {
             MethodReference getYieldValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_YieldValue.GetMethod);
             MethodReference setYieldValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_YieldValue.SetMethod);
 
-            var il = new ILProcessorEx();
-            int offset = 0;
+            Collection<Ins> insc = stateMachine.Body.Instructions;
 
-            if (yieldOffset != -1)
+            var il = new ILProcessorEx();
+
+            if (eoffYield != -1)
             {
                 MethodDefinition onYieldDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnYield, true);
                 MethodReference onYield = _mwc.SafeImport(onYieldDef);
 
                 // Need to know whether the awaitable is a value type. It will be boxed as object if so, instead
                 // of trying to create a local variable for each type found.
-                TypeReference awaitableType = GetExpressionType(stateMachine.Body, getAwaiterOffset - 1);
+                TypeReference awaitableType = GetExpressionType(stateMachine.Body, insc.Count - eoffAwaitable - 1);
                 if (awaitableType == null)
                     throw new InvalidOperationException("unable to determine expression type");
 
@@ -1139,7 +1150,7 @@ namespace Spinner.Fody.Weavers
                 il.EmitBoxIfValueType(awaitableType);
                 il.Emit(OpCodes.Stloc, awaitableVar);
 
-                offset += stateMachine.Body.InsertInstructions(getAwaiterOffset, true, il.Instructions);
+                stateMachine.Body.InsertInstructions(insc.Count - eoffAwaitable, true, il.Instructions);
                 il.Instructions.Clear();
 
                 // Store the awaitable, currently an object or boxed value type, as YieldValue
@@ -1168,23 +1179,23 @@ namespace Spinner.Fody.Weavers
                 //    il.Emit(OpCodes.Callvirt, setYieldValue);
                 //}
 
-                offset += stateMachine.Body.InsertInstructions(yieldOffset + offset, true, il.Instructions);
+                stateMachine.Body.InsertInstructions(insc.Count - eoffYield, true, il.Instructions);
                 il.Instructions.Clear();
             }
 
-            if (resumeOffset != -1)
+            if (eoffResume != -1)
             {
                 MethodDefinition onResumeDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnResume, true);
                 MethodReference onResume = _mwc.SafeImport(onResumeDef);
 
                 // Store the typed awaitable as YieldValue, optionally boxing it.
 
-                if (meaField != null && resultVar != null)
+                if (meaField != null && resultVarOpt != null)
                 {
                     il.Emit(OpCodes.Ldarg_0);
                     il.Emit(OpCodes.Ldfld, meaField);
-                    il.Emit(OpCodes.Ldloc, resultVar);
-                    il.EmitBoxIfValueType(resultVar.VariableType);
+                    il.Emit(OpCodes.Ldloc, resultVarOpt);
+                    il.EmitBoxIfValueType(resultVarOpt.VariableType);
                     il.Emit(OpCodes.Callvirt, setYieldValue);
                 }
 
@@ -1194,13 +1205,13 @@ namespace Spinner.Fody.Weavers
 
                 // Unbox the YieldValue and store it back in the result. Changing it is permitted here.
 
-                if (meaField != null && resultVar != null)
+                if (meaField != null && resultVarOpt != null)
                 {
                     il.Emit(OpCodes.Ldarg_0);
                     il.Emit(OpCodes.Ldfld, meaField);
                     il.Emit(OpCodes.Callvirt, getYieldValue);
-                    il.EmitCastOrUnbox(resultVar.VariableType);
-                    il.Emit(OpCodes.Stloc, resultVar);
+                    il.EmitCastOrUnbox(resultVarOpt.VariableType);
+                    il.Emit(OpCodes.Stloc, resultVarOpt);
 
                     //il.Emit(OpCodes.Ldarg_0);
                     //il.Emit(OpCodes.Ldfld, meaField);
@@ -1208,7 +1219,7 @@ namespace Spinner.Fody.Weavers
                     //il.Emit(OpCodes.Callvirt, setYieldValue);
                 }
 
-                stateMachine.Body.InsertInstructions(resumeOffset + offset, true, il.Instructions);
+                stateMachine.Body.InsertInstructions(insc.Count - eoffResume, true, il.Instructions);
             }
         }
 
