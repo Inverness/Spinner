@@ -512,72 +512,125 @@ namespace Spinner.Fody.Weavers
 
         protected void EmitAttributeArgument(ILProcessorEx il, CustomAttributeArgument arg)
         {
-            if (arg.Value == null)
+            EmitLiteral(il, arg.Type, arg.Value);
+        }
+
+        protected void EmitLiteral(ILProcessorEx il, TypeReference type, object value)
+        {
+            if (value == null)
             {
                 il.Emit(OpCodes.Ldnull);
             }
-            else if (arg.Value is bool)
+            else if (value is bool)
             {
-                il.Emit((bool) arg.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                il.Emit((bool) value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
             }
-            else if (arg.Value is char)
+            else if (value is char)
             {
-                il.Emit(OpCodes.Ldc_I4, (char) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (char) value);
             }
-            else if (arg.Value is byte)
+            else if (value is byte)
             {
-                il.Emit(OpCodes.Ldc_I4, (byte) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (byte) value);
             }
-            else if (arg.Value is sbyte)
+            else if (value is sbyte)
             {
-                il.Emit(OpCodes.Ldc_I4, (sbyte) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (sbyte) value);
             }
-            else if (arg.Value is short)
+            else if (value is short)
             {
-                il.Emit(OpCodes.Ldc_I4, (short) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (short) value);
             }
-            else if (arg.Value is ushort)
+            else if (value is ushort)
             {
-                il.Emit(OpCodes.Ldc_I4, (ushort) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (ushort) value);
             }
-            else if (arg.Value is int)
+            else if (value is int)
             {
-                il.Emit(OpCodes.Ldc_I4, (int) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (int) value);
             }
-            else if (arg.Value is uint)
+            else if (value is uint)
             {
-                il.Emit(OpCodes.Ldc_I4, (int) (uint) arg.Value);
+                il.Emit(OpCodes.Ldc_I4, (int) (uint) value);
             }
-            else if (arg.Value is long)
+            else if (value is long)
             {
-                il.Emit(OpCodes.Ldc_I8, (long) arg.Value);
+                il.Emit(OpCodes.Ldc_I8, (long) value);
             }
-            else if (arg.Value is ulong)
+            else if (value is ulong)
             {
-                il.Emit(OpCodes.Ldc_I8, (long) (ulong) arg.Value);
+                il.Emit(OpCodes.Ldc_I8, (long) (ulong) value);
             }
-            else if (arg.Value is float)
+            else if (value is float)
             {
-                il.Emit(OpCodes.Ldc_R4, (float) arg.Value);
+                il.Emit(OpCodes.Ldc_R4, (float) value);
             }
-            else if (arg.Value is double)
+            else if (value is double)
             {
-                il.Emit(OpCodes.Ldc_R8, (double) arg.Value);
+                il.Emit(OpCodes.Ldc_R8, (double) value);
             }
-            else if (arg.Value is string)
+            else if (value is string)
             {
-                il.Emit(OpCodes.Ldstr, (string) arg.Value);
+                il.Emit(OpCodes.Ldstr, (string) value);
             }
-            else if (arg.Value is TypeReference)
+            else if (value is TypeReference)
             {
                 MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
-                il.Emit(OpCodes.Ldtoken, (TypeReference) arg.Value);
+                il.Emit(OpCodes.Ldtoken, (TypeReference) value);
                 il.Emit(OpCodes.Call, getTypeFromHandle);
+            }
+            else if (value is CustomAttributeArgument[])
+            {
+                var caaArray = (CustomAttributeArgument[]) value;
+                TypeReference elementType = _mwc.SafeImport(type.GetElementType());
+                TypeReference objectType = elementType.Module.TypeSystem.Object;
+                OpCode stelemOpCode = GetStelemOpCode(elementType);
+
+                il.Emit(OpCodes.Ldc_I4, caaArray.Length);
+                il.Emit(OpCodes.Newarr, elementType);
+
+                for (int i = 0; i < caaArray.Length; i++)
+                {
+                    CustomAttributeArgument caa = caaArray[i];
+
+                    if (caa.Value is CustomAttributeArgument)
+                        caa = (CustomAttributeArgument) caa.Value;
+
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Ldc_I4, i);
+
+                    EmitLiteral(il, caa.Type, caa.Value);
+
+                    if (elementType.IsSame(objectType) && caa.Type.IsValueType)
+                        il.Emit(OpCodes.Box, caa.Type);
+
+                    il.Emit(stelemOpCode);
+                    //il.Emit(OpCodes.Stelem_Any, elementType);
+                }
             }
             else
             {
-                throw new ArgumentOutOfRangeException(nameof(arg), arg.Value.GetType().Name);
+                throw new ArgumentOutOfRangeException(nameof(value), value.GetType().Name);
             }
+        }
+
+        protected OpCode GetStelemOpCode(TypeReference type)
+        {
+            TypeSystem ts = type.Module.TypeSystem;
+
+            if (type == ts.Boolean || type == ts.Byte || type == ts.SByte)
+                return OpCodes.Stelem_I1;
+            if (type == ts.Char || type == ts.Int16 || type == ts.UInt16)
+                return OpCodes.Stelem_I2;
+            if (type == ts.Int32 || type == ts.UInt32)
+                return OpCodes.Stelem_I4;
+            if (type == ts.Int64 || type == ts.UInt64)
+                return OpCodes.Stelem_I8;
+            if (type == ts.Single)
+                return OpCodes.Stelem_R4;
+            if (type == ts.Double)
+                return OpCodes.Stelem_R8;
+            return OpCodes.Stelem_Ref;
         }
 
         /// <summary>
