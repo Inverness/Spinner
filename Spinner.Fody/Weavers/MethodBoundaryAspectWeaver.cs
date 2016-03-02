@@ -284,7 +284,7 @@ namespace Spinner.Fody.Weavers
             if (_aspectFeatures.Has(Features.OnYield | Features.OnResume))
             {
                 int offSearchStart = insc.Count - eoffInit;
-                VariableDefinition awaitableStorage = null;
+                //VariableDefinition awaitableStorage = null;
 
                 while (offSearchStart < insc.Count - eoffLeave)
                 {
@@ -306,17 +306,17 @@ namespace Spinner.Fody.Weavers
 
                     offSearchStart = insc.Count - eoffResume + 1;
 
-                    // This variable is used to capture the awaitable object from the stack so YieldValue can be set
-                    // before the await
-                    if (awaitableStorage == null)
-                        awaitableStorage = stateMachine.Body.AddVariableDefinition(stateMachine.Module.TypeSystem.Object);
+                    //// This variable is used to capture the awaitable object from the stack so YieldValue can be set
+                    //// before the await
+                    //if (awaitableStorage == null)
+                    //    awaitableStorage = stateMachine.Body.AddVariableDefinition(stateMachine.Module.TypeSystem.Object);
 
                     WriteYieldAndResume(stateMachine,
                                         eoffAwaitable,
                                         eoffYield,
                                         eoffResume,
                                         meaField,
-                                        awaitableStorage,
+                                        null,
                                         awaitResultVarOpt);
                 }
             }
@@ -1128,8 +1128,8 @@ namespace Spinner.Fody.Weavers
             VariableDefinition resultVarOpt
             )
         {
-            MethodReference getYieldValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_YieldValue.GetMethod);
-            MethodReference setYieldValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_YieldValue.SetMethod);
+            //MethodReference getYieldValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_YieldValue.GetMethod);
+            //MethodReference setYieldValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_YieldValue.SetMethod);
 
             Collection<Ins> insc = stateMachine.Body.Instructions;
 
@@ -1140,28 +1140,28 @@ namespace Spinner.Fody.Weavers
                 MethodDefinition onYieldDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnYield, true);
                 MethodReference onYield = _mwc.SafeImport(onYieldDef);
 
-                // Need to know whether the awaitable is a value type. It will be boxed as object if so, instead
-                // of trying to create a local variable for each type found.
-                TypeReference awaitableType = GetExpressionType(stateMachine.Body, insc.Count - eoffAwaitable - 1);
-                if (awaitableType == null)
-                    throw new InvalidOperationException("unable to determine expression type");
+                //// Need to know whether the awaitable is a value type. It will be boxed as object if so, instead
+                //// of trying to create a local variable for each type found.
+                //TypeReference awaitableType = GetExpressionType(stateMachine.Body, insc.Count - eoffAwaitable - 1);
+                //if (awaitableType == null)
+                //    throw new InvalidOperationException("unable to determine expression type");
 
-                il.Emit(OpCodes.Dup);
-                il.EmitBoxIfValueType(awaitableType);
-                il.Emit(OpCodes.Stloc, awaitableVar);
+                //il.Emit(OpCodes.Dup);
+                //il.EmitBoxIfValueType(awaitableType);
+                //il.Emit(OpCodes.Stloc, awaitableVar);
 
-                stateMachine.Body.InsertInstructions(insc.Count - eoffAwaitable, true, il.Instructions);
-                il.Instructions.Clear();
+                //stateMachine.Body.InsertInstructions(insc.Count - eoffAwaitable, true, il.Instructions);
+                //il.Instructions.Clear();
 
-                // Store the awaitable, currently an object or boxed value type, as YieldValue
+                //// Store the awaitable, currently an object or boxed value type, as YieldValue
 
-                if (meaField != null)
-                {
-                    il.Emit(OpCodes.Ldarg_0);
-                    il.Emit(OpCodes.Ldfld, meaField);
-                    il.Emit(OpCodes.Ldloc, awaitableVar);
-                    il.Emit(OpCodes.Callvirt, setYieldValue);
-                }
+                //if (meaField != null)
+                //{
+                //    il.Emit(OpCodes.Ldarg_0);
+                //    il.Emit(OpCodes.Ldfld, meaField);
+                //    il.Emit(OpCodes.Ldloc, awaitableVar);
+                //    il.Emit(OpCodes.Callvirt, setYieldValue);
+                //}
 
                 // Invoke OnYield()
 
@@ -1188,36 +1188,36 @@ namespace Spinner.Fody.Weavers
                 MethodDefinition onResumeDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnResume, true);
                 MethodReference onResume = _mwc.SafeImport(onResumeDef);
 
-                // Store the typed awaitable as YieldValue, optionally boxing it.
+                //// Store the typed awaitable as YieldValue, optionally boxing it.
 
-                if (meaField != null && resultVarOpt != null)
-                {
-                    il.Emit(OpCodes.Ldarg_0);
-                    il.Emit(OpCodes.Ldfld, meaField);
-                    il.Emit(OpCodes.Ldloc, resultVarOpt);
-                    il.EmitBoxIfValueType(resultVarOpt.VariableType);
-                    il.Emit(OpCodes.Callvirt, setYieldValue);
-                }
+                //if (meaField != null && resultVarOpt != null)
+                //{
+                //    il.Emit(OpCodes.Ldarg_0);
+                //    il.Emit(OpCodes.Ldfld, meaField);
+                //    il.Emit(OpCodes.Ldloc, resultVarOpt);
+                //    il.EmitBoxIfValueType(resultVarOpt.VariableType);
+                //    il.Emit(OpCodes.Callvirt, setYieldValue);
+                //}
 
                 il.Emit(OpCodes.Ldsfld, _aspectField);
                 il.EmitLoadOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onResume);
 
-                // Unbox the YieldValue and store it back in the result. Changing it is permitted here.
+                //// Unbox the YieldValue and store it back in the result. Changing it is permitted here.
 
-                if (meaField != null && resultVarOpt != null)
-                {
-                    il.Emit(OpCodes.Ldarg_0);
-                    il.Emit(OpCodes.Ldfld, meaField);
-                    il.Emit(OpCodes.Callvirt, getYieldValue);
-                    il.EmitCastOrUnbox(resultVarOpt.VariableType);
-                    il.Emit(OpCodes.Stloc, resultVarOpt);
+                //if (meaField != null && resultVarOpt != null)
+                //{
+                //    il.Emit(OpCodes.Ldarg_0);
+                //    il.Emit(OpCodes.Ldfld, meaField);
+                //    il.Emit(OpCodes.Callvirt, getYieldValue);
+                //    il.EmitCastOrUnbox(resultVarOpt.VariableType);
+                //    il.Emit(OpCodes.Stloc, resultVarOpt);
 
-                    //il.Emit(OpCodes.Ldarg_0);
-                    //il.Emit(OpCodes.Ldfld, meaField);
-                    //il.Emit(OpCodes.Ldnull);
-                    //il.Emit(OpCodes.Callvirt, setYieldValue);
-                }
+                //    //il.Emit(OpCodes.Ldarg_0);
+                //    //il.Emit(OpCodes.Ldfld, meaField);
+                //    //il.Emit(OpCodes.Ldnull);
+                //    //il.Emit(OpCodes.Callvirt, setYieldValue);
+                //}
 
                 stateMachine.Body.InsertInstructions(insc.Count - eoffResume, true, il.Instructions);
             }
