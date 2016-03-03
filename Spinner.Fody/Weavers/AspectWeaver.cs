@@ -22,16 +22,16 @@ namespace Spinner.Fody.Weavers
         private const string MulticastAttributePropertyPrefix = "Attribute";
 
         // ReSharper disable InconsistentNaming
-        protected readonly ModuleWeavingContext _mwc;
-        protected readonly TypeDefinition _aspectType;
-        protected readonly int _aspectIndex;
-        protected readonly IMemberDefinition _aspectTarget;
-        protected readonly Features _aspectFeatures;
-        protected readonly MulticastInstance _mi;
+        internal readonly ModuleWeavingContext _mwc;
+        internal readonly TypeDefinition _aspectType;
+        internal readonly int _aspectIndex;
+        internal readonly IMemberDefinition _aspectTarget;
+        internal readonly Features _aspectFeatures;
+        internal readonly MulticastInstance _mi;
 
-        protected FieldDefinition _aspectField;
-        protected TypeDefinition _bindingClass;
-        protected FieldDefinition _bindingInstanceField;
+        internal FieldDefinition _aspectField;
+        internal TypeDefinition _bindingClass;
+        internal FieldDefinition _bindingInstanceField;
         // ReSharper restore InconsistentNaming
 
         protected AspectWeaver(

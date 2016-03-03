@@ -24,10 +24,10 @@ namespace Spinner.Fody.Weavers
 
     internal sealed class MethodBoundaryAspectWeaver : AspectWeaver
     {
-        private readonly MethodDefinition _method;
-        private MethodDefinition _stateMachine;
-        private TypeReference _effectiveReturnType;
-        private readonly bool _applyToStateMachine;
+        internal readonly MethodDefinition _method;
+        internal MethodDefinition _stateMachine;
+        internal TypeReference _effectiveReturnType;
+        internal readonly bool _applyToStateMachine;
 
         private MethodBoundaryAspectWeaver(
             ModuleWeavingContext mwc,

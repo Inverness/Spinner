@@ -11,11 +11,14 @@ using Spinner.Fody.Analysis;
 using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 using Spinner.Fody.Weavers;
+using Spinner.Fody.Weavers.Prototype;
 
 namespace Spinner.Fody
 {
     public class ModuleWeaver
     {
+        private static bool s_test;
+
         public ModuleDefinition ModuleDefinition { get; set; }
 
         public Action<string> LogDebug { get; set; }
@@ -136,6 +139,14 @@ namespace Spinner.Fody
                         if (IsAspectAttribute(atype, _mwc.Spinner.IMethodBoundaryAspect))
                         {
                             Debug.Assert(method.HasBody);
+
+                            if (!s_test && atype.Methods.Any(m => m.Name == "OnEntry"))
+                            {
+                                s_test = true;
+                                var aw2 = new AspectWeaver2(_mwc, mi, Interlocked.Increment(ref _aspectIndexCounter), method);
+                                aw2.Weave();
+                                continue;
+                            }
 
                             if (aspects == null)
                                 aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();

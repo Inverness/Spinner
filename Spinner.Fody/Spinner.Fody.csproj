@@ -64,6 +64,13 @@
     <Compile Include="Weavers\MethodInterceptionAspectWeaver.cs" />
     <Compile Include="Weavers\NameGenerator.cs" />
     <Compile Include="Weavers\PropertyInterceptionAspectWeaver.cs" />
+    <Compile Include="Weavers\Prototype\AdviceArgsInitWeaver.cs" />
+    <Compile Include="Weavers\Prototype\AdviceWeaver.cs" />
+    <Compile Include="Weavers\Prototype\AspectFieldWeaver.cs" />
+    <Compile Include="Weavers\Prototype\AspectInitWeaver.cs" />
+    <Compile Include="Weavers\Prototype\AspectWeaver2.cs" />
+    <Compile Include="Weavers\Prototype\MethodArgsInitWeaver.cs" />
+    <Compile Include="Weavers\Prototype\MethodEntryAdviceWeaver.cs" />
     <Compile Include="WellKnownFrameworkMembers.cs" />
     <Compile Include="WellKnownSpinnerMembers.cs" />
   </ItemGroup>
