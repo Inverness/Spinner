@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using Mono.Cecil;
 using Spinner.Aspects;
 
@@ -29,6 +30,7 @@ namespace Spinner.Fody
         private readonly ModuleWeaver _weaver;
         private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
         private readonly Dictionary<MethodDefinition, Features> _typeFeatures;
+        private int _aspectIndexCounter;
 
         internal ModuleWeavingContext(ModuleWeaver weaver, ModuleDefinition module, ModuleDefinition libraryModule)
         {
@@ -42,7 +44,7 @@ namespace Spinner.Fody
                 {Spinner.AdviceArgs_Instance.GetMethod, Features.Instance},
                 {Spinner.AdviceArgs_Instance.SetMethod, Features.Instance},
                 {Spinner.MethodArgs_Arguments.GetMethod, Features.GetArguments},
-                {Spinner.PropertyInterceptionArgs_Index.GetMethod, Features.GetArguments},
+                {Spinner.LocationInterceptionArgs_Index.GetMethod, Features.GetArguments},
                 {Spinner.EventInterceptionArgs_Arguments.GetMethod, Features.GetArguments},
                 {Spinner.Arguments_set_Item, Features.SetArguments},
                 {Spinner.Arguments_SetValue, Features.SetArguments},
@@ -55,7 +57,7 @@ namespace Spinner.Fody
                 {Spinner.MethodExecutionArgs_YieldValue.GetMethod, Features.YieldValue},
                 {Spinner.MethodExecutionArgs_YieldValue.SetMethod, Features.YieldValue},
                 {Spinner.MethodArgs_Method.GetMethod, Features.MemberInfo},
-                {Spinner.PropertyInterceptionArgs_Property.GetMethod, Features.MemberInfo},
+                {Spinner.LocationInterceptionArgs_Property.GetMethod, Features.MemberInfo},
                 {Spinner.EventInterceptionArgs_Event.GetMethod, Features.MemberInfo},
                 {Spinner.AdviceArgs_Tag.GetMethod, Features.Tag},
                 {Spinner.AdviceArgs_Tag.SetMethod, Features.Tag},
@@ -70,8 +72,8 @@ namespace Spinner.Fody
                 {Spinner.IMethodBoundaryAspect_OnYield, Features.OnYield},
                 {Spinner.IMethodBoundaryAspect_OnResume, Features.OnResume},
                 {Spinner.IMethodInterceptionAspect_OnInvoke, Features.None},
-                {Spinner.IPropertyInterceptionAspect_OnGetValue, Features.None},
-                {Spinner.IPropertyInterceptionAspect_OnSetValue, Features.None},
+                {Spinner.ILocationInterceptionAspect_OnGetValue, Features.None},
+                {Spinner.ILocationInterceptionAspect_OnSetValue, Features.None},
                 {Spinner.IEventInterceptionAspect_OnAddHandler, Features.None},
                 {Spinner.IEventInterceptionAspect_OnRemoveHandler, Features.None},
                 {Spinner.IEventInterceptionAspect_OnInvokeHandler, Features.None}
@@ -143,6 +145,11 @@ namespace Spinner.Fody
         internal void LogError(string text)
         {
             _weaver.LogError(text);
+        }
+
+        internal int NewAspectIndex()
+        {
+            return Interlocked.Increment(ref _aspectIndexCounter);
         }
     }
 }

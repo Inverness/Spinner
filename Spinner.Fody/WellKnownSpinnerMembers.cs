@@ -37,9 +37,9 @@ namespace Spinner.Fody
         internal readonly TypeDefinition IMethodInterceptionAspect;
         internal readonly MethodDefinition IMethodInterceptionAspect_OnInvoke;
 
-        internal readonly TypeDefinition IPropertyInterceptionAspect;
-        internal readonly MethodDefinition IPropertyInterceptionAspect_OnGetValue;
-        internal readonly MethodDefinition IPropertyInterceptionAspect_OnSetValue;
+        internal readonly TypeDefinition ILocationInterceptionAspect;
+        internal readonly MethodDefinition ILocationInterceptionAspect_OnGetValue;
+        internal readonly MethodDefinition ILocationInterceptionAspect_OnSetValue;
 
         internal readonly TypeDefinition IEventInterceptionAspect;
         internal readonly MethodDefinition IEventInterceptionAspect_OnAddHandler;
@@ -82,17 +82,17 @@ namespace Spinner.Fody
 
         internal readonly TypeDefinition MethodBindingT1;
 
-        internal readonly TypeDefinition PropertyBindingT1;
+        internal readonly TypeDefinition LocationBindingT1;
 
         internal readonly TypeDefinition EventBinding;
 
-        internal readonly TypeDefinition PropertyInterceptionArgs;
-        internal readonly PropertyDefinition PropertyInterceptionArgs_Property;
-        internal readonly PropertyDefinition PropertyInterceptionArgs_Index;
+        internal readonly TypeDefinition LocationInterceptionArgs;
+        internal readonly PropertyDefinition LocationInterceptionArgs_Property;
+        internal readonly PropertyDefinition LocationInterceptionArgs_Index;
 
-        internal readonly TypeDefinition BoundPropertyInterceptionArgsT1;
-        internal readonly MethodDefinition BoundPropertyInterceptionArgsT1_ctor;
-        internal readonly FieldDefinition BoundPropertyInterceptionArgsT1_TypedValue;
+        internal readonly TypeDefinition BoundLocationInterceptionArgsT1;
+        internal readonly MethodDefinition BoundLocationInterceptionArgsT1_ctor;
+        internal readonly FieldDefinition BoundLocationInterceptionArgsT1_TypedValue;
 
         internal readonly TypeDefinition EventInterceptionArgs;
         internal readonly PropertyDefinition EventInterceptionArgs_Arguments;
@@ -128,6 +128,10 @@ namespace Spinner.Fody
         internal readonly TypeDefinition MulticastInheritance;
         internal readonly TypeDefinition MulticastTargets;
 
+        internal readonly TypeDefinition GroupingAdvice;
+        internal readonly PropertyDefinition GroupingAdvice_Master;
+        internal readonly TypeDefinition MethodBoundaryAdvice;
+        internal readonly PropertyDefinition MethodBoundaryAdvice_ApplyToStateMachine;
         internal readonly TypeDefinition MethodEntryAdvice;
         internal readonly TypeDefinition MethodPointcut;
         internal readonly TypeDefinition SelfPointcut;
@@ -157,9 +161,9 @@ namespace Spinner.Fody
             IMethodInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IMethodInterceptionAspect));
             IMethodInterceptionAspect_OnInvoke = type.Methods.First(m => m.Name == "OnInvoke");
 
-            IPropertyInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IPropertyInterceptionAspect));
-            IPropertyInterceptionAspect_OnGetValue = type.Methods.First(m => m.Name == "OnGetValue");
-            IPropertyInterceptionAspect_OnSetValue = type.Methods.First(m => m.Name == "OnSetValue");
+            ILocationInterceptionAspect = type = module.GetType(NsA, nameof(SpA.ILocationInterceptionAspect));
+            ILocationInterceptionAspect_OnGetValue = type.Methods.First(m => m.Name == "OnGetValue");
+            ILocationInterceptionAspect_OnSetValue = type.Methods.First(m => m.Name == "OnSetValue");
 
             IEventInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IEventInterceptionAspect));
             IEventInterceptionAspect_OnAddHandler = type.Methods.First(m => m.Name == "OnAddHandler");
@@ -168,7 +172,7 @@ namespace Spinner.Fody
 
             MethodBoundaryAspect = module.GetType(NsA, nameof(SpA.MethodBoundaryAspect));
             MethodInterceptionAspect = module.GetType(NsA, nameof(SpA.MethodInterceptionAspect));
-            PropertyInterceptionAspect = module.GetType(NsA, nameof(SpA.PropertyInterceptionAspect));
+            PropertyInterceptionAspect = module.GetType(NsA, nameof(SpA.LocationInterceptionAspect));
             EventInterceptionAspect = module.GetType(NsA, nameof(SpA.EventInterceptionAspect));
 
             _emptyAspectBaseTypes = new HashSet<TypeDefinition>
@@ -196,7 +200,7 @@ namespace Spinner.Fody
 
             MethodBinding = module.GetType(NsAi, nameof(SpAi.MethodBinding));
             MethodBindingT1 = module.GetType(NsAi, nameof(SpAi.MethodBinding) + "`1");
-            PropertyBindingT1 = module.GetType(NsAi, "PropertyBinding`1");
+            LocationBindingT1 = module.GetType(NsAi, "LocationBinding`1");
             EventBinding = module.GetType(NsAi, nameof(SpAi.EventBinding));
 
             Features = module.GetType(NsA, nameof(SpA.Features));
@@ -204,9 +208,9 @@ namespace Spinner.Fody
             AnalyzedFeaturesAttribute = type = module.GetType(NsAi, nameof(SpAi.AnalyzedFeaturesAttribute));
             AnalyzedFeaturesAttribute_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            PropertyInterceptionArgs = type = module.GetType(NsA, nameof(SpA.PropertyInterceptionArgs));
-            PropertyInterceptionArgs_Property = type.Properties.First(p => p.Name == "Property");
-            PropertyInterceptionArgs_Index = type.Properties.First(p => p.Name == "Index");
+            LocationInterceptionArgs = type = module.GetType(NsA, nameof(SpA.LocationInterceptionArgs));
+            LocationInterceptionArgs_Property = type.Properties.First(p => p.Name == "Location");
+            LocationInterceptionArgs_Index = type.Properties.First(p => p.Name == "Index");
 
             MethodInterceptionArgs = module.GetType(NsA, nameof(SpA.MethodInterceptionArgs));
 
@@ -217,9 +221,9 @@ namespace Spinner.Fody
             BoundMethodInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundMethodInterceptionArgsT1_TypedReturnValue = type.Fields.First(f => f.Name == "TypedReturnValue");
 
-            BoundPropertyInterceptionArgsT1 = type = module.GetType(NsAi, "BoundPropertyInterceptionArgs`1");
-            BoundPropertyInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
-            BoundPropertyInterceptionArgsT1_TypedValue = type.Fields.First(f => f.Name == "TypedValue");
+            BoundLocationInterceptionArgsT1 = type = module.GetType(NsAi, "BoundLocationInterceptionArgs`1");
+            BoundLocationInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
+            BoundLocationInterceptionArgsT1_TypedValue = type.Fields.First(f => f.Name == "TypedValue");
 
             EventInterceptionArgs = type = module.GetType(NsA, nameof(SpA.EventInterceptionArgs));
             EventInterceptionArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
@@ -266,6 +270,10 @@ namespace Spinner.Fody
             MulticastInheritance = module.GetType(NsE, nameof(SpE.MulticastInheritance));
             MulticastTargets = module.GetType(NsE, nameof(SpE.MulticastTargets));
 
+            GroupingAdvice = type = module.GetType(NsAv, nameof(SpAv.GroupingAdvice));
+            GroupingAdvice_Master = type.GetProperty(nameof(SpAv.GroupingAdvice.Master), false);
+            MethodBoundaryAdvice = type = module.GetType(NsAv, nameof(SpAv.MethodBoundaryAdvice));
+            MethodBoundaryAdvice_ApplyToStateMachine = type.GetProperty(nameof(SpAv.MethodBoundaryAdvice.ApplyToStateMachine), false);
             MethodEntryAdvice = module.GetType(NsAv, nameof(SpAv.MethodEntryAdvice));
             MethodPointcut = module.GetType(NsAv, nameof(SpAv.MethodPointcut));
             MulticastPointcut = module.GetType(NsAv, nameof(SpAv.MulticastPointcut));

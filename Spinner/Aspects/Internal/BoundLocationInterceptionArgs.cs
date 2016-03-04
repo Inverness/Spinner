@@ -1,12 +1,12 @@
 ﻿namespace Spinner.Aspects.Internal
 {
-    public sealed class BoundPropertyInterceptionArgs<T> : PropertyInterceptionArgs
+    public sealed class BoundLocationInterceptionArgs<T> : LocationInterceptionArgs
     {
         public T TypedValue;
 
-        private readonly PropertyBinding<T> _binding; 
+        private readonly LocationBinding<T> _binding; 
 
-        public BoundPropertyInterceptionArgs(object instance, Arguments index, PropertyBinding<T> binding)
+        public BoundLocationInterceptionArgs(object instance, Arguments index, LocationBinding<T> binding)
             : base(instance, index)
         {
             _binding = binding;

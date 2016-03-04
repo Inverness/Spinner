@@ -6,14 +6,14 @@ namespace Spinner.Aspects
     /// A default implementation of IPropertyInterceptionAspect
     /// </summary>
     [AttributeUsage(AttributeTargets.Property)]
-    public class PropertyInterceptionAspect : LocationLevelAspect, IPropertyInterceptionAspect
+    public class LocationInterceptionAspect : LocationLevelAspect, ILocationInterceptionAspect
     {
-        public virtual void OnGetValue(PropertyInterceptionArgs args)
+        public virtual void OnGetValue(LocationInterceptionArgs args)
         {
             args.ProceedGetValue();
         }
 
-        public virtual void OnSetValue(PropertyInterceptionArgs args)
+        public virtual void OnSetValue(LocationInterceptionArgs args)
         {
             args.ProceedSetValue();
         }

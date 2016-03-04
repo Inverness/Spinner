@@ -210,6 +210,32 @@ namespace Spinner.Fody
             return null;
         }
 
+        /// <summary>
+        /// Check if this type or one of its bases implements an interface. Does not check the interface's own inheritance.
+        /// </summary>
+        internal static bool HasInterface(this TypeDefinition self, TypeReference interfaceType, bool inherited)
+        {
+            TypeDefinition current = self;
+            while (current != null)
+            {
+                if (current.HasInterfaces)
+                {
+                    for (int i = 0; i < current.Interfaces.Count; i++)
+                    {
+                        if (current.Interfaces[i].IsSame(interfaceType))
+                            return true;
+                    }
+                }
+
+                if (!inherited)
+                    break;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return false;
+        }
+
         //internal static bool IsSame(this MethodReference self, MethodReference other)
         //{
         //    if (ReferenceEquals(self, other))

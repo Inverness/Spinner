@@ -1,26 +1,22 @@
-using System.Collections.Generic;
 using Mono.Cecil;
 
 namespace Spinner.Fody.Weavers.Prototype
 {
     internal sealed class AspectFieldWeaver : AdviceWeaver
     {
-        public AspectFieldWeaver(AspectWeaver2 p, MethodDefinition adviceMethod)
-            : base(p, adviceMethod)
-        {
-        }
+        internal FieldReference Field { get; private set; }
 
-        public FieldReference Field { get; private set; }
-
-        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset, ICollection<AdviceWeaver> previous)
+        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset)
         {
-            string name = NameGenerator.MakeAspectFieldName(P.AspectTarget.Name, P.AspectIndex);
+            var targetMember = (IMemberDefinition) Aspect.Target;
+
+            string name = NameGenerator.MakeAspectFieldName(targetMember.Name, Aspect.Index);
 
             var fattrs = FieldAttributes.Private | FieldAttributes.Static;
 
-            var aspectFieldDef = new FieldDefinition(name, fattrs, P.Context.SafeImport(P.AspectType));
+            var aspectFieldDef = new FieldDefinition(name, fattrs, Aspect.Context.SafeImport(Aspect.AspectType));
             AddCompilerGeneratedAttribute(aspectFieldDef);
-            P.AspectTarget.DeclaringType.Fields.Add(aspectFieldDef);
+            targetMember.DeclaringType.Fields.Add(aspectFieldDef);
 
             Field = aspectFieldDef;
         }

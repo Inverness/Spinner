@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Spinner.Fody.Utilities;
@@ -8,27 +6,21 @@ namespace Spinner.Fody.Weavers.Prototype
 {
     internal sealed class MethodEntryAdviceWeaver : AdviceWeaver
     {
-        public MethodEntryAdviceWeaver(AspectWeaver2 p, MethodDefinition adviceMethod)
-            : base(p, adviceMethod)
-        {
-        }
+        internal AspectFieldWeaver AspectField;
 
-        public VariableDefinition MeaVar { get; set; }
+        internal MethodExecutionArgsInitWeaver MethodExecutionArgsInit;
 
-        public FieldReference MeaField { get; set; }
+        internal MethodReference AdviceMethod;
 
-        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset, ICollection<AdviceWeaver> previous)
+        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset)
         {
             var il = new ILProcessorEx();
 
-            var aspectWeaver = previous.OfType<AspectFieldWeaver>().First();
-            var adviceArgsWeaver = previous.OfType<MethodExecutionArgsInitWeaver>().First();
-
             // Invoke OnEntry with the MEA field, variable, or null.
 
-            il.Emit(OpCodes.Ldsfld, aspectWeaver.Field);
-            il.EmitLoadOrNull(adviceArgsWeaver.Variable, adviceArgsWeaver.Field);
-            il.Emit(OpCodes.Callvirt, P.Context.SafeImport(AdviceMethod));
+            il.Emit(OpCodes.Ldsfld, AspectField.Field);
+            il.EmitLoadOrNull(MethodExecutionArgsInit.Variable, MethodExecutionArgsInit.Field);
+            il.Emit(OpCodes.Callvirt, Aspect.Context.SafeImport(AdviceMethod));
 
             method.Body.InsertInstructions(offset, true, il.Instructions);
         }

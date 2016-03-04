@@ -2,6 +2,6 @@
 {
     public abstract class GroupingAdvice : Advice
     {
-        public string AttributeMaster { get; set; }
+        public string Master { get; set; }
     }
 }

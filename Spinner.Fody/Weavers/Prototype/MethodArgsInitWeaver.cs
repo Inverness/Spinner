@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Spinner.Fody.Utilities;
@@ -7,14 +6,9 @@ namespace Spinner.Fody.Weavers.Prototype
 {
     internal sealed class MethodArgsInitWeaver : AdviceWeaver
     {
-        public MethodArgsInitWeaver(AspectWeaver2 p, MethodDefinition adviceMethod)
-            : base(p, adviceMethod)
-        {
-        }
-
         public VariableDefinition Variable { get; private set; }
 
-        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset, ICollection<AdviceWeaver> previous)
+        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset)
         {
             int effectiveParameterCount = GetEffectiveParameterCount(method);
 
@@ -28,8 +22,8 @@ namespace Spinner.Fody.Weavers.Prototype
             FieldReference[] argumentFields;
             GetArgumentContainerInfo(method, out argumentsType, out argumentFields);
 
-            MethodDefinition constructorDef = P.Context.Spinner.ArgumentsT_ctor[effectiveParameterCount];
-            MethodReference constructor = P.Context.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodDefinition constructorDef = Aspect.Context.Spinner.ArgumentsT_ctor[effectiveParameterCount];
+            MethodReference constructor = Aspect.Context.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
             Variable = method.Body.AddVariableDefinition("arguments", argumentsType);
 

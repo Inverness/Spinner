@@ -30,7 +30,6 @@ namespace Spinner.Fody
         public Action<string> LogError { get; set; }
 
         // Definition for IMethodInterceptionAspect
-        private int _aspectIndexCounter;
         private ModuleWeavingContext _mwc;
         private MulticastAttributeRegistry _multicastAttributeRegistry;
 

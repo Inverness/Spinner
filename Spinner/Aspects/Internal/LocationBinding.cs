@@ -1,13 +1,13 @@
 ﻿namespace Spinner.Aspects.Internal
 {
-    public abstract class PropertyBinding<T> : IPropertyBinding
+    public abstract class LocationBinding<T> : ILocationBinding
     {
-        object IPropertyBinding.GetValue(ref object instance, Arguments index)
+        object ILocationBinding.GetValue(ref object instance, Arguments index)
         {
             return GetValue(ref instance, index);
         }
 
-        void IPropertyBinding.SetValue(ref object instance, Arguments index, object value)
+        void ILocationBinding.SetValue(ref object instance, Arguments index, object value)
         {
             SetValue(ref instance, index, (T) value);
         }
@@ -17,7 +17,7 @@
         public abstract void SetValue(ref object instance, Arguments index, T value);
     }
 
-    public sealed class PropertyBindingImplTest : PropertyBinding<int>
+    public sealed class LocationBindingImplTest : LocationBinding<int>
     {
         public override int GetValue(ref object instance, Arguments index)
         {

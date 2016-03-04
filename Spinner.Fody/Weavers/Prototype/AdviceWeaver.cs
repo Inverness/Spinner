@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
@@ -7,23 +6,15 @@ namespace Spinner.Fody.Weavers.Prototype
 {
     internal abstract class AdviceWeaver
     {
-        protected readonly AspectWeaver2 P;
+        internal AspectInfo Aspect { get; set; }
 
-        internal AdviceWeaver(AspectWeaver2 p, MethodDefinition adviceMethod)
-        {
-            P = p;
-            AdviceMethod = adviceMethod;
-        }
-
-        public MethodDefinition AdviceMethod { get; }
-
-        public void Weave(MethodDefinition method, MethodDefinition stateMachine, int offset, ICollection<AdviceWeaver> previous)
+        public void Weave(MethodDefinition method, MethodDefinition stateMachine, int offset)
         {
             Debug.Assert(method != null && offset >= -1);
-            WeaveCore(method, stateMachine, offset, previous);
+            WeaveCore(method, stateMachine, offset);
         }
 
-        protected abstract void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset, ICollection<AdviceWeaver> previous);
+        protected abstract void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset);
 
         /// <summary>
         /// Gets an effective parameter count by excluding the value parameter of a property setter.
@@ -60,18 +51,18 @@ namespace Spinner.Fody.Weavers.Prototype
                 if (pt.IsByReference)
                     pt = pt.GetElementType();
 
-                baseParameterTypes[i] = P.Context.SafeImport(pt);
+                baseParameterTypes[i] = Aspect.Context.SafeImport(pt);
             }
 
-            TypeDefinition typeDef = P.Context.Spinner.ArgumentsT[effectiveParameterCount];
-            type = P.Context.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
+            TypeDefinition typeDef = Aspect.Context.Spinner.ArgumentsT[effectiveParameterCount];
+            type = Aspect.Context.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
             for (int i = 0; i < effectiveParameterCount; i++)
             {
-                FieldDefinition fieldDef = P.Context.Spinner.ArgumentsT_Item[effectiveParameterCount][i];
-                FieldReference field = P.Context.SafeImport(fieldDef).WithGenericDeclaringType(type);
+                FieldDefinition fieldDef = Aspect.Context.Spinner.ArgumentsT_Item[effectiveParameterCount][i];
+                FieldReference field = Aspect.Context.SafeImport(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;
             }
@@ -79,7 +70,7 @@ namespace Spinner.Fody.Weavers.Prototype
 
         protected void AddCompilerGeneratedAttribute(ICustomAttributeProvider definition)
         {
-            MethodReference ctor = P.Context.SafeImport(P.Context.Framework.CompilerGeneratedAttribute_ctor);
+            MethodReference ctor = Aspect.Context.SafeImport(Aspect.Context.Framework.CompilerGeneratedAttribute_ctor);
 
             definition.CustomAttributes.Add(new CustomAttribute(ctor));
         }

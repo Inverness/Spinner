@@ -1,6 +1,6 @@
 ﻿namespace Spinner.Aspects
 {
-    public interface IPropertyBinding
+    public interface ILocationBinding
     {
         object GetValue(ref object instance, Arguments index);
 

@@ -2,6 +2,6 @@
 {
     public abstract class MethodBoundaryAdvice : GroupingAdvice
     {
-        public bool AttributeApplyToStateMachine { get; set; }
+        public bool ApplyToStateMachine { get; set; }
     }
 }

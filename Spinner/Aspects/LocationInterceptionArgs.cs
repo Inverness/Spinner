@@ -2,9 +2,9 @@
 
 namespace Spinner.Aspects
 {
-    public abstract class PropertyInterceptionArgs : AdviceArgs
+    public abstract class LocationInterceptionArgs : AdviceArgs
     {
-        protected PropertyInterceptionArgs(object instance, Arguments index)
+        protected LocationInterceptionArgs(object instance, Arguments index)
             : base(instance)
         {
             Index = index;
@@ -14,7 +14,7 @@ namespace Spinner.Aspects
 
         public abstract object Value { get; set; }
 
-        public PropertyInfo Property { get; set; }
+        public PropertyInfo Location { get; set; }
 
         public abstract void ProceedGetValue();
 

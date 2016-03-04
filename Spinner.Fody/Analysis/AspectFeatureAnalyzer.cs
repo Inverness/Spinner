@@ -203,7 +203,7 @@ namespace Spinner.Fody.Analysis
                     return AspectKind.MethodBoundary;
                 if (idef == spinner.IMethodInterceptionAspect)
                     return AspectKind.MethodInterception;
-                if (idef == spinner.IPropertyInterceptionAspect)
+                if (idef == spinner.ILocationInterceptionAspect)
                     return AspectKind.PropertyInterception;
                 if (idef == spinner.IEventInterceptionAspect)
                     return AspectKind.EventInterception;
@@ -258,7 +258,7 @@ namespace Spinner.Fody.Analysis
                     baseType = _mwc.Spinner.IMethodInterceptionAspect;
                     break;
                 case AspectKind.PropertyInterception:
-                    baseType = _mwc.Spinner.IPropertyInterceptionAspect;
+                    baseType = _mwc.Spinner.ILocationInterceptionAspect;
                     break;
                 case AspectKind.EventInterception:
                     baseType = _mwc.Spinner.IEventInterceptionAspect;

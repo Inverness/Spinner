@@ -11,17 +11,12 @@ namespace Spinner.Fody.Weavers.Prototype
     {
         private const string MulticastAttributePropertyPrefix = "Attribute";
 
-        public AspectInitWeaver(AspectWeaver2 p, MethodDefinition adviceMethod)
-            : base(p, adviceMethod)
-        {
-        }
+        internal AspectFieldWeaver AspectField { get; set; }
 
-        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset, ICollection<AdviceWeaver> previous)
+        protected override void WeaveCore(MethodDefinition method, MethodDefinition stateMachine, int offset)
         {
-            var fieldWeaver = previous.OfType<AspectFieldWeaver>().First();
-
             // Figure out if the attribute has any arguments that need to be initialized
-            CustomAttribute attr = P.MulticastInstance.Attribute;
+            CustomAttribute attr = Aspect.MulticastInstance.Attribute;
 
             int argCount = attr.HasConstructorArguments ? attr.ConstructorArguments.Count : 0;
             int propCount = attr.HasProperties ? attr.Properties.Count : 0;
@@ -30,20 +25,20 @@ namespace Spinner.Fody.Weavers.Prototype
             Instruction jtNotNull = Instruction.Create(OpCodes.Nop);
 
             var il = new ILProcessorEx();
-            il.Emit(OpCodes.Ldsfld, fieldWeaver.Field);
+            il.Emit(OpCodes.Ldsfld, AspectField.Field);
             il.Emit(OpCodes.Brtrue, jtNotNull);
 
             MethodReference ctor;
             if (argCount == 0)
             {
                 // NOTE: Aspect type can't be generic since its declared by an attribute
-                ctor = P.Context.SafeImport(P.AspectType.GetConstructor(0));
+                ctor = Aspect.Context.SafeImport(Aspect.AspectType.GetConstructor(0));
             }
             else
             {
                 List<TypeReference> argTypes = attr.ConstructorArguments.Select(c => c.Type).ToList();
 
-                ctor = P.Context.SafeImport(P.AspectType.GetConstructor(argTypes));
+                ctor = Aspect.Context.SafeImport(Aspect.AspectType.GetConstructor(argTypes));
 
                 for (int i = 0; i < attr.ConstructorArguments.Count; i++)
                     EmitAttributeArgument(il, attr.ConstructorArguments[i]);
@@ -57,7 +52,7 @@ namespace Spinner.Fody.Weavers.Prototype
                 {
                     CustomAttributeNamedArgument na = attr.Fields[i];
 
-                    FieldReference field = P.Context.SafeImport(P.AspectType.GetField(na.Name, true));
+                    FieldReference field = Aspect.Context.SafeImport(Aspect.AspectType.GetField(na.Name, true));
 
                     il.Emit(OpCodes.Dup);
                     EmitAttributeArgument(il, na.Argument);
@@ -75,7 +70,7 @@ namespace Spinner.Fody.Weavers.Prototype
                     if (na.Name.StartsWith(MulticastAttributePropertyPrefix))
                         continue;
 
-                    MethodReference setter = P.Context.SafeImport(P.AspectType.GetProperty(na.Name, true).SetMethod);
+                    MethodReference setter = Aspect.Context.SafeImport(Aspect.AspectType.GetProperty(na.Name, true).SetMethod);
 
                     il.Emit(OpCodes.Dup);
                     EmitAttributeArgument(il, na.Argument);
@@ -83,7 +78,7 @@ namespace Spinner.Fody.Weavers.Prototype
                 }
             }
 
-            il.Emit(OpCodes.Stsfld, fieldWeaver.Field);
+            il.Emit(OpCodes.Stsfld, AspectField.Field);
             il.Append(jtNotNull);
 
             method.Body.InsertInstructions(offset, true, il.Instructions);
@@ -154,14 +149,14 @@ namespace Spinner.Fody.Weavers.Prototype
             }
             else if (value is TypeReference)
             {
-                MethodReference getTypeFromHandle = P.Context.SafeImport(P.Context.Framework.Type_GetTypeFromHandle);
+                MethodReference getTypeFromHandle = Aspect.Context.SafeImport(Aspect.Context.Framework.Type_GetTypeFromHandle);
                 il.Emit(OpCodes.Ldtoken, (TypeReference) value);
                 il.Emit(OpCodes.Call, getTypeFromHandle);
             }
             else if (value is CustomAttributeArgument[])
             {
                 var caaArray = (CustomAttributeArgument[]) value;
-                TypeReference elementType = P.Context.SafeImport(type.GetElementType());
+                TypeReference elementType = Aspect.Context.SafeImport(type.GetElementType());
                 TypeReference objectType = elementType.Module.TypeSystem.Object;
                 OpCode stelemOpCode = GetStelemOpCode(elementType);
 

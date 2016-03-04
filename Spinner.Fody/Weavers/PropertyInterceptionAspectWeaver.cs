@@ -91,8 +91,8 @@ namespace Spinner.Fody.Weavers
             }
             
             MethodReference adviceBase = method.IsGetter
-                ? _mwc.Spinner.IPropertyInterceptionAspect_OnGetValue
-                : _mwc.Spinner.IPropertyInterceptionAspect_OnSetValue;
+                ? _mwc.Spinner.ILocationInterceptionAspect_OnGetValue
+                : _mwc.Spinner.ILocationInterceptionAspect_OnSetValue;
 
             WriteCallAdvice(method, insc.Count, adviceBase, iaVariable);
 
@@ -119,7 +119,7 @@ namespace Spinner.Fody.Weavers
             VariableDefinition piaVariable)
         {
             MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
-            MethodReference setProperty = _mwc.SafeImport(_mwc.Spinner.PropertyInterceptionArgs_Property.SetMethod);
+            MethodReference setProperty = _mwc.SafeImport(_mwc.Spinner.LocationInterceptionArgs_Property.SetMethod);
             MethodReference getPropertyInfo = _mwc.SafeImport(_mwc.Spinner.WeaverHelpers_GetPropertyInfo);
 
             var insc = new[]
@@ -140,7 +140,7 @@ namespace Spinner.Fody.Weavers
             ModuleDefinition module = _property.Module;
 
             string name = NameGenerator.MakePropertyBindingName(_property.Name, _aspectIndex);
-            TypeReference baseType = _mwc.SafeImport(_mwc.Spinner.PropertyBindingT1).MakeGenericInstanceType(_property.PropertyType);
+            TypeReference baseType = _mwc.SafeImport(_mwc.Spinner.LocationBindingT1).MakeGenericInstanceType(_property.PropertyType);
 
             CreateBindingClass(baseType, name);
 
@@ -310,14 +310,14 @@ namespace Spinner.Fody.Weavers
             out VariableDefinition iaVariable,
             out FieldReference valueField)
         {
-            TypeDefinition piaTypeDef = _mwc.Spinner.BoundPropertyInterceptionArgsT1;
+            TypeDefinition piaTypeDef = _mwc.Spinner.BoundLocationInterceptionArgsT1;
             GenericInstanceType genericPiaType = _mwc.SafeImport(piaTypeDef).MakeGenericInstanceType(_property.PropertyType);
             TypeReference piaType = genericPiaType;
 
-            MethodDefinition constructorDef = _mwc.Spinner.BoundPropertyInterceptionArgsT1_ctor;
+            MethodDefinition constructorDef = _mwc.Spinner.BoundLocationInterceptionArgsT1_ctor;
             MethodReference constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
 
-            FieldDefinition valueFieldDef = _mwc.Spinner.BoundPropertyInterceptionArgsT1_TypedValue;
+            FieldDefinition valueFieldDef = _mwc.Spinner.BoundLocationInterceptionArgsT1_TypedValue;
             valueField = _mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
             iaVariable = method.Body.AddVariableDefinition(piaType);
