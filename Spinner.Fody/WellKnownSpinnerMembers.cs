@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
 using SpA = Spinner.Aspects;
+using SpAv = Spinner.Aspects.Advices;
 using SpAi = Spinner.Aspects.Internal;
 using SpE = Spinner.Extensibility;
 
@@ -15,6 +16,7 @@ namespace Spinner.Fody
         internal const int MaxArguments = Aspects.Arguments.MaxItems;
 
         private const string NsA = "Spinner.Aspects";
+        private const string NsAv = "Spinner.Aspects.Advices";
         private const string NsAi = "Spinner.Aspects.Internal";
         private const string NsE = "Spinner.Extensibility";
         
@@ -125,6 +127,11 @@ namespace Spinner.Fody
         internal readonly TypeDefinition MulticastAttributes;
         internal readonly TypeDefinition MulticastInheritance;
         internal readonly TypeDefinition MulticastTargets;
+
+        internal readonly TypeDefinition MethodEntryAdvice;
+        internal readonly TypeDefinition MethodPointcut;
+        internal readonly TypeDefinition SelfPointcut;
+        internal readonly TypeDefinition MulticastPointcut;
 
         // ReSharper restore InconsistentNaming
 
@@ -258,6 +265,11 @@ namespace Spinner.Fody
             MulticastAttributes = module.GetType(NsE, nameof(SpE.MulticastAttributes));
             MulticastInheritance = module.GetType(NsE, nameof(SpE.MulticastInheritance));
             MulticastTargets = module.GetType(NsE, nameof(SpE.MulticastTargets));
+
+            MethodEntryAdvice = module.GetType(NsAv, nameof(SpAv.MethodEntryAdvice));
+            MethodPointcut = module.GetType(NsAv, nameof(SpAv.MethodPointcut));
+            MulticastPointcut = module.GetType(NsAv, nameof(SpAv.MulticastPointcut));
+            SelfPointcut = module.GetType(NsAv, nameof(SpAv.SelfPointcut));
         }
 
         /// <summary>

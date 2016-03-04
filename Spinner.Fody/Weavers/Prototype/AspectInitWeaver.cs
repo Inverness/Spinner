@@ -89,12 +89,12 @@ namespace Spinner.Fody.Weavers.Prototype
             method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
-        protected void EmitAttributeArgument(ILProcessorEx il, CustomAttributeArgument arg)
+        private void EmitAttributeArgument(ILProcessorEx il, CustomAttributeArgument arg)
         {
             EmitLiteral(il, arg.Type, arg.Value);
         }
 
-        protected void EmitLiteral(ILProcessorEx il, TypeReference type, object value)
+        private void EmitLiteral(ILProcessorEx il, TypeReference type, object value)
         {
             if (value == null)
             {
@@ -193,7 +193,7 @@ namespace Spinner.Fody.Weavers.Prototype
             }
         }
 
-        protected OpCode GetStelemOpCode(TypeReference type)
+        private OpCode GetStelemOpCode(TypeReference type)
         {
             TypeSystem ts = type.Module.TypeSystem;
 

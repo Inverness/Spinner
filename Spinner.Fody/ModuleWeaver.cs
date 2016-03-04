@@ -121,140 +121,144 @@ namespace Spinner.Fody
             if (NameUtility.TryParseGeneratedName(type.Name, out typeChar) && typeChar == 'd')
                 return null;
 
+
+
+            return null;
+
             // Use HasX properties to avoid on-demand allocation of the collections.
-            
-            if (type.HasMethods)
-            {
-                foreach (MethodDefinition method in type.Methods)
-                {
-                    if (!method.HasBody)
-                        continue;
 
-                    IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(method);
+            //if (type.HasMethods)
+            //{
+            //    foreach (MethodDefinition method in type.Methods)
+            //    {
+            //        if (!method.HasBody)
+            //            continue;
 
-                    foreach (MulticastInstance mi in multicastAttributes)
-                    {
-                        TypeDefinition atype = mi.AttributeType;
+            //        IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(method);
 
-                        if (IsAspectAttribute(atype, _mwc.Spinner.IMethodBoundaryAspect))
-                        {
-                            Debug.Assert(method.HasBody);
+            //        foreach (MulticastInstance mi in multicastAttributes)
+            //        {
+            //            TypeDefinition atype = mi.AttributeType;
 
-                            if (!s_test && atype.Methods.Any(m => m.Name == "OnEntry"))
-                            {
-                                s_test = true;
-                                var aw2 = new AspectWeaver2(_mwc, mi, Interlocked.Increment(ref _aspectIndexCounter), method);
-                                aw2.Weave();
-                                continue;
-                            }
+            //            if (IsAspectAttribute(atype, _mwc.Spinner.IMethodBoundaryAspect))
+            //            {
+            //                Debug.Assert(method.HasBody);
 
-                            if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) method, mi, AspectKind.MethodBoundary));
+            //                if (!s_test && atype.Methods.Any(m => m.Name == "OnEntry"))
+            //                {
+            //                    s_test = true;
+            //                    var aw2 = new AspectWeaver2(_mwc, mi, Interlocked.Increment(ref _aspectIndexCounter), method);
+            //                    aw2.Weave();
+            //                    continue;
+            //                }
 
-                            LogDebug($"Found aspect {atype.Name} for {method}");
-                        }
-                        else if (IsAspectAttribute(atype, _mwc.Spinner.IMethodInterceptionAspect))
-                        {
-                            Debug.Assert(method.HasBody);
+            //                if (aspects == null)
+            //                    aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+            //                aspects.Add(Tuple.Create((IMemberDefinition) method, mi, AspectKind.MethodBoundary));
 
-                            if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) method, mi, AspectKind.MethodInterception));
+            //                LogDebug($"Found aspect {atype.Name} for {method}");
+            //            }
+            //            else if (IsAspectAttribute(atype, _mwc.Spinner.IMethodInterceptionAspect))
+            //            {
+            //                Debug.Assert(method.HasBody);
 
-                            LogDebug($"Found aspect {atype.Name} for {method}");
-                        }
-                    }
-                }
-            }
+            //                if (aspects == null)
+            //                    aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+            //                aspects.Add(Tuple.Create((IMemberDefinition) method, mi, AspectKind.MethodInterception));
 
-            if (type.HasProperties)
-            {
-                foreach (PropertyDefinition property in type.Properties)
-                {
-                    IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(property);
-                    
-                    foreach (MulticastInstance mi in multicastAttributes)
-                    {
-                        TypeDefinition atype = mi.AttributeType;
+            //                LogDebug($"Found aspect {atype.Name} for {method}");
+            //            }
+            //        }
+            //    }
+            //}
 
-                        if (IsAspectAttribute(atype, _mwc.Spinner.IPropertyInterceptionAspect))
-                        {
-                            Debug.Assert(property.GetMethod != null || property.SetMethod != null);
+            //if (type.HasProperties)
+            //{
+            //    foreach (PropertyDefinition property in type.Properties)
+            //    {
+            //        IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(property);
 
-                            if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) property, mi, AspectKind.PropertyInterception));
+            //        foreach (MulticastInstance mi in multicastAttributes)
+            //        {
+            //            TypeDefinition atype = mi.AttributeType;
 
-                            LogDebug($"Found aspect {atype.Name} for {property}");
-                        }
-                    }
-                }
-            }
+            //            if (IsAspectAttribute(atype, _mwc.Spinner.IPropertyInterceptionAspect))
+            //            {
+            //                Debug.Assert(property.GetMethod != null || property.SetMethod != null);
 
-            if (type.HasEvents)
-            {
-                foreach (EventDefinition xevent in type.Events)
-                {
-                    IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(xevent);
-                    
-                    foreach (MulticastInstance mi in multicastAttributes)
-                    {
-                        TypeDefinition atype = mi.AttributeType;
+            //                if (aspects == null)
+            //                    aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+            //                aspects.Add(Tuple.Create((IMemberDefinition) property, mi, AspectKind.PropertyInterception));
 
-                        if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
-                        {
-                            if (aspects == null)
-                                aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
-                            aspects.Add(Tuple.Create((IMemberDefinition) xevent, mi, AspectKind.EventInterception));
+            //                LogDebug($"Found aspect {atype.Name} for {property}");
+            //            }
+            //        }
+            //    }
+            //}
 
-                            LogDebug($"Found aspect {atype.Name} for {xevent}");
-                        }
-                    }
-                }
-            }
+            //if (type.HasEvents)
+            //{
+            //    foreach (EventDefinition xevent in type.Events)
+            //    {
+            //        IList<MulticastInstance> multicastAttributes = _multicastAttributeRegistry.GetMulticasts(xevent);
 
-            if (aspects == null)
-                return null;
+            //        foreach (MulticastInstance mi in multicastAttributes)
+            //        {
+            //            TypeDefinition atype = mi.AttributeType;
 
-            Action taskAction = () =>
-            {
-                LogInfo($"Weaving {aspects.Count} aspects for {type}");
+            //            if (IsAspectAttribute(atype, _mwc.Spinner.IEventInterceptionAspect))
+            //            {
+            //                if (aspects == null)
+            //                    aspects = new List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>>();
+            //                aspects.Add(Tuple.Create((IMemberDefinition) xevent, mi, AspectKind.EventInterception));
 
-                foreach (Tuple<IMemberDefinition, MulticastInstance, AspectKind> a in aspects)
-                {
-                    int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+            //                LogDebug($"Found aspect {atype.Name} for {xevent}");
+            //            }
+            //        }
+            //    }
+            //}
 
-                    try
-                    {
-                        switch (a.Item3)
-                        {
-                            case AspectKind.MethodBoundary:
-                                MethodBoundaryAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
-                                break;
-                            case AspectKind.MethodInterception:
-                                MethodInterceptionAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
-                                break;
-                            case AspectKind.PropertyInterception:
-                                PropertyInterceptionAspectWeaver.Weave(_mwc, (PropertyDefinition) a.Item1, a.Item2, aspectIndex);
-                                break;
-                            case AspectKind.EventInterception:
-                                EventInterceptionAspectWeaver.Weave(_mwc, (EventDefinition) a.Item1, a.Item2, aspectIndex);
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogError($"Exception while weaving aspect {a.Item2.AttributeType.Name} for member {a.Item1}: {ex.GetType().Name}: {ex.Message}");
-                        LogError(ex.StackTrace);
-                        throw;
-                    }
-                }
-            };
+            //if (aspects == null)
+            //    return null;
 
-            return taskAction;
+            //Action taskAction = () =>
+            //{
+            //    LogInfo($"Weaving {aspects.Count} aspects for {type}");
+
+            //    foreach (Tuple<IMemberDefinition, MulticastInstance, AspectKind> a in aspects)
+            //    {
+            //        int aspectIndex = Interlocked.Increment(ref _aspectIndexCounter);
+
+            //        try
+            //        {
+            //            switch (a.Item3)
+            //            {
+            //                case AspectKind.MethodBoundary:
+            //                    MethodBoundaryAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
+            //                    break;
+            //                case AspectKind.MethodInterception:
+            //                    MethodInterceptionAspectWeaver.Weave(_mwc, (MethodDefinition) a.Item1, a.Item2, aspectIndex);
+            //                    break;
+            //                case AspectKind.PropertyInterception:
+            //                    PropertyInterceptionAspectWeaver.Weave(_mwc, (PropertyDefinition) a.Item1, a.Item2, aspectIndex);
+            //                    break;
+            //                case AspectKind.EventInterception:
+            //                    EventInterceptionAspectWeaver.Weave(_mwc, (EventDefinition) a.Item1, a.Item2, aspectIndex);
+            //                    break;
+            //                default:
+            //                    throw new ArgumentOutOfRangeException();
+            //            }
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            LogError($"Exception while weaving aspect {a.Item2.AttributeType.Name} for member {a.Item1}: {ex.GetType().Name}: {ex.Message}");
+            //            LogError(ex.StackTrace);
+            //            throw;
+            //        }
+            //    }
+            //};
+
+            //return taskAction;
         }
 
         private Action CreateAnalysisAction(TypeDefinition type)

@@ -3,7 +3,7 @@
     /// <summary>
     /// Describes the advices that must be implemented for a property interception aspect.
     /// </summary>
-    public interface IPropertyInterceptionAspect : IAspect
+    public interface IPropertyInterceptionAspect : ILocationLevelAspect
     {
         /// <summary>
         /// Invoked when accessing the property getter.

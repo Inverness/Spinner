@@ -37,6 +37,13 @@ namespace Spinner.Fody.Weavers.Prototype
 
         public MulticastInstance MulticastInstance { get; }
 
+        public static AspectWeaver2 CreateWeaver(ModuleWeavingContext mwc, MulticastAttributeRegistry mar, TypeDefinition type)
+        {
+            
+
+            return null;
+        }
+
         public void Weave()
         {
             // Build advice plan

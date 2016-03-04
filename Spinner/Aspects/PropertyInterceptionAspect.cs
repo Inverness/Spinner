@@ -6,7 +6,7 @@ namespace Spinner.Aspects
     /// A default implementation of IPropertyInterceptionAspect
     /// </summary>
     [AttributeUsage(AttributeTargets.Property)]
-    public class PropertyInterceptionAspect : Aspect, IPropertyInterceptionAspect
+    public class PropertyInterceptionAspect : LocationLevelAspect, IPropertyInterceptionAspect
     {
         public virtual void OnGetValue(PropertyInterceptionArgs args)
         {
