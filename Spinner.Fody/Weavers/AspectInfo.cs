@@ -1,7 +1,7 @@
 using Mono.Cecil;
 using Spinner.Fody.Multicasting;
 
-namespace Spinner.Fody.Weavers.Prototype
+namespace Spinner.Fody.Weavers
 {
     internal class AspectInfo
     {
@@ -13,7 +13,7 @@ namespace Spinner.Fody.Weavers.Prototype
             int order)
         {
             Context = mwc;
-            MulticastInstance = mi;
+            Source = mi;
             AspectType = mi.AttributeType;
             Index = index;
             Target = target;
@@ -30,6 +30,6 @@ namespace Spinner.Fody.Weavers.Prototype
 
         public ICustomAttributeProvider Target { get; }
 
-        public MulticastInstance MulticastInstance { get; }
+        public MulticastInstance Source { get; }
     }
 }

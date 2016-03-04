@@ -120,6 +120,7 @@ namespace Spinner.Fody
         internal readonly FieldDefinition[][] ArgumentsT_Item;
 
         internal readonly MethodDefinition WeaverHelpers_InvokeEvent;
+        internal readonly MethodDefinition WeaverHelpers_InvokeEventAdvice;
         internal readonly MethodDefinition WeaverHelpers_GetEventInfo;
         internal readonly MethodDefinition WeaverHelpers_GetPropertyInfo;
 
@@ -262,6 +263,7 @@ namespace Spinner.Fody
 
             type = module.GetType(NsAi, nameof(SpAi.WeaverHelpers));
             WeaverHelpers_InvokeEvent = type.Methods.First(m => m.Name == "InvokeEvent");
+            WeaverHelpers_InvokeEventAdvice = type.Methods.First(m => m.Name == "InvokeEventAdvice");
             WeaverHelpers_GetEventInfo = type.Methods.First(m => m.Name == "GetEventInfo");
             WeaverHelpers_GetPropertyInfo = type.Methods.First(m => m.Name == "GetPropertyInfo");
 

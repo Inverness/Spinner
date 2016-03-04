@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -5,40 +6,34 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
-using Spinner.Fody.Multicasting;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
 {
-    internal sealed class PropertyInterceptionAspectWeaver : AspectWeaver
+    internal sealed class PropertyInterceptionAdviceWeaver : AdviceWeaver
     {
         private const string GetValueMethodName = "GetValue";
         private const string SetValueMethodName = "SetValue";
 
+        private readonly AdviceInfo _getAdvice;
+        private readonly AdviceInfo _setAdvice;
         private readonly PropertyDefinition _property;
         private MethodDefinition _originalGetter;
         private MethodDefinition _originalSetter;
 
-        private PropertyInterceptionAspectWeaver(
-            ModuleWeavingContext mwc,
-            MulticastInstance mi,
-            int aspectIndex,
-            PropertyDefinition aspectTarget)
-            : base(mwc, mi, aspectIndex, aspectTarget)
+        internal PropertyInterceptionAdviceWeaver(AspectInfo aspect, AdviceInfo get, AdviceInfo set, PropertyDefinition property)
+            : base(aspect)
         {
-            _property = aspectTarget;
+            _getAdvice = get;
+            _setAdvice = set;
+            _property = property;
             Debug.Assert(_property.GetMethod != null || _property.SetMethod != null);
-        }
-
-        internal static void Weave(ModuleWeavingContext mwc, PropertyDefinition property, MulticastInstance mi, int index)
-        {
-            new PropertyInterceptionAspectWeaver(mwc, mi, index, property).Weave();
         }
 
         protected override void Weave()
         {
-            MethodDefinition getter = _property.GetMethod;
-            MethodDefinition setter = _property.SetMethod;
+            MethodDefinition getter = _getAdvice != null ? _property.GetMethod : null;
+            MethodDefinition setter = _setAdvice != null ? _property.SetMethod : null;
 
             _originalGetter = getter != null ? DuplicateOriginalMethod(getter) : null;
             _originalSetter = setter != null ? DuplicateOriginalMethod(setter) : null;

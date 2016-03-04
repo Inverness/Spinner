@@ -1,8 +1,10 @@
-﻿using Mono.Cecil;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Spinner.Aspects;
-using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 
 namespace Spinner.Fody.Weavers
@@ -10,28 +12,21 @@ namespace Spinner.Fody.Weavers
     /// <summary>
     /// Applies the method interception aspect to a method.
     /// </summary>
-    internal sealed class MethodInterceptionAspectWeaver : AspectWeaver
+    internal sealed class MethodInterceptionAdviceWeaver : AdviceWeaver
     {
         private const string InvokeMethodName = "Invoke";
 
+        private readonly AdviceInfo _invokeAdvice;
         private readonly MethodDefinition _method;
         private MethodDefinition _original;
         private FieldReference _returnValueField;
         private VariableDefinition _miaVar;
 
-        private MethodInterceptionAspectWeaver(
-            ModuleWeavingContext mwc,
-            MulticastInstance mi,
-            int aspectIndex,
-            MethodDefinition aspectTarget)
-            : base(mwc, mi, aspectIndex, aspectTarget)
+        internal MethodInterceptionAdviceWeaver(AspectInfo aspect, AdviceInfo invoke, MethodDefinition method)
+            : base(aspect)
         {
-            _method = aspectTarget;
-        }
-
-        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, MulticastInstance attribute, int index)
-        {
-            new MethodInterceptionAspectWeaver(mwc, attribute, index, method).Weave();
+            _invokeAdvice = invoke;
+            _method = method;
         }
 
         protected override void Weave()
@@ -67,9 +62,8 @@ namespace Spinner.Fody.Weavers
 
             if (_aspectFeatures.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, null, il.Count, _miaVar, null);
-
-            MethodReference adviceBase = _mwc.Spinner.IMethodInterceptionAspect_OnInvoke;
-            WriteCallAdvice(method, il.Count, adviceBase, _miaVar);
+            
+            WriteCallAdvice(method, il.Count, (MethodReference) _invokeAdvice.Source, _miaVar);
 
             // Copy out and ref arguments from container
             WriteCopyArgumentsFromContainer(method, il.Count, argumentsVariable, false, true);

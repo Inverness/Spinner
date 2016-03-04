@@ -7,7 +7,6 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
-using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
@@ -22,28 +21,22 @@ namespace Spinner.Fody.Weavers
         Async
     }
 
-    internal sealed class MethodBoundaryAspectWeaver : AspectWeaver
+    internal sealed class MethodBoundaryAdviceWeaver : AdviceWeaver
     {
-        internal readonly MethodDefinition _method;
-        internal MethodDefinition _stateMachine;
-        internal TypeReference _effectiveReturnType;
-        internal readonly bool _applyToStateMachine;
+        private readonly IReadOnlyList<AdviceInfo> _advices; 
+        private readonly MethodDefinition _method;
+        private MethodDefinition _stateMachine;
+        private TypeReference _effectiveReturnType;
+        private readonly bool _applyToStateMachine;
 
-        private MethodBoundaryAspectWeaver(
-            ModuleWeavingContext mwc,
-            MulticastInstance mi,
-            int aspectIndex,
-            MethodDefinition aspectTarget
-            )
-            : base(mwc, mi, aspectIndex, aspectTarget)
+        internal MethodBoundaryAdviceWeaver(AspectInfo aspect, IReadOnlyList<AdviceInfo> advices, MethodDefinition method) 
+            : base(aspect)
         {
-            _method = aspectTarget;
-            _applyToStateMachine = mi.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
-        }
+            Debug.Assert(advices.All(a => a.Aspect == aspect), "advices must be for the same aspect");
 
-        internal static void Weave(ModuleWeavingContext mwc, MethodDefinition method, MulticastInstance attribute, int index)
-        {
-            new MethodBoundaryAspectWeaver(mwc, attribute, index, method).Weave();
+            _advices = advices;
+            _method = method;
+            _applyToStateMachine = aspect.Source.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
         }
 
         protected override void Weave()
@@ -135,8 +128,9 @@ namespace Spinner.Fody.Weavers
             int tryStartOffset = insc.Count;
 
             // Write OnEntry call
-            if (_aspectFeatures.Has(Features.OnEntry))
-                WriteOnEntryCall(method, insc.Count, meaVar, null);
+            AdviceInfo entryAdvice = _advices.SingleOrDefault(a => a.AdviceType == AdviceType.MethodEntry);
+            if (entryAdvice != null)
+                WriteOnEntryCall(method, insc.Count, entryAdvice, meaVar, null);
 
             // Re-add original body
             insc.AddRange(originalInsc);
@@ -273,8 +267,9 @@ namespace Spinner.Fody.Weavers
             if (_aspectFeatures.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, stateMachine, insc.Count - eoffInit, null, meaField);
 
-            if (_aspectFeatures.Has(Features.OnEntry))
-                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, null, meaField);
+            AdviceInfo entryAdvice = _advices.SingleOrDefault(a => a.AdviceType == AdviceType.MethodEntry);
+            if (entryAdvice != null)
+                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, entryAdvice, null, meaField);
 
             // Write OnYield() and OnResume() calls. This is done by searching the body for the offsets of await
             // method calls like GetAwaiter(), get_IsCompleted(), and GetResult(), and then writing instructions
@@ -441,8 +436,9 @@ namespace Spinner.Fody.Weavers
             if (_aspectFeatures.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, stateMachine, insc.Count - initEndOffset, null, meaField);
 
-            if (_aspectFeatures.Has(Features.OnEntry))
-                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
+            AdviceInfo entryAdvice = _advices.SingleOrDefault(a => a.AdviceType == AdviceType.MethodEntry);
+            if (entryAdvice != null)
+                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, entryAdvice, null, meaField);
 
             // TODO: Yield and Resume
 
@@ -733,11 +729,11 @@ namespace Spinner.Fody.Weavers
         private void WriteOnEntryCall(
             MethodDefinition method,
             int offset,
+            AdviceInfo advice,
             VariableDefinition meaVarOpt,
             FieldReference meaFieldOpt)
         {
-            MethodDefinition onEntryDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnEntry, true);
-            MethodReference onEntry = _mwc.SafeImport(onEntryDef);
+            MethodReference onEntry = _mwc.SafeImport((MethodDefinition) advice.Source);
             //Features adviceFeatures = GetFeatures(onEntryDef);
 
             var il = new ILProcessorEx();

@@ -15,13 +15,14 @@ namespace Spinner.Fody.Weavers
     /// <summary>
     /// Base class for aspect weavers
     /// </summary>
-    internal abstract class AspectWeaver
+    internal abstract class AdviceWeaver
     {
         protected const string BindingInstanceFieldName = "Instance";
         protected const string StateMachineThisFieldName = "<>4__this";
         private const string MulticastAttributePropertyPrefix = "Attribute";
 
         // ReSharper disable InconsistentNaming
+        internal readonly AspectInfo _aspect;
         internal readonly ModuleWeavingContext _mwc;
         internal readonly TypeDefinition _aspectType;
         internal readonly int _aspectIndex;
@@ -34,17 +35,14 @@ namespace Spinner.Fody.Weavers
         internal FieldDefinition _bindingInstanceField;
         // ReSharper restore InconsistentNaming
 
-        protected AspectWeaver(
-            ModuleWeavingContext mwc,
-            MulticastInstance mi,
-            int aspectIndex,
-            IMemberDefinition aspectTarget)
+        protected AdviceWeaver(AspectInfo aspect)
         {
-            _mwc = mwc;
-            _mi = mi;
-            _aspectType = mi.AttributeType;
-            _aspectIndex = aspectIndex;
-            _aspectTarget = aspectTarget;
+            _aspect = aspect;
+            _mwc = aspect.Context;
+            _mi = aspect.Source;
+            _aspectType = aspect.AspectType;
+            _aspectIndex = aspect.Index;
+            _aspectTarget = (IMemberDefinition) aspect.Target;
             _aspectFeatures = GetFeatures(_aspectType);
         }
 

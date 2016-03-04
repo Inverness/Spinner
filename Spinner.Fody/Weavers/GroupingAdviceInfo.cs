@@ -1,7 +1,7 @@
 using Mono.Cecil;
 using Spinner.Aspects.Advices;
 
-namespace Spinner.Fody.Weavers.Prototype
+namespace Spinner.Fody.Weavers
 {
     internal abstract class GroupingAdviceInfo : AdviceInfo
     {

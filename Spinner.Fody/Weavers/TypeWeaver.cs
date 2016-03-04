@@ -5,7 +5,7 @@ using Mono.Cecil;
 using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
 
-namespace Spinner.Fody.Weavers.Prototype
+namespace Spinner.Fody.Weavers
 {
     internal class TypeWeaver
     {
@@ -82,9 +82,72 @@ namespace Spinner.Fody.Weavers.Prototype
             }
         }
 
-        private void WeaveMethod(MethodDefinition method, IReadOnlyCollection<AdviceInfo> advices)
+        private void WeaveMethod(MethodDefinition method, IReadOnlyCollection<AdviceInfo> advicesSource)
         {
-            //IEnumerable<AdviceInfo> entryAdvices = advices.Where(a => a.AdviceType == AdviceType.MethodEntry);
+            // A method can have multiple method boundary (change existing code) or method interception (duplicate method)
+            // code. Need to organize advices so that this happens in the correct order and that method boundary
+            // advices from different aspects can be optimized.
+            
+            AdviceInfo[] advices = advicesSource.ToArray();
+            var insertionScope = new List<AdviceInfo>();
+
+            for (int i = 0; i < advices.Length; i++)
+            {
+                if (!IsInterceptionAdvice(advices[i].AdviceType))
+                {
+                    insertionScope.Add(advices[i]);
+                }
+                else
+                {
+                    if (insertionScope.Count != 0)
+                    {
+                        WeaveMethodInsertions(method, insertionScope);
+                        insertionScope.Clear();
+                    }
+
+                    WeaveMethodInterception(method, advices[i]);
+                }
+            }
+
+            if (insertionScope.Count != 0)
+            {
+                WeaveMethodInsertions(method, insertionScope);
+                insertionScope.Clear();
+            }
+        }
+
+        private void WeaveMethodInsertions(MethodDefinition method, IReadOnlyList<AdviceInfo> advices)
+        {
+            foreach (AspectInfo a in advices.Select(a => a.Aspect).Distinct())
+            {
+                // write aspect init
+            }
+
+            foreach (AdviceInfo a in advices.Where(a => a.AdviceType == AdviceType.MethodEntry))
+            {
+                // write entry advices
+            }
+        }
+
+        private void WeaveMethodInterception(MethodDefinition method, AdviceInfo advice)
+        {
+            
+        }
+
+        private static bool IsInterceptionAdvice(AdviceType type)
+        {
+            switch (type)
+            {
+                case AdviceType.MethodInvoke:
+                case AdviceType.LocationGetValue:
+                case AdviceType.LocationSetValue:
+                case AdviceType.EventAddHandler:
+                case AdviceType.EventRemoveHandler:
+                case AdviceType.EventInvokeHandler:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         public static TypeWeaver Create(ModuleWeavingContext mwc, MulticastAttributeRegistry mar, TypeDefinition type)
@@ -126,12 +189,7 @@ namespace Spinner.Fody.Weavers.Prototype
             return new TypeWeaver(mwc, type, aspects);
         }
 
-        private static void AddAspects(
-            ModuleWeavingContext mwc,
-            MulticastAttributeRegistry mar,
-            ICustomAttributeProvider target,
-            ref List<AspectInfo> aspects,
-            ref int orderCounter)
+        private static void AddAspects(ModuleWeavingContext mwc, MulticastAttributeRegistry mar, ICustomAttributeProvider target, ref List<AspectInfo> aspects, ref int orderCounter)
         {
             TypeDefinition aspectInterfaceType = mwc.Spinner.IAspect;
 

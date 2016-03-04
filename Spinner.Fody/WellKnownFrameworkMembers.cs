@@ -1,5 +1,6 @@
 using System.Linq;
 using Mono.Cecil;
+using Mono.Cecil.Rocks;
 
 namespace Spinner.Fody
 {
@@ -24,6 +25,8 @@ namespace Spinner.Fody
         internal readonly TypeDefinition MethodInfo;
         internal readonly TypeDefinition Delegate;
         internal readonly MethodDefinition Type_GetTypeFromHandle;
+        internal readonly TypeDefinition ActionT1;
+        internal readonly MethodDefinition ActionT1_ctor;
         // ReSharper restore InconsistentNaming
 
         internal WellKnownFrameworkMembers(ModuleDefinition currentModule)
@@ -47,6 +50,8 @@ namespace Spinner.Fody
             Delegate = module.GetType(NsSystem, "Delegate");
             var type = module.GetType(NsSystem, "Type");
             Type_GetTypeFromHandle = type.Methods.First(m => m.Name == "GetTypeFromHandle");
+            ActionT1 = type = module.GetType(NsSystem, "Action`1");
+            ActionT1_ctor = type.GetConstructors().Single();
         }
     }
 }

@@ -71,6 +71,16 @@ namespace Spinner.Aspects.Internal
             }
         }
 
+        public static void InvokeEventAdvice(Delegate handler, Action<EventInterceptionArgs> advice, EventInterceptionArgs args)
+        {
+            Delegate[] targets = handler.GetInvocationList();
+            for (int i = 0; i < targets.Length; i++)
+            {
+                args.Handler = targets[i];
+                advice(args);
+            }
+        }
+
         public static PropertyInfo GetPropertyInfo(Type type, string name)
         {
             return type.GetTypeInfo().GetDeclaredProperty(name);

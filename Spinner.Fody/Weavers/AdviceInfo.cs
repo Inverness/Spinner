@@ -1,6 +1,6 @@
 using Mono.Cecil;
 
-namespace Spinner.Fody.Weavers.Prototype
+namespace Spinner.Fody.Weavers
 {
     internal abstract class AdviceInfo
     {
