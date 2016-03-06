@@ -11,7 +11,7 @@ using Spinner.TestTarget.Aspects;
 //    AttributeTargetTypes = "Spinner.*",
 //    AttributeTargetTypeAttributes = MulticastAttributes.All & ~MulticastAttributes.CompilerGenerated,
 //    AttributeTargetElements = MulticastTargets.Method,
-//    AttributeTargetMemberAttributes = MulticastAttributes.All
+//    AttributeTargetMemberAttributes = MulticastAttributes.All & ~MulticastAttributes.CompilerGenerated
 //    )]
 
 //[assembly: Spinner.TestTarget.EntryLogAspect(

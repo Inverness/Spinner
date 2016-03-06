@@ -173,7 +173,7 @@ namespace Spinner.Fody.Weavers
         {
             TypeDefinition aspectInterfaceType = mwc.Spinner.IAspect;
 
-            foreach (MulticastInstance m in mar.GetMulticasts(target))
+            foreach (MulticastAttributeInstance m in mar.GetMulticasts(target))
             {
                 if (m.AttributeType.HasInterface(aspectInterfaceType, true))
                 {

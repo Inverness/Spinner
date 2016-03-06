@@ -8,7 +8,7 @@ namespace Spinner.Fody.Weavers
     {
         internal AspectInfo(
             ModuleWeavingContext mwc,
-            MulticastInstance mi,
+            MulticastAttributeInstance mi,
             ICustomAttributeProvider target,
             int index,
             int order)
@@ -32,7 +32,7 @@ namespace Spinner.Fody.Weavers
 
         public ICustomAttributeProvider Target { get; }
 
-        public MulticastInstance Source { get; }
+        public MulticastAttributeInstance Source { get; }
 
         public Features Features { get; }
     }

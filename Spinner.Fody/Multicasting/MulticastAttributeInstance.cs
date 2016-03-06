@@ -7,13 +7,16 @@ namespace Spinner.Fody.Multicasting
     /// <summary>
     /// An instance of a multicast attribute that was specified on an assembly, type, or type member.
     /// </summary>
-    internal sealed class MulticastInstance
+    internal sealed class MulticastAttributeInstance
     {
-        internal MulticastInstance(
+        private readonly MulticastArguments _a = new MulticastArguments();
+
+        internal MulticastAttributeInstance(
             ICustomAttributeProvider origin,
             ProviderType ot,
             CustomAttribute attribute,
-            TypeDefinition attributeType)
+            TypeDefinition attributeType,
+            bool isExternal)
         {
             Target = origin;
             TargetType = ot;
@@ -21,14 +24,13 @@ namespace Spinner.Fody.Multicasting
             OriginType = ot;
             Attribute = attribute;
             AttributeType = attributeType;
-            TargetElements = MulticastTargets.All;
-            TargetTypeAttributes = MulticastAttributes.All;
-            TargetExternalTypeAttributes = MulticastAttributes.All;
+
+            _a.IsExternal = isExternal;
+
             // Not applied to all members by default
-            TargetAssemblies = StringMatcher.AnyMatcher;
-            TargetTypes = StringMatcher.AnyMatcher;
-            TargetMembers = StringMatcher.AnyMatcher;
-            TargetParameters = StringMatcher.AnyMatcher;
+            _a.TargetMemberAttributes = MulticastAttributes.Default;
+            _a.TargetExternalMemberAttributes = MulticastAttributes.Default;
+            _a.TargetParameterAttributes = MulticastAttributes.Default;
 
             if (!attribute.HasProperties)
                 return;
@@ -52,34 +54,34 @@ namespace Spinner.Fody.Multicasting
                         Replace = (bool) value;
                         break;
                     case nameof(MulticastAttribute.AttributeTargetElements):
-                        TargetElements = (MulticastTargets) (uint) value;
+                        _a.TargetElements = (MulticastTargets) (uint) value;
                         break;
                     case nameof(MulticastAttribute.AttributeTargetAssemblies):
-                        TargetAssemblies = StringMatcher.Create((string) value);
+                        _a.TargetAssemblies = StringMatcher.Create((string) value);
                         break;
                     case nameof(MulticastAttribute.AttributeTargetTypes):
-                        TargetTypes = StringMatcher.Create((string) value);
+                        _a.TargetTypes = StringMatcher.Create((string) value);
                         break;
                     case nameof(MulticastAttribute.AttributeTargetTypeAttributes):
-                        TargetTypeAttributes = (MulticastAttributes) (uint) value;
+                        _a.TargetTypeAttributes = (MulticastAttributes) (uint) value;
                         break;
                     case nameof(MulticastAttribute.AttributeTargetExternalTypeAttributes):
-                        TargetExternalTypeAttributes = (MulticastAttributes) (uint) value;
+                        _a.TargetExternalTypeAttributes = (MulticastAttributes) (uint) value;
                         break;
                     case nameof(MulticastAttribute.AttributeTargetMembers):
-                        TargetMembers = StringMatcher.Create((string) value);
+                        _a.TargetMembers = StringMatcher.Create((string) value);
                         break;
                     case nameof(MulticastAttribute.AttributeTargetMemberAttributes):
-                        TargetMemberAttributes = (MulticastAttributes) (uint) value;
+                        _a.TargetMemberAttributes = (MulticastAttributes) (uint) value;
                         break;
                     case nameof(MulticastAttribute.AttributeTargetExternalMemberAttributes):
-                        TargetExternalMemberAttributes = (MulticastAttributes) (uint) value;
+                        _a.TargetExternalMemberAttributes = (MulticastAttributes) (uint) value;
                         break;
                     case nameof(MulticastAttribute.AttributeTargetParameters):
-                        TargetParameters = StringMatcher.Create((string) value);
+                        _a.TargetParameters = StringMatcher.Create((string) value);
                         break;
                     case nameof(MulticastAttribute.AttributeTargetParameterAttributes):
-                        TargetParameterAttributes = (MulticastAttributes) (uint) value;
+                        _a.TargetParameterAttributes = (MulticastAttributes) (uint) value;
                         break;
                 }
             }
@@ -93,10 +95,6 @@ namespace Spinner.Fody.Multicasting
 
         public ProviderType OriginType { get; }
 
-        public CustomAttribute Attribute { get; }
-
-        public TypeDefinition AttributeType { get; }
-        
         public bool Exclude { get; }
 
         public MulticastInheritance Inheritance { get; }
@@ -105,31 +103,37 @@ namespace Spinner.Fody.Multicasting
 
         public bool Replace { get; }
 
-        public MulticastTargets TargetElements { get; }
+        public CustomAttribute Attribute { get; }
 
-        public StringMatcher TargetAssemblies { get; }
+        public TypeDefinition AttributeType { get; }
 
-        public StringMatcher TargetTypes { get; }
+        public MulticastArguments Arguments => _a;
 
-        public MulticastAttributes TargetTypeAttributes { get; }
+        //public MulticastTargets TargetElements => _a.TargetElements;
 
-        public MulticastAttributes TargetExternalTypeAttributes { get; }
+        //public StringMatcher TargetAssemblies => _a.TargetAssemblies;
 
-        public StringMatcher TargetMembers { get; }
+        //public StringMatcher TargetTypes => _a.TargetTypes;
 
-        public MulticastAttributes TargetMemberAttributes { get; }
+        //public MulticastAttributes TargetTypeAttributes => _a.TargetTypeAttributes;
 
-        public MulticastAttributes TargetExternalMemberAttributes { get; }
+        //public MulticastAttributes TargetExternalTypeAttributes => _a.TargetExternalTypeAttributes;
 
-        public StringMatcher TargetParameters { get; }
+        //public StringMatcher TargetMembers => _a.TargetMembers;
 
-        public MulticastAttributes TargetParameterAttributes { get; }
+        //public MulticastAttributes TargetMemberAttributes => _a.TargetMemberAttributes;
 
-        public MulticastInstance WithTarget(ICustomAttributeProvider newTarget)
+        //public MulticastAttributes TargetExternalMemberAttributes => _a.TargetExternalMemberAttributes;
+
+        //public StringMatcher TargetParameters => _a.TargetParameters;
+
+        //public MulticastAttributes TargetParameterAttributes => _a.TargetParameterAttributes;
+
+        public MulticastAttributeInstance WithTarget(ICustomAttributeProvider newTarget)
         {
             Debug.Assert(newTarget.GetType() == Target.GetType());
 
-            var clone = (MulticastInstance) MemberwiseClone();
+            var clone = (MulticastAttributeInstance) MemberwiseClone();
             clone.Target = newTarget;
             return clone;
         }

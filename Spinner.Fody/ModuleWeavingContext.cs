@@ -6,6 +6,7 @@ using System.Runtime.Remoting.Contexts;
 using System.Threading;
 using Mono.Cecil;
 using Spinner.Aspects;
+using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody
 {
@@ -92,6 +93,8 @@ namespace Spinner.Fody
                 {Spinner.MethodResumeAdvice, AdviceType.MethodResume},
                 {Spinner.MethodInvokeAdvice, AdviceType.MethodInvoke}
             };
+
+            MulticastEngine = new MulticastEngine(this);
         }
 
         /// <summary>
@@ -107,7 +110,9 @@ namespace Spinner.Fody
         /// <summary>
         /// Gets a dictionary that maps advice attribute types to the AdviceType enum.
         /// </summary>
-        internal IReadOnlyDictionary<TypeReference, AdviceType> AdviceTypes => _adviceTypes; 
+        internal IReadOnlyDictionary<TypeReference, AdviceType> AdviceTypes => _adviceTypes;
+
+        internal MulticastEngine MulticastEngine { get; }
 
         internal TypeReference SafeImport(Type type)
         {

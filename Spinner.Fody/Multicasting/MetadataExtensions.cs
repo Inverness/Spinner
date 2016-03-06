@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Mono.Cecil;
 using Spinner.Extensibility;
 
@@ -24,6 +25,11 @@ namespace Spinner.Fody.Multicasting
             if (target is MethodReturnType)
                 return ProviderType.MethodReturn;
             return s_providerTypes[target.MetadataToken.TokenType];
+        }
+
+        public static bool IsMatch(this MulticastTargets self, MulticastTargets other)
+        {
+            return (self & other) != 0;
         }
 
         public static MulticastTargets GetMulticastTargetType(this IMetadataTokenProvider target)
@@ -59,15 +65,14 @@ namespace Spinner.Fody.Multicasting
                     var method = (MethodDefinition) target;
                     if (method != null)
                     {
-                        switch (method.Name)
+                        if (method.Name[0] == '.')
                         {
-                            case ".ctor":
+                            if (method.Name == ".ctor")
                                 return MulticastTargets.InstanceConstructor;
-                            case ".cctor":
+                            if (method.Name == ".cctor")
                                 return MulticastTargets.StaticConstructor;
-                            default:
-                                return MulticastTargets.Method;
                         }
+                        return MulticastTargets.Method;
                     }
                     break;
                 case ProviderType.Property:

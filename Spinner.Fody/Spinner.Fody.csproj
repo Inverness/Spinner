@@ -48,8 +48,10 @@
     <Compile Include="MethodBodyExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
     <Compile Include="Multicasting\MetadataExtensions.cs" />
+    <Compile Include="Multicasting\MulticastArguments.cs" />
     <Compile Include="Multicasting\MulticastAttributeRegistry.cs" />
-    <Compile Include="Multicasting\MulticastInstance.cs" />
+    <Compile Include="Multicasting\MulticastAttributeInstance.cs" />
+    <Compile Include="Multicasting\MulticastEngine.cs" />
     <Compile Include="Multicasting\ProviderType.cs" />
     <Compile Include="Multicasting\StringMatcher.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -122,7 +122,7 @@ namespace Spinner.Fody
 
         private Action CreateWeaveAction(TypeDefinition type)
         {
-            List<Tuple<IMemberDefinition, MulticastInstance, AspectKind>> aspects = null;
+            List<Tuple<IMemberDefinition, MulticastAttributeInstance, AspectKind>> aspects = null;
 
             // State machine weaving is handled by its owning method. Trying to treat state machines as their own type
             // causes threading issues with the declaring type's weaver.
