@@ -41,11 +41,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AdviceType.cs" />
     <Compile Include="Analysis\AspectFeatureAnalyzer.cs" />
     <Compile Include="CollectionExtensions.cs" />
     <Compile Include="ModuleWeavingContext.cs" />
     <Compile Include="MethodBodyExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
+    <Compile Include="Multicasting\MetadataExtensions.cs" />
     <Compile Include="Multicasting\MulticastAttributeRegistry.cs" />
     <Compile Include="Multicasting\MulticastInstance.cs" />
     <Compile Include="Multicasting\ProviderType.cs" />
@@ -57,20 +59,28 @@
     <Compile Include="Utilities\ILProcessorEx.cs" />
     <Compile Include="Utilities\LabelProcessor.cs" />
     <Compile Include="Utilities\NameUtility.cs" />
+    <Compile Include="Weavers\AdviceGroup.cs" />
     <Compile Include="Weavers\AdviceInfo.cs" />
-    <Compile Include="Weavers\AdviceType.cs" />
     <Compile Include="Weavers\AspectInfo.cs" />
     <Compile Include="Weavers\AdviceWeaver.cs" />
+    <Compile Include="Weavers\AspectWeaver.cs" />
+    <Compile Include="Weavers\AspectWeaverFactory.cs" />
     <Compile Include="Weavers\EventInterceptionAdviceWeaver.cs" />
-    <Compile Include="Weavers\GroupingAdviceInfo.cs" />
+    <Compile Include="Weavers\FeaturesExtensions.cs" />
     <Compile Include="Weavers\ILProcessorExtensions.cs" />
+    <Compile Include="Weavers\MethodBoundaryAdviceGroup.cs" />
     <Compile Include="Weavers\MethodBoundaryAdviceInfo.cs" />
     <Compile Include="Weavers\MethodBoundaryAdviceWeaver.cs" />
+    <Compile Include="Weavers\MethodInterceptionAdviceGroup.cs" />
     <Compile Include="Weavers\MethodInterceptionAdviceWeaver.cs" />
-    <Compile Include="Weavers\MethodInvokeAdviceInfo.cs" />
+    <Compile Include="Weavers\MethodInterceptionAdviceInfo.cs" />
+    <Compile Include="Weavers\MethodLevelAspectWeaver.cs" />
     <Compile Include="Weavers\NameGenerator.cs" />
+    <Compile Include="Weavers\PointcutType.cs" />
     <Compile Include="Weavers\PropertyInterceptionAdviceWeaver.cs" />
-    <Compile Include="Weavers\TypeWeaver.cs" />
+    <Compile Include="Weavers\StateMachineKind.cs" />
+    <Compile Include="Weavers\TypeLevelAspectWeaver.cs" />
+    <Compile Include="Weavers\ValidationException.cs" />
     <Compile Include="WellKnownFrameworkMembers.cs" />
     <Compile Include="WellKnownSpinnerMembers.cs" />
   </ItemGroup>

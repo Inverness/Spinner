@@ -14,32 +14,37 @@ using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weavers
 {
-    internal enum StateMachineKind
-    {
-        None,
-        Iterator,
-        Async
-    }
-
     internal sealed class MethodBoundaryAdviceWeaver : AdviceWeaver
     {
-        private readonly IReadOnlyList<AdviceInfo> _advices; 
+        //private readonly IReadOnlyList<AdviceInfo> _advices;
+        private readonly AdviceInfo _entryAdvice;
+        private readonly AdviceInfo _exitAdvice;
+        private readonly AdviceInfo _successAdvice;
+        private readonly AdviceInfo _exceptionAdvice;
+        private readonly AdviceInfo _yieldAdvice;
+        private readonly AdviceInfo _resumeAdvice;
         private readonly MethodDefinition _method;
         private MethodDefinition _stateMachine;
         private TypeReference _effectiveReturnType;
         private readonly bool _applyToStateMachine;
 
-        internal MethodBoundaryAdviceWeaver(AspectInfo aspect, IReadOnlyList<AdviceInfo> advices, MethodDefinition method) 
-            : base(aspect)
+        internal MethodBoundaryAdviceWeaver(AspectWeaver parent, AdviceInfo entry, AdviceInfo exit, AdviceInfo success, AdviceInfo exception, AdviceInfo yield, AdviceInfo resume, MethodDefinition method) 
+            : base(parent)
         {
-            Debug.Assert(advices.All(a => a.Aspect == aspect), "advices must be for the same aspect");
+            //Debug.Assert(advices.All(a => a.Aspect == aspect), "advices must be for the same aspect");
 
-            _advices = advices;
+            //_advices = advices;
+            _entryAdvice = entry;
+            _exitAdvice = exit;
+            _successAdvice = success;
+            _exceptionAdvice = exception;
+            _yieldAdvice = yield;
+            _resumeAdvice = resume;
             _method = method;
-            _applyToStateMachine = aspect.Source.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
+            _applyToStateMachine = parent.Aspect.Source.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
         }
 
-        protected override void Weave()
+        public override void Weave()
         {
             CreateAspectCacheField();
 
@@ -52,8 +57,8 @@ namespace Spinner.Fody.Weavers
             switch (stateMachineKind)
             {
                 case StateMachineKind.None:
-                    _effectiveReturnType = _method.ReturnType != _mwc.Module.TypeSystem.Void
-                        ? _mwc.SafeImport(_method.ReturnType)
+                    _effectiveReturnType = _method.ReturnType != Context.Module.TypeSystem.Void
+                        ? Context.SafeImport(_method.ReturnType)
                         : null;
 
                     _method.Body.SimplifyMacros();
@@ -68,7 +73,7 @@ namespace Spinner.Fody.Weavers
 
                 case StateMachineKind.Iterator:
                     _effectiveReturnType = _method.ReturnType.IsGenericInstance
-                        ? _mwc.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
+                        ? Context.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
                         : _method.Module.TypeSystem.Object;
 
                     _stateMachine.Body.SimplifyMacros();
@@ -84,7 +89,7 @@ namespace Spinner.Fody.Weavers
                 case StateMachineKind.Async:
                     // void for Task and T for Task<T>
                     _effectiveReturnType = _method.ReturnType.IsGenericInstance
-                        ? _mwc.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
+                        ? Context.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
                         : null;
 
                     _stateMachine.Body.SimplifyMacros();
@@ -104,6 +109,7 @@ namespace Spinner.Fody.Weavers
         {
             MethodDefinition method = _method;
             Collection<Ins> insc = method.Body.Instructions;
+            bool needNewReturn = false;
             
             // Will be reinserted later. This is a bit more efficient than doing repeated insertions at the beginning.
             var originalInsc = new Collection<Ins>(insc);
@@ -112,7 +118,7 @@ namespace Spinner.Fody.Weavers
             WriteAspectInit(_method, insc.Count);
 
             VariableDefinition argumentsVar = null;
-            if (_aspectFeatures.Has(Features.GetArguments))
+            if (Aspect.Features.Has(Features.GetArguments))
             {
                 WriteArgumentContainerInit(method, insc.Count, out argumentsVar);
                 WriteCopyArgumentsToContainer(method, insc.Count, argumentsVar, true);
@@ -121,16 +127,15 @@ namespace Spinner.Fody.Weavers
             VariableDefinition meaVar;
             WriteMeaInit(method, argumentsVar, insc.Count, out meaVar);
 
-            if (_aspectFeatures.Has(Features.MemberInfo))
+            if (Aspect.Features.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, null, insc.Count, meaVar, null);
 
             // Exception handlers will start before OnEntry().
             int tryStartOffset = insc.Count;
 
             // Write OnEntry call
-            AdviceInfo entryAdvice = _advices.SingleOrDefault(a => a.AdviceType == AdviceType.MethodEntry);
-            if (entryAdvice != null)
-                WriteOnEntryCall(method, insc.Count, entryAdvice, meaVar, null);
+            if (_entryAdvice != null)
+                WriteOnEntryCall(method, insc.Count, _entryAdvice, meaVar, null);
 
             // Re-add original body
             insc.AddRange(originalInsc);
@@ -142,8 +147,10 @@ namespace Spinner.Fody.Weavers
             // 3. Leave the exception handler to code that returns the value stored in the previously mentioned local
 
             VariableDefinition returnValueVar = null;
-            if (_aspectFeatures.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
+            if (Aspect.Features.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
             {
+                needNewReturn = true;
+
                 if (_effectiveReturnType != null)
                     returnValueVar = _method.Body.AddVariableDefinition(_effectiveReturnType);
 
@@ -159,19 +166,19 @@ namespace Spinner.Fody.Weavers
 
                 // Write success block
 
-                if (_aspectFeatures.Has(Features.OnSuccess))
+                if (Aspect.Features.Has(Features.OnSuccess))
                 {
                     WriteSuccessHandler(method,
                                         insc.Count,
                                         meaVar,
                                         null,
-                                        _aspectFeatures.Has(Features.ReturnValue) ? returnValueVar : null);
+                                        Aspect.Features.Has(Features.ReturnValue) ? returnValueVar : null);
                 }
             }
             
             // Need to leave the exception block
             Ins exceptionHandlerLeaveTarget = null;
-            if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
+            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
             {
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
                 insc.Add(Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
@@ -179,7 +186,7 @@ namespace Spinner.Fody.Weavers
 
             // Write exception filter and handler
             
-            if (_aspectFeatures.Has(Features.OnException))
+            if (Aspect.Features.Has(Features.OnException))
             {
                 WriteCatchExceptionHandler(method,
                                            null,
@@ -191,7 +198,7 @@ namespace Spinner.Fody.Weavers
 
             // End of try block for the finally handler
 
-            if (_aspectFeatures.Has(Features.OnExit))
+            if (Aspect.Features.Has(Features.OnExit))
             {
                 WriteFinallyExceptionHandler(method,
                                              null,
@@ -206,12 +213,15 @@ namespace Spinner.Fody.Weavers
             
             if (exceptionHandlerLeaveTarget != null)
                 insc.Add(exceptionHandlerLeaveTarget);
-                
-            // Return the previously stored result
-            if (returnValueVar != null)
-                insc.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
 
-            insc.Add(Ins.Create(OpCodes.Ret));
+            if (needNewReturn)
+            {
+                // Return the previously stored result
+                if (returnValueVar != null)
+                    insc.Add(Ins.Create(OpCodes.Ldloc, returnValueVar));
+
+                insc.Add(Ins.Create(OpCodes.Ret));
+            }
         }
 
         private void WeaveAsyncMethod()
@@ -255,7 +265,7 @@ namespace Spinner.Fody.Weavers
             WriteAspectInit(stateMachine, insc.Count - eoffInit);
 
             FieldDefinition arguments = null;
-            if (_aspectFeatures.Has(Features.GetArguments))
+            if (Aspect.Features.Has(Features.GetArguments))
             {
                 WriteSmArgumentContainerInit(method, stateMachine, insc.Count - eoffInit, out arguments);
                 WriteSmCopyArgumentsToContainer(method, stateMachine, insc.Count - eoffInit, arguments, true);
@@ -264,19 +274,18 @@ namespace Spinner.Fody.Weavers
             FieldDefinition meaField;
             WriteSmMeaInit(method, stateMachine, arguments, insc.Count - eoffInit, out meaField);
 
-            if (_aspectFeatures.Has(Features.MemberInfo))
+            if (Aspect.Features.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, stateMachine, insc.Count - eoffInit, null, meaField);
-
-            AdviceInfo entryAdvice = _advices.SingleOrDefault(a => a.AdviceType == AdviceType.MethodEntry);
-            if (entryAdvice != null)
-                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, entryAdvice, null, meaField);
+            
+            if (_entryAdvice != null)
+                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, _entryAdvice, null, meaField);
 
             // Write OnYield() and OnResume() calls. This is done by searching the body for the offsets of await
             // method calls like GetAwaiter(), get_IsCompleted(), and GetResult(), and then writing instructions
             // and those offsets before searching the next part of the body.
             // TODO: Fix OnEntry() and OnYield() will be called in opposite orders with multiple aspects
 
-            if (_aspectFeatures.Has(Features.OnYield | Features.OnResume))
+            if (Aspect.Features.Has(Features.OnYield | Features.OnResume))
             {
                 int offSearchStart = insc.Count - eoffInit;
                 //VariableDefinition awaitableStorage = null;
@@ -319,7 +328,7 @@ namespace Spinner.Fody.Weavers
             // Everything following this point is written after the body but BEFORE the async exception handler's
             // leave instruction.
 
-            if (_aspectFeatures.Has(Features.OnSuccess))
+            if (Aspect.Features.Has(Features.OnSuccess))
             {
                 // If a MethodBoundaryAspect has already been applied to this state machine then
                 // we might need to use a leave instead of a break if control must cross an exception handler
@@ -343,12 +352,12 @@ namespace Spinner.Fody.Weavers
                                     insc.Count - eoffLeave,
                                     null,
                                     meaField,
-                                    _aspectFeatures.Has(Features.ReturnValue) ? resultVar : null);
+                                    Aspect.Features.Has(Features.ReturnValue) ? resultVar : null);
             }
 
             // Leave the the exception handlers that will be written next.
             Ins exceptionHandlerLeaveTarget = null;
-            if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
+            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
             {
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
 
@@ -358,7 +367,7 @@ namespace Spinner.Fody.Weavers
                                                      Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
             }
 
-            if (_aspectFeatures.Has(Features.OnException))
+            if (Aspect.Features.Has(Features.OnException))
             {
                 WriteCatchExceptionHandler(_method,
                                            _stateMachine,
@@ -368,7 +377,7 @@ namespace Spinner.Fody.Weavers
                                            offTryStart);
             }
 
-            if (_aspectFeatures.Has(Features.OnExit))
+            if (Aspect.Features.Has(Features.OnExit))
             {
                 WriteFinallyExceptionHandler(_method,
                                              _stateMachine,
@@ -382,7 +391,7 @@ namespace Spinner.Fody.Weavers
             if (exceptionHandlerLeaveTarget != null)
                 insc.Insert(insc.Count - eoffLeave, exceptionHandlerLeaveTarget);
 
-            if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
+            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
             {
                 // Ensure the task EH is last
                 stateMachine.Body.ExceptionHandlers.Remove(taskExceptionHandler);
@@ -417,13 +426,13 @@ namespace Spinner.Fody.Weavers
             }
 
             int initEndOffset = insc.Count - bodyBeginOffset;
-            
+
             // Begin writing init code
 
             WriteAspectInit(stateMachine, insc.Count - initEndOffset);
 
             FieldDefinition arguments = null;
-            if (_aspectFeatures.Has(Features.GetArguments))
+            if (Aspect.Features.Has(Features.GetArguments))
             {
                 WriteSmArgumentContainerInit(method, stateMachine, insc.Count - initEndOffset, out arguments);
                 WriteSmCopyArgumentsToContainer(method, stateMachine, insc.Count - initEndOffset, arguments, true);
@@ -433,12 +442,11 @@ namespace Spinner.Fody.Weavers
             FieldDefinition meaField;
             WriteSmMeaInit(method, stateMachine, arguments, insc.Count - initEndOffset, out meaField);
 
-            if (_aspectFeatures.Has(Features.MemberInfo))
+            if (Aspect.Features.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, stateMachine, insc.Count - initEndOffset, null, meaField);
-
-            AdviceInfo entryAdvice = _advices.SingleOrDefault(a => a.AdviceType == AdviceType.MethodEntry);
-            if (entryAdvice != null)
-                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, entryAdvice, null, meaField);
+            
+            if (_entryAdvice != null)
+                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, _entryAdvice, null, meaField);
 
             // TODO: Yield and Resume
 
@@ -448,7 +456,7 @@ namespace Spinner.Fody.Weavers
             // can have exceptions occur but that doesn't stop them from being resumed.
 
             VariableDefinition hasNextVar = null;
-            if (_aspectFeatures.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
+            if (Aspect.Features.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
             {
                 hasNextVar = _stateMachine.Body.AddVariableDefinition(_stateMachine.Module.TypeSystem.Boolean);
 
@@ -465,7 +473,7 @@ namespace Spinner.Fody.Weavers
 
                 // Write success block
 
-                if (_aspectFeatures.Has(Features.OnSuccess))
+                if (Aspect.Features.Has(Features.OnSuccess))
                 {
                     // TODO: Insert this into branches that set false instead of checking here
                     Ins notFinishedLabel = Ins.Create(OpCodes.Nop);
@@ -482,7 +490,7 @@ namespace Spinner.Fody.Weavers
 
             // Need to leave the exception block
             Ins exceptionHandlerLeaveTarget = null;
-            if (_aspectFeatures.Has(Features.OnException | Features.OnExit))
+            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
             {
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
                 insc.Add(Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
@@ -490,7 +498,7 @@ namespace Spinner.Fody.Weavers
 
             // Write exception filter and handler
 
-            if (_aspectFeatures.Has(Features.OnException))
+            if (Aspect.Features.Has(Features.OnException))
             {
                 WriteCatchExceptionHandler(method,
                                            stateMachine,
@@ -502,7 +510,7 @@ namespace Spinner.Fody.Weavers
 
             // End of try block for the finally handler
 
-            if (_aspectFeatures.Has(Features.OnExit))
+            if (Aspect.Features.Has(Features.OnExit))
             {
                 WriteFinallyExceptionHandler(method,
                                              stateMachine,
@@ -631,8 +639,8 @@ namespace Spinner.Fody.Weavers
             int offset,
             out VariableDefinition meaVar)
         {
-            TypeReference meaType = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs);
-            MethodReference meaCtor = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ctor);
+            TypeReference meaType = Context.SafeImport(Context.Spinner.MethodExecutionArgs);
+            MethodReference meaCtor = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ctor);
 
             meaVar = method.Body.AddVariableDefinition(meaType);
 
@@ -677,10 +685,10 @@ namespace Spinner.Fody.Weavers
             int offset,
             out FieldDefinition meaField)
         {
-            TypeReference meaType = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs);
-            MethodReference meaCtor = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ctor);
+            TypeReference meaType = Context.SafeImport(Context.Spinner.MethodExecutionArgs);
+            MethodReference meaCtor = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ctor);
 
-            string fieldName = NameGenerator.MakeAdviceArgsFieldName(_aspectIndex);
+            string fieldName = NameGenerator.MakeAdviceArgsFieldName(Aspect.Index);
             meaField = new FieldDefinition(fieldName, FieldAttributes.Private, meaType);
             stateMachine.DeclaringType.Fields.Add(meaField);
 
@@ -733,14 +741,14 @@ namespace Spinner.Fody.Weavers
             VariableDefinition meaVarOpt,
             FieldReference meaFieldOpt)
         {
-            MethodReference onEntry = _mwc.SafeImport((MethodDefinition) advice.Source);
+            MethodReference onEntry = Context.SafeImport((MethodDefinition) advice.Source);
             //Features adviceFeatures = GetFeatures(onEntryDef);
 
             var il = new ILProcessorEx();
 
             // Invoke OnEntry with the MEA field, variable, or null.
 
-            il.Emit(OpCodes.Ldsfld, _aspectField);
+            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
             il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
             il.Emit(OpCodes.Callvirt, onEntry);
 
@@ -867,8 +875,7 @@ namespace Spinner.Fody.Weavers
             FieldReference meaFieldOpt,
             VariableDefinition returnVarOpt)
         {
-            MethodReference onSuccess =
-                _mwc.SafeImport(_aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnSuccess, true));
+            MethodReference onSuccess = Context.SafeImport((MethodDefinition) _successAdvice.Source);
 
             var il = new ILProcessorEx();
 
@@ -876,7 +883,7 @@ namespace Spinner.Fody.Weavers
 
             if (returnVarOpt != null && (meaVarOpt != null || meaFieldOpt != null))
             {
-                MethodReference setReturnValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
+                MethodReference setReturnValue = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
 
                 il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Ldloc, returnVarOpt);
@@ -886,7 +893,7 @@ namespace Spinner.Fody.Weavers
 
             // Call OnSuccess()
 
-            il.Emit(OpCodes.Ldsfld, _aspectField);
+            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
             il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
             il.Emit(OpCodes.Callvirt, onSuccess);
 
@@ -894,7 +901,7 @@ namespace Spinner.Fody.Weavers
 
             if (returnVarOpt != null && (meaVarOpt != null || meaFieldOpt != null))
             {
-                MethodReference getReturnValue = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
+                MethodReference getReturnValue = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
 
                 il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Callvirt, getReturnValue);
@@ -913,11 +920,10 @@ namespace Spinner.Fody.Weavers
             FieldReference meaField,
             int tryStart)
         {
-            MethodDefinition filterExceptionDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_FilterException, true);
-            MethodReference filterExcetion = _mwc.SafeImport(filterExceptionDef);
-            MethodDefinition onExceptionDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnException, true);
-            MethodReference onException = _mwc.SafeImport(onExceptionDef);
-            TypeReference exceptionType = _mwc.SafeImport(_mwc.Framework.Exception);
+            MethodDefinition filterExceptionDef = Aspect.AspectType.GetMethod(Context.Spinner.IMethodBoundaryAspect_FilterException, true);
+            MethodReference filterExcetion = Context.SafeImport(filterExceptionDef);
+            MethodReference onException = Context.SafeImport((MethodDefinition) _exceptionAdvice.Source);
+            TypeReference exceptionType = Context.SafeImport(Context.Framework.Exception);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
 
@@ -941,7 +947,7 @@ namespace Spinner.Fody.Weavers
             // Call FilterException()
             il.Append(labelFilterTrue);
             il.Emit(OpCodes.Stloc, exceptionHolder);
-            il.Emit(OpCodes.Ldsfld, _aspectField);
+            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
             il.EmitLoadOrNull(meaVar, meaField);
             il.Emit(OpCodes.Ldloc, exceptionHolder);
             il.Emit(OpCodes.Callvirt, filterExcetion);
@@ -961,13 +967,13 @@ namespace Spinner.Fody.Weavers
             {
                 //Features onExceptionFeatures = GetFeatures(onExceptionDef);
                 //MethodReference getException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.GetMethod);
-                MethodReference setException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.SetMethod);
+                MethodReference setException = Context.SafeImport(Context.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
                 il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Ldloc, exceptionHolder);
                 il.Emit(OpCodes.Callvirt, setException);
 
-                il.Emit(OpCodes.Ldsfld, _aspectField);
+                il.Emit(OpCodes.Ldsfld, Parent.AspectField);
                 il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Callvirt, onException);
 
@@ -1035,7 +1041,7 @@ namespace Spinner.Fody.Weavers
             }
             else
             {
-                il.Emit(OpCodes.Ldsfld, _aspectField);
+                il.Emit(OpCodes.Ldsfld, Parent.AspectField);
                 il.Emit(OpCodes.Ldnull);
                 il.Emit(OpCodes.Callvirt, onException);
             }
@@ -1070,8 +1076,8 @@ namespace Spinner.Fody.Weavers
             int tryStart,
             VariableDefinition hasNextVarOpt)
         {
-            MethodDefinition onExitDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnExit, true);
-            MethodReference onExit = _mwc.SafeImport(onExitDef);
+            MethodDefinition onExitDef = Aspect.AspectType.GetMethod(Context.Spinner.IMethodBoundaryAspect_OnExit, true);
+            MethodReference onExit = Context.SafeImport(onExitDef);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
 
@@ -1088,7 +1094,7 @@ namespace Spinner.Fody.Weavers
             }
 
             // Call OnExit()
-            il.Emit(OpCodes.Ldsfld, _aspectField);
+            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
             il.EmitLoadOrNull(meaVar, meaField);
             il.Emit(OpCodes.Callvirt, onExit);
 
@@ -1133,8 +1139,7 @@ namespace Spinner.Fody.Weavers
 
             if (eoffYield != -1)
             {
-                MethodDefinition onYieldDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnYield, true);
-                MethodReference onYield = _mwc.SafeImport(onYieldDef);
+                MethodReference onYield = Context.SafeImport((MethodDefinition) _yieldAdvice.Source);
 
                 //// Need to know whether the awaitable is a value type. It will be boxed as object if so, instead
                 //// of trying to create a local variable for each type found.
@@ -1161,7 +1166,7 @@ namespace Spinner.Fody.Weavers
 
                 // Invoke OnYield()
 
-                il.Emit(OpCodes.Ldsfld, _aspectField);
+                il.Emit(OpCodes.Ldsfld, Parent.AspectField);
                 il.EmitLoadOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onYield);
 
@@ -1181,8 +1186,7 @@ namespace Spinner.Fody.Weavers
 
             if (eoffResume != -1)
             {
-                MethodDefinition onResumeDef = _aspectType.GetMethod(_mwc.Spinner.IMethodBoundaryAspect_OnResume, true);
-                MethodReference onResume = _mwc.SafeImport(onResumeDef);
+                MethodReference onResume = Context.SafeImport((MethodDefinition) _resumeAdvice.Source);
 
                 //// Store the typed awaitable as YieldValue, optionally boxing it.
 
@@ -1195,7 +1199,7 @@ namespace Spinner.Fody.Weavers
                 //    il.Emit(OpCodes.Callvirt, setYieldValue);
                 //}
 
-                il.Emit(OpCodes.Ldsfld, _aspectField);
+                il.Emit(OpCodes.Ldsfld, Parent.AspectField);
                 il.EmitLoadOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onResume);
 
@@ -1269,8 +1273,8 @@ namespace Spinner.Fody.Weavers
         {
             if (method.HasCustomAttributes)
             {
-                TypeDefinition asmType = _mwc.Framework.AsyncStateMachineAttribute;
-                TypeDefinition ismType = _mwc.Framework.IteratorStateMachineAttribute;
+                TypeDefinition asmType = Context.Framework.AsyncStateMachineAttribute;
+                TypeDefinition ismType = Context.Framework.IteratorStateMachineAttribute;
 
                 foreach (CustomAttribute a in method.CustomAttributes)
                 {

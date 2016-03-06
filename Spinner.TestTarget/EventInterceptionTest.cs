@@ -4,11 +4,11 @@ using Spinner.TestTarget.Aspects;
 
 namespace Spinner.TestTarget
 {
-    [BasicLoggingEia(
-        AttributeTargetElements = MulticastTargets.Event,
-        AttributeTargetMemberAttributes = MulticastAttributes.Public,
-        AttributeInheritance = MulticastInheritance.Multicast)
-        ]
+    //[BasicLoggingEia(
+    //    AttributeTargetElements = MulticastTargets.Event,
+    //    AttributeTargetMemberAttributes = MulticastAttributes.Public,
+    //    AttributeInheritance = MulticastInheritance.Multicast)
+    //    ]
     public class EventInterceptionTest
     {
         private EventHandler _customHandlers;

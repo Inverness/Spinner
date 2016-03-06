@@ -51,6 +51,7 @@
     <Compile Include="Aspects\BasicLoggingEia.cs" />
     <Compile Include="Aspects\BasicLoggingMia.cs" />
     <Compile Include="Aspects\BasicLogginaPia.cs" />
+    <Compile Include="Aspects\ComposedBasicLoggingMba.cs" />
     <Compile Include="Aspects\ExceptionControlMba.cs" />
     <Compile Include="Aspects\PropertyNameLoggingPia.cs" />
     <Compile Include="EventInterceptionTest.cs" />

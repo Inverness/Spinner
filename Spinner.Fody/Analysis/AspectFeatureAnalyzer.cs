@@ -17,8 +17,8 @@ namespace Spinner.Fody.Analysis
     {
         // Constants used to optimize various parts of analysis.
         private const char GeneratedNamePrefix = '<';
-        private const int AspectInterfaceNameMinimumLength = 20;
         private const string AspectInterfaceNameSuffix = "Aspect";
+        private const string AdviceTypeNameSuffix = "Advice";
         private const string AdviceArgsNamespace = "Spinner.Aspects";
         private const string AdviceNamePrefix = "On";
 
@@ -95,24 +95,47 @@ namespace Spinner.Fody.Analysis
                         if (!m.Name.StartsWith(AdviceNamePrefix, StringComparison.Ordinal))
                             continue;
 
-                        // Get the base definition from the aspect interface that is being implemented or overridden.
-                        Features typeFeatures;
-                        MethodDefinition baseDefinition = GetBaseDefinition(m, _aspectKind, out typeFeatures);
-                        if (baseDefinition == null)
-                            continue;
+                        if (_aspectKind == AspectKind.Composed)
+                        {
+                            AdviceType? adviceType = GetMethodAdviceType(m);
+                            if (!adviceType.HasValue)
+                                continue;
 
-                        // Join method features inherited from the overriden method with those analyzed now.
-                        Features methodFeatures;
-                        inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
+                            MethodDefinition baseMethod = t.BaseType.Resolve().GetMethod(m, true);
+                            
+                            Features methodFeatures = Features.None;
+                            if (baseMethod != null)
+                                inheritedMethodFeatures.TryGetValue(baseMethod, out methodFeatures);
 
-                        methodFeatures |= AnalyzeAdvice(m);
+                            methodFeatures |= AnalyzeAdvice(m);
 
-                        inheritedMethodFeatures[baseDefinition] = methodFeatures;
+                            inheritedMethodFeatures[m] = methodFeatures;
 
-                        AddAnalyzedFeaturesAttribute(m, methodFeatures);
+                            AddAnalyzedFeaturesAttribute(m, methodFeatures);
 
-                        // Add type and method level features that this advice uses.
-                        inheritedTypeFeatures |= typeFeatures | methodFeatures;
+                            inheritedTypeFeatures |= methodFeatures;
+                        }
+                        else
+                        {
+                            // Get the base definition from the aspect interface that is being implemented or overridden.
+                            Features typeFeatures;
+                            MethodDefinition baseDefinition = GetBaseDefinition(m, _aspectKind, out typeFeatures);
+                            if (baseDefinition == null)
+                                continue;
+
+                            // Join method features inherited from the overriden method with those analyzed now.
+                            Features methodFeatures;
+                            inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
+
+                            methodFeatures |= AnalyzeAdvice(m);
+
+                            inheritedMethodFeatures[baseDefinition] = methodFeatures;
+
+                            AddAnalyzedFeaturesAttribute(m, methodFeatures);
+
+                            // Add type and method level features that this advice uses.
+                            inheritedTypeFeatures |= typeFeatures | methodFeatures;
+                        }
                     }
 
                     AddAnalyzedFeaturesAttribute(t, inheritedTypeFeatures);
@@ -193,12 +216,13 @@ namespace Spinner.Fody.Analysis
                 TypeReference iref = interfaces[i];
 
                 // Before resolving, try examining the name.
-                if (iref.Name.Length < AspectInterfaceNameMinimumLength ||
-                    !iref.Name.EndsWith(AspectInterfaceNameSuffix, StringComparison.Ordinal))
+                if (!iref.Name.EndsWith(AspectInterfaceNameSuffix, StringComparison.Ordinal))
                     continue;
 
                 TypeDefinition idef = iref.Resolve();
 
+                if (idef == spinner.IAspect)
+                    return AspectKind.Composed;
                 if (idef == spinner.IMethodBoundaryAspect)
                     return AspectKind.MethodBoundary;
                 if (idef == spinner.IMethodInterceptionAspect)
@@ -251,6 +275,9 @@ namespace Spinner.Fody.Analysis
 
             switch (ak)
             {
+                case AspectKind.Composed:
+                    typeFeature = Features.None;
+                    return null;
                 case AspectKind.MethodBoundary:
                     baseType = _mwc.Spinner.IMethodBoundaryAspect;
                     break;
@@ -277,5 +304,49 @@ namespace Spinner.Fody.Analysis
             typeFeature = _mwc.TypeFeatures[baseMethod];
             return baseMethod;
         }
+
+        private AdviceType? GetMethodAdviceType(MethodDefinition method)
+        {
+            if (method.HasCustomAttributes)
+            {
+                foreach (CustomAttribute ca in method.CustomAttributes)
+                {
+                    AdviceType adviceType;
+                    if (_mwc.AdviceTypes.TryGetValue(ca.AttributeType, out adviceType))
+                        return adviceType;
+                }
+            }
+
+            return null;
+        }
+
+        //private AdviceType? GetMethodAdviceType(MethodDefinition method, bool inherited, out MethodDefinition adviceMethod)
+        //{
+        //    MethodDefinition currentMethod = method;
+
+        //    do
+        //    {
+        //        if (currentMethod.HasCustomAttributes)
+        //        {
+        //            foreach (CustomAttribute ca in currentMethod.CustomAttributes)
+        //            {
+        //                AdviceType adviceType;
+        //                if (_mwc.AdviceTypes.TryGetValue(ca.AttributeType, out adviceType))
+        //                {
+        //                    adviceMethod = currentMethod;
+        //                    return adviceType;
+        //                }
+        //            }
+        //        }
+
+        //        if (!inherited)
+        //            break;
+
+        //        currentMethod = currentMethod.DeclaringType.BaseType?.Resolve()?.GetMethod(method, true);
+        //    } while (currentMethod != null);
+
+        //    adviceMethod = null;
+        //    return null;
+        //}
     }
 }

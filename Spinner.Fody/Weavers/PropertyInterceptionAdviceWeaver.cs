@@ -21,8 +21,8 @@ namespace Spinner.Fody.Weavers
         private MethodDefinition _originalGetter;
         private MethodDefinition _originalSetter;
 
-        internal PropertyInterceptionAdviceWeaver(AspectInfo aspect, AdviceInfo get, AdviceInfo set, PropertyDefinition property)
-            : base(aspect)
+        internal PropertyInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo get, AdviceInfo set, PropertyDefinition property)
+            : base(parent)
         {
             _getAdvice = get;
             _setAdvice = set;
@@ -30,7 +30,7 @@ namespace Spinner.Fody.Weavers
             Debug.Assert(_property.GetMethod != null || _property.SetMethod != null);
         }
 
-        protected override void Weave()
+        public override void Weave()
         {
             MethodDefinition getter = _getAdvice != null ? _property.GetMethod : null;
             MethodDefinition setter = _setAdvice != null ? _property.SetMethod : null;
@@ -64,7 +64,7 @@ namespace Spinner.Fody.Weavers
             WriteArgumentContainerInit(method, insc.Count, out argumentsVariable);
 
             WriteCopyArgumentsToContainer(method, insc.Count, argumentsVariable, true);
-            
+
             WriteAspectInit(method, insc.Count);
 
             WriteBindingInit(method, insc.Count);
@@ -73,7 +73,7 @@ namespace Spinner.Fody.Weavers
             VariableDefinition iaVariable;
             WritePiaInit(method, insc.Count, argumentsVariable, out iaVariable, out valueField);
             
-            if (_aspectFeatures.Has(Features.MemberInfo))
+            if (Aspect.Features.Has(Features.MemberInfo))
                 WriteSetPropertyInfo(method, insc.Count, iaVariable);
             
             if (method.IsSetter)
@@ -86,8 +86,8 @@ namespace Spinner.Fody.Weavers
             }
             
             MethodReference adviceBase = method.IsGetter
-                ? _mwc.Spinner.ILocationInterceptionAspect_OnGetValue
-                : _mwc.Spinner.ILocationInterceptionAspect_OnSetValue;
+                ? Context.Spinner.ILocationInterceptionAspect_OnGetValue
+                : Context.Spinner.ILocationInterceptionAspect_OnSetValue;
 
             WriteCallAdvice(method, insc.Count, adviceBase, iaVariable);
 
@@ -113,9 +113,9 @@ namespace Spinner.Fody.Weavers
             int offset,
             VariableDefinition piaVariable)
         {
-            MethodReference getTypeFromHandle = _mwc.SafeImport(_mwc.Framework.Type_GetTypeFromHandle);
-            MethodReference setProperty = _mwc.SafeImport(_mwc.Spinner.LocationInterceptionArgs_Property.SetMethod);
-            MethodReference getPropertyInfo = _mwc.SafeImport(_mwc.Spinner.WeaverHelpers_GetPropertyInfo);
+            MethodReference getTypeFromHandle = Context.SafeImport(Context.Framework.Type_GetTypeFromHandle);
+            MethodReference setProperty = Context.SafeImport(Context.Spinner.LocationInterceptionArgs_Property.SetMethod);
+            MethodReference getPropertyInfo = Context.SafeImport(Context.Spinner.WeaverHelpers_GetPropertyInfo);
 
             var insc = new[]
             {
@@ -134,8 +134,8 @@ namespace Spinner.Fody.Weavers
         {
             ModuleDefinition module = _property.Module;
 
-            string name = NameGenerator.MakePropertyBindingName(_property.Name, _aspectIndex);
-            TypeReference baseType = _mwc.SafeImport(_mwc.Spinner.LocationBindingT1).MakeGenericInstanceType(_property.PropertyType);
+            string name = NameGenerator.MakePropertyBindingName(_property.Name, Aspect.Index);
+            TypeReference baseType = Context.SafeImport(Context.Spinner.LocationBindingT1).MakeGenericInstanceType(_property.PropertyType);
 
             CreateBindingClass(baseType, name);
 
@@ -149,10 +149,10 @@ namespace Spinner.Fody.Weavers
 
                 var bmethod = new MethodDefinition(GetValueMethodName, mattrs, _property.PropertyType);
 
-                _bindingClass.Methods.Add(bmethod);
+                BindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
+                TypeReference argumentsBaseType = Context.SafeImport(Context.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -231,10 +231,10 @@ namespace Spinner.Fody.Weavers
 
                 var bmethod = new MethodDefinition(SetValueMethodName, mattrs, module.TypeSystem.Void);
 
-                _bindingClass.Methods.Add(bmethod);
+                BindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
+                TypeReference argumentsBaseType = Context.SafeImport(Context.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -305,15 +305,15 @@ namespace Spinner.Fody.Weavers
             out VariableDefinition iaVariable,
             out FieldReference valueField)
         {
-            TypeDefinition piaTypeDef = _mwc.Spinner.BoundLocationInterceptionArgsT1;
-            GenericInstanceType genericPiaType = _mwc.SafeImport(piaTypeDef).MakeGenericInstanceType(_property.PropertyType);
+            TypeDefinition piaTypeDef = Context.Spinner.BoundLocationInterceptionArgsT1;
+            GenericInstanceType genericPiaType = Context.SafeImport(piaTypeDef).MakeGenericInstanceType(_property.PropertyType);
             TypeReference piaType = genericPiaType;
 
-            MethodDefinition constructorDef = _mwc.Spinner.BoundLocationInterceptionArgsT1_ctor;
-            MethodReference constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
+            MethodDefinition constructorDef = Context.Spinner.BoundLocationInterceptionArgsT1_ctor;
+            MethodReference constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
 
-            FieldDefinition valueFieldDef = _mwc.Spinner.BoundLocationInterceptionArgsT1_TypedValue;
-            valueField = _mwc.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
+            FieldDefinition valueFieldDef = Context.Spinner.BoundLocationInterceptionArgsT1_TypedValue;
+            valueField = Context.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
             iaVariable = method.Body.AddVariableDefinition(piaType);
 
@@ -337,7 +337,7 @@ namespace Spinner.Fody.Weavers
                 ? Ins.Create(OpCodes.Ldnull)
                 : Ins.Create(OpCodes.Ldloc, argumentsVariable));
 
-            insc.Add(Ins.Create(OpCodes.Ldsfld, _bindingInstanceField));
+            insc.Add(Ins.Create(OpCodes.Ldsfld, BindingInstanceField));
 
             insc.Add(Ins.Create(OpCodes.Newobj, constructor));
             insc.Add(Ins.Create(OpCodes.Stloc, iaVariable));

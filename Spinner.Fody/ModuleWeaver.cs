@@ -1,4 +1,6 @@
-﻿using System;
+﻿//#define WITH_THREADING
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -77,7 +79,7 @@ namespace Spinner.Fody
 
             Task[] analysisTasks = types.Select(CreateAnalysisAction)
                                         .Where(a => a != null)
-                                        .Select(Task.Run)
+                                        .Select(RunTask)
                                         .ToArray();
 
             if (analysisTasks.Length != 0)
@@ -97,7 +99,7 @@ namespace Spinner.Fody
             // Tasks are only created when there is actual work to be done for a type.
             Task[] weaveTasks = types.Select(CreateWeaveAction)
                                      .Where(a => a != null)
-                                     .Select(Task.Run)
+                                     .Select(RunTask)
                                      .ToArray();
 
             if (weaveTasks.Length != 0)
@@ -106,6 +108,16 @@ namespace Spinner.Fody
             stopwatch.Stop();
 
             LogInfo($"Finished aspect weaving for {weaveTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        private static Task RunTask(Action action)
+        {
+#if WITH_THREADING
+            return Task.Run(action);
+#else
+            action();
+            return Task.FromResult(true);
+#endif
         }
 
         private Action CreateWeaveAction(TypeDefinition type)
@@ -119,9 +131,16 @@ namespace Spinner.Fody
             if (NameUtility.TryParseGeneratedName(type.Name, out typeChar) && typeChar == 'd')
                 return null;
 
+            AspectWeaver[] weavers = AspectWeaverFactory.TryCreate(_mwc, _multicastAttributeRegistry, type);
 
+            if (weavers == null)
+                return null;
 
-            return null;
+            return () =>
+            {
+                foreach (AspectWeaver w in weavers)
+                    w.Weave();
+            };
 
             // Use HasX properties to avoid on-demand allocation of the collections.
 

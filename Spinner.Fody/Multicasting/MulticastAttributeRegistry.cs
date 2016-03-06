@@ -17,18 +17,6 @@ namespace Spinner.Fody.Multicasting
 
         private static readonly IList<MulticastInstance> s_noInstances = new MulticastInstance[0];
 
-        private static readonly Dictionary<TokenType, ProviderType> s_providerTypes =
-            new Dictionary<TokenType, ProviderType>
-            {
-                {TokenType.Assembly, ProviderType.Assembly},
-                {TokenType.TypeDef, ProviderType.Type},
-                {TokenType.Method, ProviderType.Method},
-                {TokenType.Property, ProviderType.Property},
-                {TokenType.Event, ProviderType.Event},
-                {TokenType.Field, ProviderType.Field},
-                {TokenType.Param, ProviderType.Parameter}
-            };
-
         private readonly ModuleWeavingContext _mwc;
         private readonly ModuleDefinition _module;
         private readonly TypeDefinition _compilerGeneratedAttributeType;
@@ -563,7 +551,7 @@ namespace Spinner.Fody.Multicasting
                     AddMulticastTarget(item.Item1, item.Item2);
             }
 
-            if ((mi.TargetElements & GetTargetType(mi.Target)) != 0)
+            if ((mi.TargetElements & mi.Target.GetMulticastTargetType()) != 0)
                 AddMulticastTarget(mi, mi.Target);
         }
 
@@ -607,12 +595,12 @@ namespace Spinner.Fody.Multicasting
             const MulticastTargets eventAndChildTargets =
                 MulticastTargets.Event | methodAndChildTargets;
 
-            MulticastTargets typeTargetType = GetTargetType(type);
+            MulticastTargets typeTargetType = type.GetMulticastTargetType();
 
             if ((mi.TargetElements & (typeTargetType | typeChildTargets)) == 0)
                 return;
 
-            MulticastAttributes attrs = ComputeAttributes(type);
+            MulticastAttributes attrs = ComputeMulticastAttributes(type);
 
             bool external = mi.Attribute.Constructor.Module != _module;
 
@@ -672,7 +660,7 @@ namespace Spinner.Fody.Multicasting
         {
             const MulticastTargets childTargets = MulticastTargets.ReturnValue | MulticastTargets.Parameter;
 
-            MulticastTargets methodTargetType = GetTargetType(method);
+            MulticastTargets methodTargetType = method.GetMulticastTargetType();
 
             // Stop if the attribute does not apply to this method, the return value, or parameters.
             if ((mi.TargetElements & (methodTargetType | childTargets)) == 0)
@@ -697,7 +685,7 @@ namespace Spinner.Fody.Multicasting
             {
                 foreach (ParameterDefinition parameter in method.Parameters)
                 {
-                    MulticastAttributes pattrs = ComputeAttributes(parameter);
+                    MulticastAttributes pattrs = ComputeMulticastAttributes(parameter);
 
                     if ((mi.TargetParameterAttributes & pattrs) != 0 && mi.TargetParameters.IsMatch(parameter.Name))
                     {
@@ -762,7 +750,7 @@ namespace Spinner.Fody.Multicasting
 
         private bool IsValidMemberAttributes(MulticastInstance mi, IMemberDefinition member)
         {
-            MulticastAttributes attrs = ComputeAttributes(member);
+            MulticastAttributes attrs = ComputeMulticastAttributes(member);
 
             bool external = mi.Attribute.Constructor.Module != _module;
 
@@ -773,7 +761,7 @@ namespace Spinner.Fody.Multicasting
             return (compareAttrs & attrs) != 0;
         }
 
-        private MulticastAttributes ComputeAttributes(TypeDefinition type)
+        private MulticastAttributes ComputeMulticastAttributes(TypeDefinition type)
         {
             MulticastAttributes a = 0;
 
@@ -807,24 +795,24 @@ namespace Spinner.Fody.Multicasting
             return a;
         }
 
-        private MulticastAttributes ComputeAttributes(IMemberDefinition member)
+        private MulticastAttributes ComputeMulticastAttributes(IMemberDefinition member)
         {
-            switch (GetProviderType(member))
+            switch (member.GetProviderType())
             {
                 case ProviderType.Method:
-                    return ComputeAttributes((MethodDefinition) member);
+                    return ComputeMulticastAttributes((MethodDefinition) member);
                 case ProviderType.Property:
-                    return ComputeAttributes((PropertyDefinition) member);
+                    return ComputeMulticastAttributes((PropertyDefinition) member);
                 case ProviderType.Event:
-                    return ComputeAttributes((EventDefinition) member);
+                    return ComputeMulticastAttributes((EventDefinition) member);
                 case ProviderType.Field:
-                    return ComputeAttributes((FieldDefinition) member);
+                    return ComputeMulticastAttributes((FieldDefinition) member);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
 
-        private MulticastAttributes ComputeAttributes(MethodDefinition method)
+        private MulticastAttributes ComputeMulticastAttributes(MethodDefinition method)
         {
             MulticastAttributes a = 0;
 
@@ -854,10 +842,10 @@ namespace Spinner.Fody.Multicasting
             return a;
         }
 
-        private MulticastAttributes ComputeAttributes(PropertyDefinition property)
+        private MulticastAttributes ComputeMulticastAttributes(PropertyDefinition property)
         {
-            MulticastAttributes ga = property.GetMethod != null ? ComputeAttributes(property.GetMethod) : 0;
-            MulticastAttributes sa = property.SetMethod != null ? ComputeAttributes(property.SetMethod) : 0;
+            MulticastAttributes ga = property.GetMethod != null ? ComputeMulticastAttributes(property.GetMethod) : 0;
+            MulticastAttributes sa = property.SetMethod != null ? ComputeMulticastAttributes(property.SetMethod) : 0;
 
             MulticastAttributes a = 0;
 
@@ -887,14 +875,14 @@ namespace Spinner.Fody.Multicasting
             return a;
         }
 
-        private MulticastAttributes ComputeAttributes(EventDefinition evt)
+        private MulticastAttributes ComputeMulticastAttributes(EventDefinition evt)
         {
             Debug.Assert(evt.AddMethod != null);
 
-            return ComputeAttributes(evt.AddMethod);
+            return ComputeMulticastAttributes(evt.AddMethod);
         }
 
-        private MulticastAttributes ComputeAttributes(FieldDefinition field)
+        private MulticastAttributes ComputeMulticastAttributes(FieldDefinition field)
         {
             MulticastAttributes a = 0;
 
@@ -920,7 +908,7 @@ namespace Spinner.Fody.Multicasting
             return a;
         }
 
-        private MulticastAttributes ComputeAttributes(ParameterDefinition parameter)
+        private MulticastAttributes ComputeMulticastAttributes(ParameterDefinition parameter)
         {
             MulticastAttributes a = 0;
 
@@ -965,94 +953,6 @@ namespace Spinner.Fody.Multicasting
             }
 
             return false;
-        }
-
-        private static ProviderType GetProviderType(IMetadataTokenProvider target)
-        {
-            if (target is MethodReturnType)
-                return ProviderType.MethodReturn;
-            return s_providerTypes[target.MetadataToken.TokenType];
-        }
-
-        private static string GetName(ICustomAttributeProvider target)
-        {
-            switch (GetProviderType(target))
-            {
-                case ProviderType.Assembly:
-                    return ((AssemblyDefinition) target).FullName;
-                case ProviderType.Type:
-                    return ((TypeDefinition) target).FullName;
-                case ProviderType.Method:
-                case ProviderType.Property:
-                case ProviderType.Event:
-                case ProviderType.Field:
-                    return ((IMemberDefinition) target).Name;
-                case ProviderType.Parameter:
-                    return ((ParameterDefinition) target).Name;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        private static MulticastTargets GetTargetType(IMetadataTokenProvider target)
-        {
-            switch (GetProviderType(target))
-            {
-                case ProviderType.Assembly:
-                    return MulticastTargets.Assembly;
-                case ProviderType.Type:
-                    var type = (TypeDefinition) target;
-
-                    if (type.IsInterface)
-                        return MulticastTargets.Interface;
-
-                    if (type.BaseType?.Namespace == "System")
-                    {
-                        switch (type.BaseType.Name)
-                        {
-                            case "Enum":
-                                return MulticastTargets.Enum;
-                            case "ValueType":
-                                return MulticastTargets.Struct;
-                            case "Delegate":
-                                return MulticastTargets.Delegate;
-                        }
-                    }
-
-                    if (type.IsClass)
-                        return MulticastTargets.Class;
-
-                    throw new ArgumentOutOfRangeException(nameof(target));
-                case ProviderType.Method:
-                    var method = (MethodDefinition) target;
-                    if (method != null)
-                    {
-                        switch (method.Name)
-                        {
-                            case ".ctor":
-                                return MulticastTargets.InstanceConstructor;
-                            case ".cctor":
-                                return MulticastTargets.StaticConstructor;
-                            default:
-                                return MulticastTargets.Method;
-                        }
-                    }
-                    break;
-                case ProviderType.Property:
-                    return MulticastTargets.Property;
-                case ProviderType.Event:
-                    return MulticastTargets.Event;
-                case ProviderType.Field:
-                    return MulticastTargets.Field;
-                case ProviderType.Parameter:
-                    return MulticastTargets.Parameter;
-                case ProviderType.MethodReturn:
-                    return MulticastTargets.ReturnValue;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
-            throw new ArgumentOutOfRangeException(nameof(target));
         }
 
         private static bool IsFrameworkAssemblyReference(AssemblyNameReference ar)

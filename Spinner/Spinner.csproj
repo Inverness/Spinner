@@ -39,10 +39,21 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Aspects\AdviceArgs.cs" />
+    <Compile Include="Aspects\Advices\EventAddHandlerAdvice.cs" />
+    <Compile Include="Aspects\Advices\EventInvokeHandlerAdvice.cs" />
+    <Compile Include="Aspects\Advices\EventRemoveHandlerAdvice.cs" />
     <Compile Include="Aspects\Advices\GroupingAdvice.cs" />
+    <Compile Include="Aspects\Advices\LocationGetValueAdvice.cs" />
+    <Compile Include="Aspects\Advices\LocationSetValueAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodBoundaryAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodEntryAdvice.cs" />
+    <Compile Include="Aspects\Advices\MethodExceptionAdvice.cs" />
+    <Compile Include="Aspects\Advices\MethodExitAdvice.cs" />
+    <Compile Include="Aspects\Advices\MethodInvokeAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodPointcut.cs" />
+    <Compile Include="Aspects\Advices\MethodResumeAdvice.cs" />
+    <Compile Include="Aspects\Advices\MethodSuccessAdvice.cs" />
+    <Compile Include="Aspects\Advices\MethodYieldAdvice.cs" />
     <Compile Include="Aspects\Advices\MulticastPointcut.cs" />
     <Compile Include="Aspects\Advices\Advice.cs" />
     <Compile Include="Aspects\Advices\Pointcut.cs" />

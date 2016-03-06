@@ -7,7 +7,8 @@ namespace Spinner.TestTarget
 {
     public class MethodBoundaryTest
     {
-        [BasicLoggingMba(55)]
+        //[BasicLoggingMba(55)]
+        [ComposedBasicLoggingMba]
         public int OneAspect(int a, out int b, string c)
         {
             b = 20;
@@ -21,8 +22,8 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [BasicLoggingMba]
-        [BasicLoggingMba]
+        //[BasicLoggingMba]
+        //[BasicLoggingMba]
         public int TwoAspect(int a, out int b, string c)
         {
             b = 20;
@@ -36,7 +37,7 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [ExceptionControlMba]
+        //[ExceptionControlMba]
         public int ExceptionFlowBehaviorInt(int a, out int b, string c)
         {
             b = 20;
@@ -50,8 +51,8 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [ExceptionControlMba]
-        [ExceptionControlMba]
+        //[ExceptionControlMba]
+        //[ExceptionControlMba]
         public int ExceptionFlowBehaviorIntTwo(int a, out int b, string c)
         {
             b = 20;
@@ -65,7 +66,7 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [BasicLoggingMba]
+        //[BasicLoggingMba]
         public async Task<int> AsyncInt(int a, int b, string c)
         {
             a += await GetNum(3);
@@ -82,7 +83,7 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [BasicLoggingMba]
+        //[BasicLoggingMba]
         public async Task AsyncVoid(int a, int b, string c)
         {
             a += await GetNum(3);
@@ -94,7 +95,7 @@ namespace Spinner.TestTarget
             a += await GetNum(6);
         }
 
-        [ExceptionControlMba]
+        //[ExceptionControlMba]
         public async Task<int> ExceptionFlowBehaviorAsyncInt(int a, int b, string c)
         {
             a += await GetNum(3);
@@ -111,8 +112,8 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [ExceptionControlMba]
-        [ExceptionControlMba]
+        //[ExceptionControlMba]
+        //[ExceptionControlMba]
         public async Task<int> ExceptionFlowBehaviorAsyncIntTwo(int a, int b, string c)
         {
             a += await GetNum(3);
@@ -129,7 +130,7 @@ namespace Spinner.TestTarget
             return a;
         }
 
-        [BasicLoggingMba]
+        //[BasicLoggingMba]
         public IEnumerable<int> GeneratorInt(int a, int b, string c)
         {
             yield return a;

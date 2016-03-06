@@ -3,25 +3,25 @@ using Spinner.Aspects;
 using Spinner.Extensibility;
 using Spinner.TestTarget.Aspects;
 
-[assembly: BasicLoggingMia(AttributeTargetTypes = "Spinner.TestTarget.*",
-                           AttributeTargetElements = MulticastTargets.Method)]
+//[assembly: BasicLoggingMia(AttributeTargetTypes = "Spinner.TestTarget.*",
+//                           AttributeTargetElements = MulticastTargets.Method)]
 
-[assembly: Spinner.TestTarget.EntryLogAspect(
-    AttributeInheritance = MulticastInheritance.Multicast,
-    AttributeTargetTypes = "Spinner.*",
-    AttributeTargetTypeAttributes = MulticastAttributes.All & ~MulticastAttributes.CompilerGenerated,
-    AttributeTargetElements = MulticastTargets.Method,
-    AttributeTargetMemberAttributes = MulticastAttributes.All
-    )]
+//[assembly: Spinner.TestTarget.EntryLogAspect(
+//    AttributeInheritance = MulticastInheritance.Multicast,
+//    AttributeTargetTypes = "Spinner.*",
+//    AttributeTargetTypeAttributes = MulticastAttributes.All & ~MulticastAttributes.CompilerGenerated,
+//    AttributeTargetElements = MulticastTargets.Method,
+//    AttributeTargetMemberAttributes = MulticastAttributes.All
+//    )]
 
-[assembly: Spinner.TestTarget.EntryLogAspect(
-    AttributeInheritance = MulticastInheritance.Multicast,
-    AttributeTargetTypes = "Spinner.TestTarget.EntryLogAspect",
-    AttributeTargetTypeAttributes = MulticastAttributes.All & ~MulticastAttributes.CompilerGenerated,
-    AttributeTargetElements = MulticastTargets.Method,
-    AttributeTargetMemberAttributes = MulticastAttributes.All,
-    AttributeExclude = true
-    )]
+//[assembly: Spinner.TestTarget.EntryLogAspect(
+//    AttributeInheritance = MulticastInheritance.Multicast,
+//    AttributeTargetTypes = "Spinner.TestTarget.EntryLogAspect",
+//    AttributeTargetTypeAttributes = MulticastAttributes.All & ~MulticastAttributes.CompilerGenerated,
+//    AttributeTargetElements = MulticastTargets.Method,
+//    AttributeTargetMemberAttributes = MulticastAttributes.All,
+//    AttributeExclude = true
+//    )]
 
 namespace Spinner.TestTarget
 {

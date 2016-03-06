@@ -67,11 +67,18 @@ namespace Spinner.Fody
             if (self.Name != other.Name || self.Namespace != other.Namespace)
                 return false;
 
-            if (self.HasGenericParameters != other.HasGenericParameters)
-                return false;
+            if (self.HasGenericParameters)
+            {
+                if (!other.HasGenericParameters)
+                    return false;
 
-            if (self.HasGenericParameters && (self.GenericParameters.Count != other.GenericParameters.Count))
+                if (self.GenericParameters.Count != other.GenericParameters.Count)
+                    return false;
+            }
+            else if (other.HasGenericParameters)
+            {
                 return false;
+            }
 
             return self.Resolve() == other.Resolve();
         }
@@ -301,5 +308,38 @@ namespace Spinner.Fody
         {
             return self.GetNamedArgument(name)?.Value;
         }
+
+        internal static IEnumerable<IMemberDefinition> GetMembers(this TypeDefinition self)
+        {
+            if (self.HasFields)
+            {
+                foreach (FieldDefinition field in self.Fields)
+                    yield return field;
+            }
+
+            if (self.HasEvents)
+            {
+                foreach (EventDefinition evt in self.Events)
+                    yield return evt;
+            }
+
+            if (self.HasProperties)
+            {
+                foreach (PropertyDefinition prop in self.Properties)
+                    yield return prop;
+            }
+
+            if (self.HasMethods)
+            {
+                foreach (MethodDefinition method in self.Methods)
+                    yield return method;
+            }
+
+            if (self.HasNestedTypes)
+            {
+                foreach (TypeDefinition type in self.NestedTypes)
+                    yield return type;
+            }
+        } 
     }
 }

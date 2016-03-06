@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Runtime.Remoting.Contexts;
 using System.Threading;
 using Mono.Cecil;
 using Spinner.Aspects;
@@ -30,6 +32,7 @@ namespace Spinner.Fody
         private readonly ModuleWeaver _weaver;
         private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
         private readonly Dictionary<MethodDefinition, Features> _typeFeatures;
+        private readonly Dictionary<TypeReference, AdviceType> _adviceTypes; 
         private int _aspectIndexCounter;
 
         internal ModuleWeavingContext(ModuleWeaver weaver, ModuleDefinition module, ModuleDefinition libraryModule)
@@ -78,6 +81,17 @@ namespace Spinner.Fody
                 {Spinner.IEventInterceptionAspect_OnRemoveHandler, Features.None},
                 {Spinner.IEventInterceptionAspect_OnInvokeHandler, Features.None}
             };
+
+            _adviceTypes = new Dictionary<TypeReference, AdviceType>(new TypeReferenceIsSameComparer())
+            {
+                {Spinner.MethodEntryAdvice, AdviceType.MethodEntry},
+                {Spinner.MethodExitAdvice, AdviceType.MethodExit},
+                {Spinner.MethodSuccessAdvice, AdviceType.MethodSuccess},
+                {Spinner.MethodExceptionAdvice, AdviceType.MethodException},
+                {Spinner.MethodYieldAdvice, AdviceType.MethodYield},
+                {Spinner.MethodResumeAdvice, AdviceType.MethodResume},
+                {Spinner.MethodInvokeAdvice, AdviceType.MethodInvoke}
+            };
         }
 
         /// <summary>
@@ -88,7 +102,12 @@ namespace Spinner.Fody
         /// <summary>
         /// Gets a dictionary that maps aspect interface method definitions to the type feature they indicate support of.
         /// </summary>
-        internal IReadOnlyDictionary<MethodDefinition, Features> TypeFeatures => _typeFeatures; 
+        internal IReadOnlyDictionary<MethodDefinition, Features> TypeFeatures => _typeFeatures;
+
+        /// <summary>
+        /// Gets a dictionary that maps advice attribute types to the AdviceType enum.
+        /// </summary>
+        internal IReadOnlyDictionary<TypeReference, AdviceType> AdviceTypes => _adviceTypes; 
 
         internal TypeReference SafeImport(Type type)
         {
@@ -150,6 +169,102 @@ namespace Spinner.Fody
         internal int NewAspectIndex()
         {
             return Interlocked.Increment(ref _aspectIndexCounter);
+        }
+
+        /// <summary>
+        /// Get the features declared for a type. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
+        /// </summary>
+        internal Features GetFeatures(TypeDefinition aspectType)
+        {
+            TypeDefinition attrType = Spinner.FeaturesAttribute;
+            TypeDefinition analyzedAttrType = Spinner.AnalyzedFeaturesAttribute;
+
+            Features? features = null;
+
+            TypeDefinition current = aspectType;
+            while (current != null)
+            {
+                if (current.HasCustomAttributes)
+                {
+                    foreach (CustomAttribute a in current.CustomAttributes)
+                    {
+                        TypeReference atype = a.AttributeType;
+
+                        if (atype.IsSame(analyzedAttrType))
+                        {
+                            return (Features) (uint) a.ConstructorArguments.First().Value;
+                        }
+
+                        if (atype.IsSame(attrType))
+                        {
+                            features = (Features) (uint) a.ConstructorArguments.First().Value;
+                            // Continue in case AnalyzedFeaturesAttribute is found.
+                        }
+                    }
+                }
+
+                // No need to examine base type if found here
+                if (features.HasValue)
+                    return features.Value;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return Features.None;
+        }
+
+        /// <summary>
+        /// Get the features declared for an advice. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
+        /// </summary>
+        internal Features GetFeatures(MethodDefinition advice)
+        {
+            TypeDefinition attrType = Spinner.FeaturesAttribute;
+            TypeDefinition analyzedAttrType = Spinner.AnalyzedFeaturesAttribute;
+
+            Features? features = null;
+
+            MethodDefinition current = advice;
+            while (current != null)
+            {
+                if (current.HasCustomAttributes)
+                {
+                    foreach (CustomAttribute a in current.CustomAttributes)
+                    {
+                        TypeReference atype = a.AttributeType;
+
+                        if (atype.IsSame(analyzedAttrType))
+                        {
+                            return (Features) (uint) a.ConstructorArguments.First().Value;
+                        }
+
+                        if (atype.IsSame(attrType))
+                        {
+                            features = (Features) (uint) a.ConstructorArguments.First().Value;
+                            // Continue in case AnalyzedFeaturesAttribute is found on same type.
+                        }
+                    }
+                }
+
+                if (features.HasValue)
+                    return features.Value;
+
+                current = current.DeclaringType.BaseType?.Resolve()?.GetMethod(advice, true);
+            }
+
+            return Features.None;
+        }
+
+        private class TypeReferenceIsSameComparer : IEqualityComparer<TypeReference>
+        {
+            public bool Equals(TypeReference x, TypeReference y)
+            {
+                return x.IsSame(y);
+            }
+
+            public int GetHashCode(TypeReference obj)
+            {
+                return obj.Name.GetHashCode();
+            }
         }
     }
 }

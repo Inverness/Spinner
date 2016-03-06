@@ -6,7 +6,7 @@ namespace Spinner.TestTarget
     {
         private int _x;
         
-        [BasicLogginaPia]
+        //[BasicLogginaPia]
         public int Basic
         {
             get { return _x; }
@@ -14,7 +14,7 @@ namespace Spinner.TestTarget
             set { _x = value + 1; }
         }
 
-        [PropertyNameLoggingPia]
+        //[PropertyNameLoggingPia]
         public int BasicWithName
         {
             get { return _x; }
@@ -22,7 +22,7 @@ namespace Spinner.TestTarget
             set { _x = value + 2; }
         }
 
-        [BasicLogginaPia]
+        //[BasicLogginaPia]
         public int this[int index, string a]
         {
             get { return _x + index; }

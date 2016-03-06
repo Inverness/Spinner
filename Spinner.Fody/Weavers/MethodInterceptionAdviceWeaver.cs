@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using Mono.Cecil;
+﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Spinner.Aspects;
@@ -22,14 +19,14 @@ namespace Spinner.Fody.Weavers
         private FieldReference _returnValueField;
         private VariableDefinition _miaVar;
 
-        internal MethodInterceptionAdviceWeaver(AspectInfo aspect, AdviceInfo invoke, MethodDefinition method)
-            : base(aspect)
+        internal MethodInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo invoke, MethodDefinition method)
+            : base(parent)
         {
             _invokeAdvice = invoke;
             _method = method;
         }
 
-        protected override void Weave()
+        public override void Weave()
         {
             _original = DuplicateOriginalMethod(_method);
             
@@ -60,7 +57,7 @@ namespace Spinner.Fody.Weavers
             
             WriteMiaInit(method, il.Count, argumentsVariable);
 
-            if (_aspectFeatures.Has(Features.MemberInfo))
+            if (Aspect.Features.Has(Features.MemberInfo))
                 WriteSetMethodInfo(method, null, il.Count, _miaVar, null);
             
             WriteCallAdvice(method, il.Count, (MethodReference) _invokeAdvice.Source, _miaVar);
@@ -96,23 +93,23 @@ namespace Spinner.Fody.Weavers
             
             if (method.ReturnType == module.TypeSystem.Void)
             {
-                TypeDefinition miaTypeDef = _mwc.Spinner.BoundMethodInterceptionArgs;
-                miaType = _mwc.SafeImport(miaTypeDef);
+                TypeDefinition miaTypeDef = Context.Spinner.BoundMethodInterceptionArgs;
+                miaType = Context.SafeImport(miaTypeDef);
 
-                MethodDefinition constructorDef = _mwc.Spinner.BoundMethodInterceptionArgs_ctor;
-                constructor = _mwc.SafeImport(constructorDef);
+                MethodDefinition constructorDef = Context.Spinner.BoundMethodInterceptionArgs_ctor;
+                constructor = Context.SafeImport(constructorDef);
             }
             else
             {
-                TypeDefinition miaTypeDef = _mwc.Spinner.BoundMethodInterceptionArgsT1;
-                GenericInstanceType genericMiaType = _mwc.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
+                TypeDefinition miaTypeDef = Context.Spinner.BoundMethodInterceptionArgsT1;
+                GenericInstanceType genericMiaType = Context.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
                 miaType = genericMiaType;
 
-                MethodDefinition constructorDef = _mwc.Spinner.BoundMethodInterceptionArgsT1_ctor;
-                constructor = _mwc.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
+                MethodDefinition constructorDef = Context.Spinner.BoundMethodInterceptionArgsT1_ctor;
+                constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
 
-                FieldDefinition returnValueFieldDef = _mwc.Spinner.BoundMethodInterceptionArgsT1_TypedReturnValue;
-                _returnValueField = _mwc.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
+                FieldDefinition returnValueFieldDef = Context.Spinner.BoundMethodInterceptionArgsT1_TypedReturnValue;
+                _returnValueField = Context.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
             _miaVar = method.Body.AddVariableDefinition(miaType);
@@ -134,7 +131,7 @@ namespace Spinner.Fody.Weavers
 
             il.EmitLoadOrNull(argumentsVariable, null);
             
-            il.Emit(OpCodes.Ldsfld, _bindingInstanceField);
+            il.Emit(OpCodes.Ldsfld, BindingInstanceField);
 
             il.Emit(OpCodes.Newobj, constructor);
             il.Emit(OpCodes.Stloc, _miaVar);
@@ -150,14 +147,14 @@ namespace Spinner.Fody.Weavers
 
             if (_method.ReturnType == module.TypeSystem.Void)
             {
-                baseType = _mwc.SafeImport(_mwc.Spinner.MethodBinding);
+                baseType = Context.SafeImport(Context.Spinner.MethodBinding);
             }
             else
             {
-                baseType = _mwc.SafeImport(_mwc.Spinner.MethodBindingT1).MakeGenericInstanceType(_method.ReturnType);
+                baseType = Context.SafeImport(Context.Spinner.MethodBindingT1).MakeGenericInstanceType(_method.ReturnType);
             }
 
-            string name = NameGenerator.MakeMethodBindingName(_method.Name, _aspectIndex);
+            string name = NameGenerator.MakeMethodBindingName(_method.Name, Aspect.Index);
 
             CreateBindingClass(baseType, name);
 
@@ -171,10 +168,10 @@ namespace Spinner.Fody.Weavers
 
             var invokeMethod = new MethodDefinition(InvokeMethodName, invokeAttrs, _method.ReturnType);
 
-            _bindingClass.Methods.Add(invokeMethod);
+            BindingClass.Methods.Add(invokeMethod);
 
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-            TypeReference argumentsBaseType = _mwc.SafeImport(_mwc.Spinner.Arguments);
+            TypeReference argumentsBaseType = Context.SafeImport(Context.Spinner.Arguments);
 
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));

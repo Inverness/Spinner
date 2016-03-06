@@ -1,4 +1,5 @@
 using Mono.Cecil;
+using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weavers
@@ -18,6 +19,7 @@ namespace Spinner.Fody.Weavers
             Index = index;
             Target = target;
             Order = order;
+            Features = mwc.GetFeatures(mi.AttributeType);
         }
 
         public ModuleWeavingContext Context { get; }
@@ -31,5 +33,7 @@ namespace Spinner.Fody.Weavers
         public ICustomAttributeProvider Target { get; }
 
         public MulticastInstance Source { get; }
+
+        public Features Features { get; }
     }
 }

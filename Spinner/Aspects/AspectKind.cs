@@ -6,6 +6,7 @@ namespace Spinner.Aspects
     /// </summary>
     public enum AspectKind
     {
+        Composed,
         MethodBoundary,
         MethodInterception,
         PropertyInterception,

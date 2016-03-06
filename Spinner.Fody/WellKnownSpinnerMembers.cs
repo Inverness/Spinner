@@ -131,9 +131,15 @@ namespace Spinner.Fody
 
         internal readonly TypeDefinition GroupingAdvice;
         internal readonly PropertyDefinition GroupingAdvice_Master;
+        internal readonly TypeDefinition MethodInvokeAdvice;
         internal readonly TypeDefinition MethodBoundaryAdvice;
         internal readonly PropertyDefinition MethodBoundaryAdvice_ApplyToStateMachine;
         internal readonly TypeDefinition MethodEntryAdvice;
+        internal readonly TypeDefinition MethodExitAdvice;
+        internal readonly TypeDefinition MethodSuccessAdvice;
+        internal readonly TypeDefinition MethodExceptionAdvice;
+        internal readonly TypeDefinition MethodYieldAdvice;
+        internal readonly TypeDefinition MethodResumeAdvice;
         internal readonly TypeDefinition MethodPointcut;
         internal readonly TypeDefinition SelfPointcut;
         internal readonly TypeDefinition MulticastPointcut;
@@ -274,9 +280,15 @@ namespace Spinner.Fody
 
             GroupingAdvice = type = module.GetType(NsAv, nameof(SpAv.GroupingAdvice));
             GroupingAdvice_Master = type.GetProperty(nameof(SpAv.GroupingAdvice.Master), false);
+            MethodInvokeAdvice = module.GetType(NsAv, nameof(SpAv.MethodInvokeAdvice));
             MethodBoundaryAdvice = type = module.GetType(NsAv, nameof(SpAv.MethodBoundaryAdvice));
             MethodBoundaryAdvice_ApplyToStateMachine = type.GetProperty(nameof(SpAv.MethodBoundaryAdvice.ApplyToStateMachine), false);
             MethodEntryAdvice = module.GetType(NsAv, nameof(SpAv.MethodEntryAdvice));
+            MethodExitAdvice = module.GetType(NsAv, nameof(SpAv.MethodExitAdvice));
+            MethodSuccessAdvice = module.GetType(NsAv, nameof(SpAv.MethodSuccessAdvice));
+            MethodExceptionAdvice = module.GetType(NsAv, nameof(SpAv.MethodExceptionAdvice));
+            MethodYieldAdvice = module.GetType(NsAv, nameof(SpAv.MethodYieldAdvice));
+            MethodResumeAdvice = module.GetType(NsAv, nameof(SpAv.MethodResumeAdvice));
             MethodPointcut = module.GetType(NsAv, nameof(SpAv.MethodPointcut));
             MulticastPointcut = module.GetType(NsAv, nameof(SpAv.MulticastPointcut));
             SelfPointcut = module.GetType(NsAv, nameof(SpAv.SelfPointcut));
