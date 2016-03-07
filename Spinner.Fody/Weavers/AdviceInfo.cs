@@ -28,7 +28,7 @@ namespace Spinner.Fody.Weavers
 
         public abstract AdviceType AdviceType { get; }
 
-        public abstract MulticastTargets Targets { get; }
+        public abstract MulticastTargets ValidTargets { get; }
 
         public AspectInfo Aspect { get; }
 

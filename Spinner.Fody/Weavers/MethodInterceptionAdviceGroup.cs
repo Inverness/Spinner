@@ -13,7 +13,7 @@ namespace Spinner.Fody.Weavers
 
         internal AdviceInfo Invoke { get; private set; }
 
-        internal override AdviceWeaver CreateWeaver(AspectWeaver parent, ICustomAttributeProvider target)
+        internal override AdviceWeaver CreateWeaver(AspectWeaver parent, IMetadataTokenProvider target)
         {
             return new MethodInterceptionAdviceWeaver(parent, Invoke, (MethodDefinition) target);
         }

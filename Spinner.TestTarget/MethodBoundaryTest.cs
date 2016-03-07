@@ -5,10 +5,10 @@ using Spinner.TestTarget.Aspects;
 
 namespace Spinner.TestTarget
 {
+    [ComposedBasicLoggingMba]
     public class MethodBoundaryTest
     {
         //[BasicLoggingMba(55)]
-        [ComposedBasicLoggingMba]
         public int OneAspect(int a, out int b, string c)
         {
             b = 20;

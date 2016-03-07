@@ -14,7 +14,7 @@ namespace Spinner.Fody.Weavers
 
         public override AdviceType AdviceType { get; }
 
-        public override MulticastTargets Targets => MulticastTargets.Method;
+        public override MulticastTargets ValidTargets => MulticastTargets.Method;
 
         public bool? ApplyToStateMachine { get; private set; }
 

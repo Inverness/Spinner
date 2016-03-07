@@ -12,6 +12,6 @@ namespace Spinner.Fody.Weavers
 
         public override AdviceType AdviceType => AdviceType.MethodInvoke;
 
-        public override MulticastTargets Targets => MulticastTargets.Method;
+        public override MulticastTargets ValidTargets => MulticastTargets.Method;
     }
 }

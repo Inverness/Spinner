@@ -28,7 +28,7 @@ namespace Spinner.Fody.Weavers
             base.AddChild(advice);
         }
 
-        internal override AdviceWeaver CreateWeaver(AspectWeaver parent, ICustomAttributeProvider target)
+        internal override AdviceWeaver CreateWeaver(AspectWeaver parent, IMetadataTokenProvider target)
         {
             return new MethodBoundaryAdviceWeaver(parent,
                                                   Entry,

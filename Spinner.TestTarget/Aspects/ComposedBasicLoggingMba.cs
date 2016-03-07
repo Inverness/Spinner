@@ -1,12 +1,14 @@
 using System;
 using Spinner.Aspects;
 using Spinner.Aspects.Advices;
+using Spinner.Extensibility;
 
 namespace Spinner.TestTarget.Aspects
 {
-    public sealed class ComposedBasicLoggingMba : MethodLevelAspect
+    public sealed class ComposedBasicLoggingMba : TypeLevelAspect
     {
         [MethodEntryAdvice]
+        [MulticastPointcut(Targets = MulticastTargets.Method, Attributes = MulticastAttributes.Public | ~MulticastAttributes.AnyVisibility)]
         public void OnEntry(MethodExecutionArgs args)
         {
             Console.WriteLine(GetType().Name + " OnEntry called ");

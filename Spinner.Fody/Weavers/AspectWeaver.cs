@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
+using Spinner.Extensibility;
+using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weavers
 {
@@ -28,10 +31,43 @@ namespace Spinner.Fody.Weavers
 
         public virtual void Weave()
         {
-            foreach (AdviceGroup g in AdviceGroups)
+            MulticastTargets targetType = Target.GetMulticastTargetType();
+
+            foreach (AdviceGroup group in AdviceGroups)
             {
-                var w = g.CreateWeaver(this, null);
-                w.Weave();
+                AdviceInfo master = group.Master;
+
+                switch (group.PointcutType)
+                {
+                    case null:
+                    case PointcutType.Self:
+                        if ((group.Master.ValidTargets & targetType) != 0)
+                        {
+                            var w = group.CreateWeaver(this, Target);
+                            w.Weave();
+                        }
+
+                        break;
+                    case PointcutType.Multicast:
+                        var ma = new MulticastArguments
+                        {
+                            TargetElements = group.PointcutTargets & master.ValidTargets,
+                            TargetMemberAttributes = group.PointcutAttributes,
+                            TargetExternalMemberAttributes = group.PointcutAttributes,
+                            TargetMembers = group.PointcutMemberName
+                        };
+
+                        foreach (IMetadataTokenProvider d in Context.MulticastEngine.GetDescendants(Target, ma))
+                        {
+                            var w = group.CreateWeaver(this, d);
+                            w.Weave();
+                        }
+                        break;
+                    case PointcutType.Method:
+                        throw new NotImplementedException();
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
             }
         }
 

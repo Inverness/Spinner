@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Mono.Cecil;
 using Spinner.Aspects.Advices;
 using Spinner.Extensibility;
+using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 
 namespace Spinner.Fody.Weavers
@@ -43,7 +44,7 @@ namespace Spinner.Fody.Weavers
 
         internal MulticastAttributes PointcutAttributes { get; private set; }
 
-        internal string PointcutMemberName { get; private set; }
+        internal StringMatcher PointcutMemberName { get; private set; }
 
         internal MulticastTargets PointcutTargets { get; private set; }
 
@@ -55,7 +56,7 @@ namespace Spinner.Fody.Weavers
             _slaves.Add(advice);
         }
 
-        internal abstract AdviceWeaver CreateWeaver(AspectWeaver parent, ICustomAttributeProvider target);
+        internal abstract AdviceWeaver CreateWeaver(AspectWeaver parent, IMetadataTokenProvider target);
 
         protected static void ThrowIfDuplicate(AdviceInfo advice)
         {
@@ -87,7 +88,7 @@ namespace Spinner.Fody.Weavers
                     PointcutType = Weavers.PointcutType.Multicast;
                     PointcutAttributes = (MulticastAttributes) attributes;
                     PointcutTargets = (MulticastTargets) targets;
-                    PointcutMemberName = memberName;
+                    PointcutMemberName = StringMatcher.Create(memberName);
                 }
                 else if (ca.AttributeType.IsSame(mwc.Spinner.MethodPointcut))
                 {
