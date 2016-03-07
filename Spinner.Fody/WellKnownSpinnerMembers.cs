@@ -138,6 +138,7 @@ namespace Spinner.Fody
         internal readonly TypeDefinition MethodExitAdvice;
         internal readonly TypeDefinition MethodSuccessAdvice;
         internal readonly TypeDefinition MethodExceptionAdvice;
+        internal readonly TypeDefinition MethodFilterExceptionAdvice;
         internal readonly TypeDefinition MethodYieldAdvice;
         internal readonly TypeDefinition MethodResumeAdvice;
         internal readonly TypeDefinition MethodPointcut;
@@ -287,6 +288,7 @@ namespace Spinner.Fody
             MethodExitAdvice = module.GetType(NsAv, nameof(SpAv.MethodExitAdvice));
             MethodSuccessAdvice = module.GetType(NsAv, nameof(SpAv.MethodSuccessAdvice));
             MethodExceptionAdvice = module.GetType(NsAv, nameof(SpAv.MethodExceptionAdvice));
+            MethodFilterExceptionAdvice = module.GetType(NsAv, nameof(SpAv.MethodFilterExceptionAdvice));
             MethodYieldAdvice = module.GetType(NsAv, nameof(SpAv.MethodYieldAdvice));
             MethodResumeAdvice = module.GetType(NsAv, nameof(SpAv.MethodResumeAdvice));
             MethodPointcut = module.GetType(NsAv, nameof(SpAv.MethodPointcut));

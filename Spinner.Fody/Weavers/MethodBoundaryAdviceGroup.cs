@@ -18,6 +18,8 @@ namespace Spinner.Fody.Weavers
 
         internal AdviceInfo Exception { get; private set; }
 
+        internal AdviceInfo FilterException { get; private set; }
+
         internal AdviceInfo Yield { get; private set; }
 
         internal AdviceInfo Resume { get; private set; }
@@ -35,6 +37,7 @@ namespace Spinner.Fody.Weavers
                                                   Exit,
                                                   Success,
                                                   Exception,
+                                                  FilterException,
                                                   Yield,
                                                   Resume,
                                                   (MethodDefinition) target);
@@ -59,6 +62,10 @@ namespace Spinner.Fody.Weavers
                 case AdviceType.MethodException:
                     ThrowIfDuplicate(Exception);
                     Exception = advice;
+                    break;
+                case AdviceType.MethodFilterException:
+                    ThrowIfDuplicate(FilterException);
+                    FilterException = advice;
                     break;
                 case AdviceType.MethodYield:
                     ThrowIfDuplicate(Yield);

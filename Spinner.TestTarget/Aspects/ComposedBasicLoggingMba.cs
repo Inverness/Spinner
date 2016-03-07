@@ -33,7 +33,8 @@ namespace Spinner.TestTarget.Aspects
             throw new Exception("Wrapping Exception", args.Exception);
         }
 
-        public bool FilterException(MethodExecutionArgs args, Exception ex)
+        [MethodFilterExceptionAdvice(Master = "OnEntry")]
+        public bool OnFilterException(MethodExecutionArgs args, Exception ex)
         {
             Console.WriteLine(GetType().Name + " FilterException called " + ex);
             return true;

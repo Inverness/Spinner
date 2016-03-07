@@ -46,6 +46,11 @@ namespace Spinner.Fody.Weavers
 
         public Features Features { get; }
 
+        public MethodReference ImportSourceMethod()
+        {
+            return Aspect.Context.SafeImport((MethodReference) Source);
+        }
+
         protected virtual void ParseAttribute()
         {
             Master = (string) Attribute.GetNamedArgumentValue(nameof(GroupingAdvice.Master));

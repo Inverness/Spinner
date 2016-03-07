@@ -21,6 +21,7 @@ namespace Spinner.Fody.Weavers
         private readonly AdviceInfo _exitAdvice;
         private readonly AdviceInfo _successAdvice;
         private readonly AdviceInfo _exceptionAdvice;
+        private readonly AdviceInfo _filterExceptionAdvice;
         private readonly AdviceInfo _yieldAdvice;
         private readonly AdviceInfo _resumeAdvice;
         private readonly MethodDefinition _method;
@@ -28,7 +29,16 @@ namespace Spinner.Fody.Weavers
         private TypeReference _effectiveReturnType;
         private readonly bool _applyToStateMachine;
 
-        internal MethodBoundaryAdviceWeaver(AspectWeaver parent, AdviceInfo entry, AdviceInfo exit, AdviceInfo success, AdviceInfo exception, AdviceInfo yield, AdviceInfo resume, MethodDefinition method) 
+        internal MethodBoundaryAdviceWeaver(
+            AspectWeaver parent,
+            AdviceInfo entry,
+            AdviceInfo exit,
+            AdviceInfo success,
+            AdviceInfo exception,
+            AdviceInfo filterException,
+            AdviceInfo yield,
+            AdviceInfo resume,
+            MethodDefinition method)
             : base(parent, method)
         {
             //Debug.Assert(advices.All(a => a.Aspect == aspect), "advices must be for the same aspect");
@@ -38,10 +48,13 @@ namespace Spinner.Fody.Weavers
             _exitAdvice = exit;
             _successAdvice = success;
             _exceptionAdvice = exception;
+            _filterExceptionAdvice = filterException;
             _yieldAdvice = yield;
             _resumeAdvice = resume;
             _method = method;
-            _applyToStateMachine = parent.Aspect.Source.Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
+            _applyToStateMachine =
+                parent.Aspect.Source.Attribute.GetNamedArgumentValue(
+                    nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
         }
 
         public override void Weave()
@@ -135,7 +148,7 @@ namespace Spinner.Fody.Weavers
 
             // Write OnEntry call
             if (_entryAdvice != null)
-                WriteOnEntryCall(method, insc.Count, _entryAdvice, meaVar, null);
+                WriteOnEntryCall(method, insc.Count, meaVar, null);
 
             // Re-add original body
             insc.AddRange(originalInsc);
@@ -278,7 +291,7 @@ namespace Spinner.Fody.Weavers
                 WriteSetMethodInfo(method, stateMachine, insc.Count - eoffInit, null, meaField);
             
             if (_entryAdvice != null)
-                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, _entryAdvice, null, meaField);
+                WriteOnEntryCall(stateMachine, insc.Count - eoffInit, null, meaField);
 
             // Write OnYield() and OnResume() calls. This is done by searching the body for the offsets of await
             // method calls like GetAwaiter(), get_IsCompleted(), and GetResult(), and then writing instructions
@@ -446,7 +459,7 @@ namespace Spinner.Fody.Weavers
                 WriteSetMethodInfo(method, stateMachine, insc.Count - initEndOffset, null, meaField);
             
             if (_entryAdvice != null)
-                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, _entryAdvice, null, meaField);
+                WriteOnEntryCall(stateMachine, insc.Count - initEndOffset, null, meaField);
 
             // TODO: Yield and Resume
 
@@ -742,11 +755,10 @@ namespace Spinner.Fody.Weavers
         private void WriteOnEntryCall(
             MethodDefinition method,
             int offset,
-            AdviceInfo advice,
             VariableDefinition meaVarOpt,
             FieldReference meaFieldOpt)
         {
-            MethodReference onEntry = Context.SafeImport((MethodDefinition) advice.Source);
+            MethodReference onEntry = _entryAdvice.ImportSourceMethod();
             //Features adviceFeatures = GetFeatures(onEntryDef);
 
             var il = new ILProcessorEx();
@@ -880,7 +892,7 @@ namespace Spinner.Fody.Weavers
             FieldReference meaFieldOpt,
             VariableDefinition returnVarOpt)
         {
-            MethodReference onSuccess = Context.SafeImport((MethodDefinition) _successAdvice.Source);
+            MethodReference onSuccess = _successAdvice.ImportSourceMethod();
 
             var il = new ILProcessorEx();
 
@@ -925,9 +937,13 @@ namespace Spinner.Fody.Weavers
             FieldReference meaField,
             int tryStart)
         {
-            //MethodDefinition filterExceptionDef = Aspect.AspectType.GetMethod(Context.Spinner.IMethodBoundaryAspect_FilterException, true);
-            //MethodReference filterExcetion = Context.SafeImport(filterExceptionDef);
-            MethodReference onException = Context.SafeImport((MethodDefinition) _exceptionAdvice.Source);
+            bool withFilter = _filterExceptionAdvice != null;
+
+            MethodReference onFilterException = null;
+            if (withFilter)
+                onFilterException = _filterExceptionAdvice.ImportSourceMethod();
+
+            MethodReference onException = _exceptionAdvice.ImportSourceMethod();
             TypeReference exceptionType = Context.SafeImport(Context.Framework.Exception);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
@@ -936,43 +952,50 @@ namespace Spinner.Fody.Weavers
 
             var il = new ILProcessorEx();
 
-            Ins labelFilterTrue = il.CreateNop();
-            Ins labelFilterEnd = il.CreateNop();
+            int ehCatchStart;
+            if (withFilter)
+            {
+                Ins labelFilterTrue = il.CreateNop();
+                Ins labelFilterEnd = il.CreateNop();
 
-            // Check if its actually Exception. Non-Exception types can be thrown by native code.
-            il.Emit(OpCodes.Isinst, exceptionType);
-            il.Emit(OpCodes.Dup);
-            il.Emit(OpCodes.Brtrue, labelFilterTrue);
+                // Check if its actually Exception. Non-Exception types can be thrown by native code.
+                il.Emit(OpCodes.Isinst, exceptionType);
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Brtrue, labelFilterTrue);
 
-            // Not an Exception, load 0 as endfilter argument
-            il.Emit(OpCodes.Pop);
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Br, labelFilterEnd);
+                // Not an Exception, load 0 as endfilter argument
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Br, labelFilterEnd);
 
-            // Call FilterException()
-            il.Append(labelFilterTrue);
-            il.Emit(OpCodes.Stloc, exceptionHolder);
-            //il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            //il.EmitLoadOrNull(meaVar, meaField);
-            //il.Emit(OpCodes.Ldloc, exceptionHolder);
-            //il.Emit(OpCodes.Callvirt, filterExcetion);
+                // Call FilterException()
+                il.Append(labelFilterTrue);
+                il.Emit(OpCodes.Stloc, exceptionHolder);
+                il.Emit(OpCodes.Ldsfld, Parent.AspectField);
+                il.EmitLoadOrNull(meaVar, meaField);
+                il.Emit(OpCodes.Ldloc, exceptionHolder);
+                il.Emit(OpCodes.Callvirt, onFilterException);
 
-            // Compare FilterException result with 0 to get the endfilter argument
-            //il.Emit(OpCodes.Ldc_I4_0);
-            //il.Emit(OpCodes.Cgt_Un);
-            il.Emit(OpCodes.Ldc_I4_1);
-            il.Append(labelFilterEnd);
-            il.Emit(OpCodes.Endfilter);
+                // Compare FilterException result with 0 to get the endfilter argument
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);
+                il.Append(labelFilterEnd);
+                il.Emit(OpCodes.Endfilter);
 
-            int ehCatchStart = il.Instructions.Count;
+                ehCatchStart = il.Instructions.Count;
 
-            il.Emit(OpCodes.Pop); // Exception already stored
+                il.Emit(OpCodes.Pop); // Exception already stored
+            }
+            else
+            {
+                ehCatchStart = il.Instructions.Count;
+
+                il.Emit(OpCodes.Stloc, exceptionHolder);
+            }
 
             // Call OnException()
             if (meaVar != null || meaField != null)
             {
-                //Features onExceptionFeatures = GetFeatures(onExceptionDef);
-                //MethodReference getException = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_Exception.GetMethod);
                 MethodReference setException = Context.SafeImport(Context.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
                 il.EmitLoadOrNull(meaVar, meaField);
@@ -982,68 +1005,6 @@ namespace Spinner.Fody.Weavers
                 il.Emit(OpCodes.Ldsfld, Parent.AspectField);
                 il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Callvirt, onException);
-
-                //if (onExceptionFeatures.Has(Features.FlowControl))
-                //{
-                //    MethodReference getFlowBehavior = _mwc.SafeImport(_mwc.Spinner.MethodExecutionArgs_FlowBehavior.GetMethod);
-
-                //    returnTarget = il.CreateNop();
-
-                //    Ins continueCase = il.CreateNop();
-                //    Ins rethrowCase = il.CreateNop();
-                //    Ins returnCase = il.CreateNop();
-
-                //    il.EmitLoadVarOrField(meaVar, meaField);
-                //    il.Emit(OpCodes.Callvirt, getFlowBehavior);
-
-                //    il.Emit(OpCodes.Switch, new[] {rethrowCase, continueCase, rethrowCase, returnCase});
-                //    il.Emit(OpCodes.Br, rethrowCase); // fallthrough
-
-                //    il.Append(continueCase);
-                //    il.Emit(OpCodes.Leave, continueTarget); // TEMP!!!
-
-                //    il.Append(rethrowCase);
-                //    il.Emit(OpCodes.Rethrow);
-
-                //    il.Append(returnCase);
-
-                //    // Store the ReturnValue property in the variable if necessary
-                //    if (returnValueVarOpt != null)
-                //    {
-                //        MethodDefinition getReturnValueDef = _mwc.Spinner.MethodExecutionArgs_ReturnValue.GetMethod;
-                //        MethodReference getReturnValue = _mwc.SafeImport(getReturnValueDef);
-                //        TypeReference varType = _mwc.SafeImport(returnValueVarOpt.VariableType);
-
-                //        il.EmitLoadVarOrField(meaVar, meaField);
-                //        il.Emit(OpCodes.Callvirt, getReturnValue);
-                //        if (varType.IsValueType)
-                //            il.Emit(OpCodes.Unbox_Any, varType);
-                //        else if (!varType.IsSame(_method.Module.TypeSystem.Object))
-                //            il.Emit(OpCodes.Castclass, varType);
-                //        il.Emit(OpCodes.Stloc, returnValueVarOpt);
-                //    }
-
-                //    il.Emit(OpCodes.Leave, returnTarget);
-                //}
-                //else
-                //{
-                //    il.Emit(OpCodes.Rethrow);
-                //}
-
-                //Ins labelCaught = il.CreateNop();
-
-                //// If the Exception property was set to null, return normally, otherwise rethrow
-                //// Changeing the exception object will not throw the new value, instead the OnException() advice
-                //// should throw.
-                //il.EmitLoadAdviceArgs(meaVar, meaField);
-                //il.Emit(OpCodes.Callvirt, getException);
-                //il.Emit(OpCodes.Dup);
-                //il.Emit(OpCodes.Brfalse, labelCaught);
-
-                //il.Emit(OpCodes.Rethrow);
-
-                //il.Append(labelCaught);
-                //il.Emit(OpCodes.Pop);
             }
             else
             {
@@ -1060,11 +1021,11 @@ namespace Spinner.Fody.Weavers
             // Do not fix offsets since exception handlers are special.
             targetMethod.Body.InsertInstructions(offset, false, il.Instructions);
 
-            var eh = new ExceptionHandler(ExceptionHandlerType.Filter)
+            var eh = new ExceptionHandler(withFilter ? ExceptionHandlerType.Filter : ExceptionHandlerType.Catch)
             {
                 TryStart = targetMethod.Body.Instructions[tryStart],
                 TryEnd = il.Instructions[0],
-                FilterStart = il.Instructions[0],
+                FilterStart = withFilter ? il.Instructions[0] : null,
                 HandlerStart = il.Instructions[ehCatchStart],
                 HandlerEnd = il.Instructions[ehCatchEnd],
                 CatchType = exceptionType
@@ -1082,7 +1043,7 @@ namespace Spinner.Fody.Weavers
             int tryStart,
             VariableDefinition hasNextVarOpt)
         {
-            MethodReference onExit = Context.SafeImport((MethodDefinition) _exitAdvice.Source);
+            MethodReference onExit = _exitAdvice.ImportSourceMethod();
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
 
@@ -1144,7 +1105,7 @@ namespace Spinner.Fody.Weavers
 
             if (eoffYield != -1 && _yieldAdvice != null)
             {
-                MethodReference onYield = Context.SafeImport((MethodDefinition) _yieldAdvice.Source);
+                MethodReference onYield = _yieldAdvice.ImportSourceMethod();
 
                 //// Need to know whether the awaitable is a value type. It will be boxed as object if so, instead
                 //// of trying to create a local variable for each type found.
@@ -1191,7 +1152,7 @@ namespace Spinner.Fody.Weavers
 
             if (eoffResume != -1 && _resumeAdvice != null)
             {
-                MethodReference onResume = Context.SafeImport((MethodDefinition) _resumeAdvice.Source);
+                MethodReference onResume = _resumeAdvice.ImportSourceMethod();
 
                 //// Store the typed awaitable as YieldValue, optionally boxing it.
 

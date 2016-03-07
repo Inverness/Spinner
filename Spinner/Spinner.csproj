@@ -49,6 +49,7 @@
     <Compile Include="Aspects\Advices\MethodEntryAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodExceptionAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodExitAdvice.cs" />
+    <Compile Include="Aspects\Advices\MethodFilterExceptionAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodInvokeAdvice.cs" />
     <Compile Include="Aspects\Advices\MethodPointcut.cs" />
     <Compile Include="Aspects\Advices\MethodResumeAdvice.cs" />

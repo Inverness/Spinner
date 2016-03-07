@@ -204,6 +204,7 @@ namespace Spinner.Fody.Weavers
                     case AdviceType.MethodExit:
                     case AdviceType.MethodSuccess:
                     case AdviceType.MethodException:
+                    case AdviceType.MethodFilterException:
                     case AdviceType.MethodYield:
                     case AdviceType.MethodResume:
                         result = new MethodBoundaryAdviceInfo(type, aspect, (MethodDefinition) source, a);

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.Remoting.Contexts;
 using System.Threading;
 using Mono.Cecil;
 using Spinner.Aspects;
@@ -89,6 +88,7 @@ namespace Spinner.Fody
                 {Spinner.MethodExitAdvice, AdviceType.MethodExit},
                 {Spinner.MethodSuccessAdvice, AdviceType.MethodSuccess},
                 {Spinner.MethodExceptionAdvice, AdviceType.MethodException},
+                {Spinner.MethodFilterExceptionAdvice, AdviceType.MethodFilterException},
                 {Spinner.MethodYieldAdvice, AdviceType.MethodYield},
                 {Spinner.MethodResumeAdvice, AdviceType.MethodResume},
                 {Spinner.MethodInvokeAdvice, AdviceType.MethodInvoke}

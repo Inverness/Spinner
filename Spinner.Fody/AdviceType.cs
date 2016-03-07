@@ -6,6 +6,7 @@ namespace Spinner.Fody
         MethodExit,
         MethodSuccess,
         MethodException,
+        MethodFilterException,
         MethodYield,
         MethodResume,
 
