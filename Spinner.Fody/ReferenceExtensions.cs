@@ -340,6 +340,16 @@ namespace Spinner.Fody
                 foreach (TypeDefinition type in self.NestedTypes)
                     yield return type;
             }
-        } 
+        }
+
+        internal static MethodDefinition GetMethodDefinition(this ParameterDefinition p)
+        {
+            return (MethodDefinition) p.Method;
+        }
+
+        internal static MethodDefinition GetMethodDefinition(this MethodReturnType r)
+        {
+            return (MethodDefinition) r.Method;
+        }
     }
 }

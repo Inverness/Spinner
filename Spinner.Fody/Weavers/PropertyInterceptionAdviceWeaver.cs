@@ -22,7 +22,7 @@ namespace Spinner.Fody.Weavers
         private MethodDefinition _originalSetter;
 
         internal PropertyInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo get, AdviceInfo set, PropertyDefinition property)
-            : base(parent)
+            : base(parent, property)
         {
             _getAdvice = get;
             _setAdvice = set;
@@ -40,7 +40,7 @@ namespace Spinner.Fody.Weavers
             
             CreatePropertyBindingClass();
 
-            CreateAspectCacheField();
+            Parent.CreateAspectCacheField();
 
             if (getter != null)
                 WeaveMethod(getter);

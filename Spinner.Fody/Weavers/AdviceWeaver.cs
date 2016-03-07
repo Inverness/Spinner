@@ -23,16 +23,18 @@ namespace Spinner.Fody.Weavers
         internal readonly AspectInfo Aspect;
         internal readonly ModuleWeavingContext Context;
         internal readonly AspectWeaver Parent;
+        internal readonly IMetadataTokenProvider Target;
         
         internal TypeDefinition BindingClass;
         internal FieldDefinition BindingInstanceField;
         // ReSharper restore InconsistentNaming
 
-        protected AdviceWeaver(AspectWeaver parent)
+        protected AdviceWeaver(AspectWeaver parent, IMetadataTokenProvider adviceTarget)
         {
             Parent = parent;
             Aspect = parent.Aspect;
             Context = parent.Context;
+            Target = adviceTarget;
         }
 
         public virtual void Weave()
@@ -55,7 +57,7 @@ namespace Spinner.Fody.Weavers
 
             var original = new MethodDefinition(originalName, originalAttributes, method.ReturnType);
 
-            AddCompilerGeneratedAttribute(original);
+            Parent.AddCompilerGeneratedAttribute(original);
 
             original.Parameters.AddRange(method.Parameters);
             original.GenericParameters.AddRange(method.GenericParameters.Select(p => p.Clone(original)));
@@ -698,24 +700,6 @@ namespace Spinner.Fody.Weavers
             target.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
-        protected void CreateAspectCacheField()
-        {
-            if (Parent.AspectField != null)
-                return;
-
-            IMemberDefinition targetMember = (IMemberDefinition) Aspect.Target;
-
-            string name = NameGenerator.MakeAspectFieldName(targetMember.Name, Aspect.Index);
-
-            var fattrs = FieldAttributes.Private | FieldAttributes.Static;
-            
-            var aspectFieldDef = new FieldDefinition(name, fattrs, Context.SafeImport(Aspect.AspectType));
-            AddCompilerGeneratedAttribute(aspectFieldDef);
-            targetMember.DeclaringType.Fields.Add(aspectFieldDef);
-
-            Parent.AspectField = aspectFieldDef;
-        }
-
         protected MethodDefinition MakeDefaultConstructor(TypeDefinition type)
         {
             TypeDefinition baseTypeDef = type.BaseType.Resolve();
@@ -740,13 +724,6 @@ namespace Spinner.Fody.Weavers
             return method;
         }
 
-        protected void AddCompilerGeneratedAttribute(ICustomAttributeProvider definition)
-        {
-            MethodReference ctor = Context.SafeImport(Context.Framework.CompilerGeneratedAttribute_ctor);
-            
-            definition.CustomAttributes.Add(new CustomAttribute(ctor));
-        }
-
         /// <summary>
         /// Create a nested binding class with an empty default constructor and a static instance field.
         /// </summary>
@@ -765,7 +742,7 @@ namespace Spinner.Fody.Weavers
                 DeclaringType = targetMember.DeclaringType
             };
 
-            AddCompilerGeneratedAttribute(BindingClass);
+            Parent.AddCompilerGeneratedAttribute(BindingClass);
 
             targetMember.DeclaringType.NestedTypes.Add(BindingClass);
 

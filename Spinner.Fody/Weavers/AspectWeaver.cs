@@ -82,5 +82,57 @@ namespace Spinner.Fody.Weavers
                 _wroteInitFor = new HashSet<MethodDefinition>();
             _wroteInitFor.Add(method);
         }
+
+        internal void CreateAspectCacheField()
+        {
+            if (AspectField != null)
+                return;
+
+            IMemberDefinition member;
+            TypeDefinition hostType;
+            switch (Target.GetProviderType())
+            {
+                case ProviderType.Assembly:
+                    throw new InvalidOperationException();
+                case ProviderType.Type:
+                    member = hostType = (TypeDefinition) Target;
+                    break;
+                case ProviderType.Method:
+                case ProviderType.Property:
+                case ProviderType.Event:
+                case ProviderType.Field:
+                    member = (IMemberDefinition) Target;
+                    hostType = member.DeclaringType;
+                    break;
+                case ProviderType.Parameter:
+                    member = ((ParameterDefinition) Target).GetMethodDefinition();
+                    hostType = member.DeclaringType;
+                    break;
+                case ProviderType.MethodReturn:
+                    member = ((MethodReturnType) Target).GetMethodDefinition();
+                    hostType = member.DeclaringType;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            string name = NameGenerator.MakeAspectFieldName(member.Name, Aspect.Index);
+
+            var fattrs = FieldAttributes.Private | FieldAttributes.Static;
+
+            var aspectFieldDef = new FieldDefinition(name, fattrs, Context.SafeImport(Aspect.AspectType));
+            AddCompilerGeneratedAttribute(aspectFieldDef);
+
+            hostType.Fields.Add(aspectFieldDef);
+
+            AspectField = aspectFieldDef;
+        }
+
+        internal void AddCompilerGeneratedAttribute(ICustomAttributeProvider definition)
+        {
+            MethodReference ctor = Context.SafeImport(Context.Framework.CompilerGeneratedAttribute_ctor);
+
+            definition.CustomAttributes.Add(new CustomAttribute(ctor));
+        }
     }
 }

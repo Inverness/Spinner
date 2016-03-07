@@ -32,7 +32,7 @@ namespace Spinner.Fody.Weavers
         private MethodDefinition _invokerMethod;
 
         internal EventInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo add, AdviceInfo remove, AdviceInfo invoke, EventDefinition evt)
-            : base(parent)
+            : base(parent, evt)
         {
             _evt = evt;
             _addAdvice = add;
@@ -48,7 +48,7 @@ namespace Spinner.Fody.Weavers
             _originalAdder = adder != null ? DuplicateOriginalMethod(adder) : null;
             _originalRemover = remover != null ? DuplicateOriginalMethod(remover) : null;
 
-            CreateAspectCacheField();
+            Parent.CreateAspectCacheField();
 
             CreateEventBindingClass();
 
@@ -313,7 +313,7 @@ namespace Spinner.Fody.Weavers
                 DeclaringType = _evt.DeclaringType
             };
 
-            AddCompilerGeneratedAttribute(_invokerDelegateField);
+            Parent.AddCompilerGeneratedAttribute(_invokerDelegateField);
 
             _evt.DeclaringType.Fields.Add(_invokerDelegateField);
         }
@@ -338,7 +338,7 @@ namespace Spinner.Fody.Weavers
                 DeclaringType = _evt.DeclaringType
             };
 
-            AddCompilerGeneratedAttribute(_invokerMethod);
+            Parent.AddCompilerGeneratedAttribute(_invokerMethod);
             
             _evt.DeclaringType.Methods.Add(_invokerMethod);
             

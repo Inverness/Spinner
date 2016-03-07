@@ -20,7 +20,7 @@ namespace Spinner.Fody.Weavers
         private VariableDefinition _miaVar;
 
         internal MethodInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo invoke, MethodDefinition method)
-            : base(parent)
+            : base(parent, method)
         {
             _invokeAdvice = invoke;
             _method = method;
@@ -32,7 +32,7 @@ namespace Spinner.Fody.Weavers
             
             CreateMethodBindingClass();
             
-            CreateAspectCacheField();
+            Parent.CreateAspectCacheField();
 
             // Clear the target method body as it needs entirely new code
             MethodDefinition method = _method;

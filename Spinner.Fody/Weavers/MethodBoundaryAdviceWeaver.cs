@@ -29,7 +29,7 @@ namespace Spinner.Fody.Weavers
         private readonly bool _applyToStateMachine;
 
         internal MethodBoundaryAdviceWeaver(AspectWeaver parent, AdviceInfo entry, AdviceInfo exit, AdviceInfo success, AdviceInfo exception, AdviceInfo yield, AdviceInfo resume, MethodDefinition method) 
-            : base(parent)
+            : base(parent, method)
         {
             //Debug.Assert(advices.All(a => a.Aspect == aspect), "advices must be for the same aspect");
 
@@ -46,7 +46,7 @@ namespace Spinner.Fody.Weavers
 
         public override void Weave()
         {
-            CreateAspectCacheField();
+            Parent.CreateAspectCacheField();
 
             // State machines are very different and have their own weaving methods.
             StateMachineKind stateMachineKind = _applyToStateMachine
@@ -147,7 +147,7 @@ namespace Spinner.Fody.Weavers
             // 3. Leave the exception handler to code that returns the value stored in the previously mentioned local
 
             VariableDefinition returnValueVar = null;
-            if (Aspect.Features.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
+            if (_successAdvice != null || _exceptionAdvice != null || _exitAdvice != null)
             {
                 needNewReturn = true;
 
@@ -166,7 +166,7 @@ namespace Spinner.Fody.Weavers
 
                 // Write success block
 
-                if (Aspect.Features.Has(Features.OnSuccess))
+                if (_successAdvice != null)
                 {
                     WriteSuccessHandler(method,
                                         insc.Count,
@@ -178,7 +178,7 @@ namespace Spinner.Fody.Weavers
             
             // Need to leave the exception block
             Ins exceptionHandlerLeaveTarget = null;
-            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
+            if (_exceptionAdvice != null || _exitAdvice != null)
             {
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
                 insc.Add(Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
@@ -186,7 +186,7 @@ namespace Spinner.Fody.Weavers
 
             // Write exception filter and handler
             
-            if (Aspect.Features.Has(Features.OnException))
+            if (_exceptionAdvice != null)
             {
                 WriteCatchExceptionHandler(method,
                                            null,
@@ -198,7 +198,7 @@ namespace Spinner.Fody.Weavers
 
             // End of try block for the finally handler
 
-            if (Aspect.Features.Has(Features.OnExit))
+            if (_exitAdvice != null)
             {
                 WriteFinallyExceptionHandler(method,
                                              null,
@@ -285,7 +285,7 @@ namespace Spinner.Fody.Weavers
             // and those offsets before searching the next part of the body.
             // TODO: Fix OnEntry() and OnYield() will be called in opposite orders with multiple aspects
 
-            if (Aspect.Features.Has(Features.OnYield | Features.OnResume))
+            if (_yieldAdvice != null || _resumeAdvice != null)
             {
                 int offSearchStart = insc.Count - eoffInit;
                 //VariableDefinition awaitableStorage = null;
@@ -328,7 +328,7 @@ namespace Spinner.Fody.Weavers
             // Everything following this point is written after the body but BEFORE the async exception handler's
             // leave instruction.
 
-            if (Aspect.Features.Has(Features.OnSuccess))
+            if (_successAdvice != null)
             {
                 // If a MethodBoundaryAspect has already been applied to this state machine then
                 // we might need to use a leave instead of a break if control must cross an exception handler
@@ -357,7 +357,7 @@ namespace Spinner.Fody.Weavers
 
             // Leave the the exception handlers that will be written next.
             Ins exceptionHandlerLeaveTarget = null;
-            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
+            if (_exceptionAdvice != null || _exitAdvice != null)
             {
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
 
@@ -367,7 +367,7 @@ namespace Spinner.Fody.Weavers
                                                      Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
             }
 
-            if (Aspect.Features.Has(Features.OnException))
+            if (_exceptionAdvice != null)
             {
                 WriteCatchExceptionHandler(_method,
                                            _stateMachine,
@@ -377,7 +377,7 @@ namespace Spinner.Fody.Weavers
                                            offTryStart);
             }
 
-            if (Aspect.Features.Has(Features.OnExit))
+            if (_exitAdvice != null)
             {
                 WriteFinallyExceptionHandler(_method,
                                              _stateMachine,
@@ -391,7 +391,7 @@ namespace Spinner.Fody.Weavers
             if (exceptionHandlerLeaveTarget != null)
                 insc.Insert(insc.Count - eoffLeave, exceptionHandlerLeaveTarget);
 
-            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
+            if (_exceptionAdvice != null || _exitAdvice != null)
             {
                 // Ensure the task EH is last
                 stateMachine.Body.ExceptionHandlers.Remove(taskExceptionHandler);
@@ -456,9 +456,11 @@ namespace Spinner.Fody.Weavers
             // can have exceptions occur but that doesn't stop them from being resumed.
 
             VariableDefinition hasNextVar = null;
-            if (Aspect.Features.Has(Features.OnSuccess | Features.OnException | Features.OnExit))
+            bool needsNewReturn = false;
+            if (_successAdvice != null || _exceptionAdvice != null || _exitAdvice != null)
             {
                 hasNextVar = _stateMachine.Body.AddVariableDefinition(_stateMachine.Module.TypeSystem.Boolean);
+                needsNewReturn = true;
 
                 Ins labelSuccess = Ins.Create(OpCodes.Nop);
 
@@ -473,7 +475,7 @@ namespace Spinner.Fody.Weavers
 
                 // Write success block
 
-                if (Aspect.Features.Has(Features.OnSuccess))
+                if (_successAdvice != null)
                 {
                     // TODO: Insert this into branches that set false instead of checking here
                     Ins notFinishedLabel = Ins.Create(OpCodes.Nop);
@@ -490,7 +492,7 @@ namespace Spinner.Fody.Weavers
 
             // Need to leave the exception block
             Ins exceptionHandlerLeaveTarget = null;
-            if (Aspect.Features.Has(Features.OnException | Features.OnExit))
+            if (_exceptionAdvice != null || _exitAdvice != null)
             {
                 exceptionHandlerLeaveTarget = Ins.Create(OpCodes.Nop);
                 insc.Add(Ins.Create(OpCodes.Leave, exceptionHandlerLeaveTarget));
@@ -498,7 +500,7 @@ namespace Spinner.Fody.Weavers
 
             // Write exception filter and handler
 
-            if (Aspect.Features.Has(Features.OnException))
+            if (_exceptionAdvice != null)
             {
                 WriteCatchExceptionHandler(method,
                                            stateMachine,
@@ -510,7 +512,7 @@ namespace Spinner.Fody.Weavers
 
             // End of try block for the finally handler
 
-            if (Aspect.Features.Has(Features.OnExit))
+            if (_exitAdvice != null)
             {
                 WriteFinallyExceptionHandler(method,
                                              stateMachine,
@@ -526,11 +528,14 @@ namespace Spinner.Fody.Weavers
             if (exceptionHandlerLeaveTarget != null)
                 insc.Add(exceptionHandlerLeaveTarget);
 
-            // Return the previously stored result
-            if (hasNextVar != null)
-                insc.Add(Ins.Create(OpCodes.Ldloc, hasNextVar));
+            if (needsNewReturn)
+            {
+                // Return the previously stored result
+                if (hasNextVar != null)
+                    insc.Add(Ins.Create(OpCodes.Ldloc, hasNextVar));
 
-            insc.Add(Ins.Create(OpCodes.Ret));
+                insc.Add(Ins.Create(OpCodes.Ret));
+            }
         }
 
         /// <summary>
@@ -920,8 +925,8 @@ namespace Spinner.Fody.Weavers
             FieldReference meaField,
             int tryStart)
         {
-            MethodDefinition filterExceptionDef = Aspect.AspectType.GetMethod(Context.Spinner.IMethodBoundaryAspect_FilterException, true);
-            MethodReference filterExcetion = Context.SafeImport(filterExceptionDef);
+            //MethodDefinition filterExceptionDef = Aspect.AspectType.GetMethod(Context.Spinner.IMethodBoundaryAspect_FilterException, true);
+            //MethodReference filterExcetion = Context.SafeImport(filterExceptionDef);
             MethodReference onException = Context.SafeImport((MethodDefinition) _exceptionAdvice.Source);
             TypeReference exceptionType = Context.SafeImport(Context.Framework.Exception);
 
@@ -947,14 +952,15 @@ namespace Spinner.Fody.Weavers
             // Call FilterException()
             il.Append(labelFilterTrue);
             il.Emit(OpCodes.Stloc, exceptionHolder);
-            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            il.EmitLoadOrNull(meaVar, meaField);
-            il.Emit(OpCodes.Ldloc, exceptionHolder);
-            il.Emit(OpCodes.Callvirt, filterExcetion);
+            //il.Emit(OpCodes.Ldsfld, Parent.AspectField);
+            //il.EmitLoadOrNull(meaVar, meaField);
+            //il.Emit(OpCodes.Ldloc, exceptionHolder);
+            //il.Emit(OpCodes.Callvirt, filterExcetion);
 
             // Compare FilterException result with 0 to get the endfilter argument
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Cgt_Un);
+            //il.Emit(OpCodes.Ldc_I4_0);
+            //il.Emit(OpCodes.Cgt_Un);
+            il.Emit(OpCodes.Ldc_I4_1);
             il.Append(labelFilterEnd);
             il.Emit(OpCodes.Endfilter);
 
@@ -1076,8 +1082,7 @@ namespace Spinner.Fody.Weavers
             int tryStart,
             VariableDefinition hasNextVarOpt)
         {
-            MethodDefinition onExitDef = Aspect.AspectType.GetMethod(Context.Spinner.IMethodBoundaryAspect_OnExit, true);
-            MethodReference onExit = Context.SafeImport(onExitDef);
+            MethodReference onExit = Context.SafeImport((MethodDefinition) _exitAdvice.Source);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
 
@@ -1137,7 +1142,7 @@ namespace Spinner.Fody.Weavers
 
             var il = new ILProcessorEx();
 
-            if (eoffYield != -1)
+            if (eoffYield != -1 && _yieldAdvice != null)
             {
                 MethodReference onYield = Context.SafeImport((MethodDefinition) _yieldAdvice.Source);
 
@@ -1184,7 +1189,7 @@ namespace Spinner.Fody.Weavers
                 il.Instructions.Clear();
             }
 
-            if (eoffResume != -1)
+            if (eoffResume != -1 && _resumeAdvice != null)
             {
                 MethodReference onResume = Context.SafeImport((MethodDefinition) _resumeAdvice.Source);
 
