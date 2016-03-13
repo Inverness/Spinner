@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -35,7 +36,9 @@ namespace Spinner.Fody
         private readonly ModuleWeaver _weaver;
         private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
         private readonly Dictionary<MethodDefinition, Features> _typeFeatures;
-        private readonly Dictionary<TypeReference, AdviceType> _adviceTypes; 
+        private readonly Dictionary<TypeReference, AdviceType> _adviceTypes;
+        private readonly ConcurrentDictionary<TypeDefinition, AspectKind?> _aspectKinds =
+            new ConcurrentDictionary<TypeDefinition, AspectKind?>();
         private int _aspectIndexCounter;
 
         internal ModuleWeavingContext(ModuleWeaver weaver, ModuleDefinition module, ModuleDefinition libraryModule)
@@ -262,13 +265,39 @@ namespace Spinner.Fody
             return null;
         }
 
+        internal AspectKind? GetAspectKind(TypeDefinition type, bool withBases)
+        {
+            if (type == null || !type.IsClass)
+                return null;
+
+            if (!withBases)
+                return GetAspectKindCore(type);
+
+            TypeDefinition current = type;
+
+            while (current != null)
+            {
+                AspectKind? result = GetAspectKindCore(current);
+                if (result.HasValue)
+                    return result;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Finds if a class implements one of the aspect interfaces.
         /// </summary>
-        internal AspectKind? GetAspectKind(TypeDefinition type)
+        private AspectKind? GetAspectKindCore(TypeDefinition type)
         {
-            if (type == null || !type.HasInterfaces || !type.IsClass)
+            if (!type.HasInterfaces)
                 return null;
+
+            AspectKind? result;
+            if (_aspectKinds.TryGetValue(type, out result))
+                return result;
 
             Collection<TypeReference> interfaces = type.Interfaces;
             WellKnownSpinnerMembers spinner = Spinner;
@@ -284,18 +313,35 @@ namespace Spinner.Fody
                 TypeDefinition idef = iref.Resolve();
 
                 if (idef == spinner.IAspect)
-                    return AspectKind.Composed;
+                {
+                    result = AspectKind.Composed;
+                    break;
+                }
                 if (idef == spinner.IMethodBoundaryAspect)
-                    return AspectKind.MethodBoundary;
+                {
+                    result = AspectKind.MethodBoundary;
+                    break;
+                }
                 if (idef == spinner.IMethodInterceptionAspect)
-                    return AspectKind.MethodInterception;
+                {
+                    result = AspectKind.MethodInterception;
+                    break;
+                }
                 if (idef == spinner.ILocationInterceptionAspect)
-                    return AspectKind.PropertyInterception;
+                {
+                    result = AspectKind.PropertyInterception;
+                    break;
+                }
                 if (idef == spinner.IEventInterceptionAspect)
-                    return AspectKind.EventInterception;
+                {
+                    result = AspectKind.EventInterception;
+                    break;
+                }
             }
 
-            return null;
+            _aspectKinds.TryAdd(type, result);
+
+            return result;
         }
 
         private class TypeReferenceIsSameComparer : IEqualityComparer<TypeReference>

@@ -24,9 +24,16 @@ namespace Spinner.Fody.Analysis
         private readonly ModuleWeavingContext _mwc;
         private readonly TypeDefinition _type;
         private readonly AspectKind _aspectKind;
-        private readonly TypeDefinition[] _inheritanceList; 
+        private readonly TypeDefinition[] _inheritanceList;
+        private readonly Dictionary<MethodDefinition, Features> _inheritedMethodFeatures =
+            new Dictionary<MethodDefinition, Features>();
+        private Features _inheritedTypeFeatures;
 
-        private AspectFeatureAnalyzer(ModuleWeavingContext mwc, TypeDefinition type, AspectKind aspectKind, TypeDefinition[] inheritanceList)
+        private AspectFeatureAnalyzer(
+            ModuleWeavingContext mwc,
+            TypeDefinition type,
+            AspectKind aspectKind,
+            TypeDefinition[] inheritanceList)
         {
             _mwc = mwc;
             _type = type;
@@ -67,81 +74,83 @@ namespace Spinner.Fody.Analysis
 
         private void Analyze()
         {
-            // Method and type feature flags are inherited
-            var inheritedMethodFeatures = new Dictionary<MethodDefinition, Features>();
-            var inheritedTypeFeatures = Features.None;
-
-            foreach (TypeDefinition t in _inheritanceList)
+            foreach (TypeDefinition type in _inheritanceList)
             {
-                if (_mwc.Spinner.IsEmptyAdviceBase(t) || !t.HasMethods)
+                if (_mwc.Spinner.IsEmptyAdviceBase(type) || !type.HasMethods)
                     continue;
 
                 // Do not analyze the same type more than once.
-                lock (t)
+                lock (type)
                 {
-                    if (HasAttribute(t, _mwc.Spinner.AnalyzedFeaturesAttribute))
-                        continue;
-
-                    _mwc.LogDebug($"Analyzing features for aspect type {t.Name}");
-
-                    foreach (MethodDefinition m in t.Methods)
-                    {
-                        // Skip what can't be an advice implementation.
-                        if (m.IsStatic || !m.IsPublic || m.IsConstructor || !m.HasParameters || !m.HasBody)
-                            continue;
-
-                        // All advice method names start with "On"
-                        if (!m.Name.StartsWith(AdviceNamePrefix, StringComparison.Ordinal))
-                            continue;
-
-                        if (_aspectKind == AspectKind.Composed)
-                        {
-                            AdviceType? adviceType = GetMethodAdviceType(m);
-                            if (!adviceType.HasValue)
-                                continue;
-
-                            MethodDefinition baseMethod = t.BaseType.Resolve().GetMethod(m, true);
-                            
-                            Features methodFeatures = Features.None;
-                            if (baseMethod != null)
-                                inheritedMethodFeatures.TryGetValue(baseMethod, out methodFeatures);
-
-                            methodFeatures |= AnalyzeAdvice(m);
-
-                            inheritedMethodFeatures[m] = methodFeatures;
-
-                            AddAnalyzedFeaturesAttribute(m, methodFeatures);
-
-                            inheritedTypeFeatures |= methodFeatures;
-                        }
-                        else
-                        {
-                            // Get the base definition from the aspect interface that is being implemented or overridden.
-                            Features typeFeatures;
-                            MethodDefinition baseDefinition = GetBaseDefinition(m, _aspectKind, out typeFeatures);
-                            if (baseDefinition == null)
-                                continue;
-
-                            // Join method features inherited from the overriden method with those analyzed now.
-                            Features methodFeatures;
-                            inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
-
-                            methodFeatures |= AnalyzeAdvice(m);
-
-                            inheritedMethodFeatures[baseDefinition] = methodFeatures;
-
-                            AddAnalyzedFeaturesAttribute(m, methodFeatures);
-
-                            // Add type and method level features that this advice uses.
-                            inheritedTypeFeatures |= typeFeatures | methodFeatures;
-                        }
-                    }
-
-                    AddAnalyzedFeaturesAttribute(t, inheritedTypeFeatures);
-
-                    Debug.Assert(HasAttribute(t, _mwc.Spinner.AnalyzedFeaturesAttribute));
+                    AnalyzeType(type);
                 }
             }
+        }
+
+        private void AnalyzeType(TypeDefinition type)
+        {
+            // A lock is held on the type
+            if (HasAttribute(type, _mwc.Spinner.AnalyzedFeaturesAttribute))
+                return;
+
+            _mwc.LogDebug($"Analyzing features for aspect type {type.Name}");
+
+            foreach (MethodDefinition m in type.Methods)
+            {
+                // Skip what can't be an advice implementation.
+                if (m.IsStatic || !m.IsPublic || m.IsConstructor || !m.HasParameters || !m.HasBody)
+                    continue;
+
+                // All advice method names start with "On"
+                if (!m.Name.StartsWith(AdviceNamePrefix, StringComparison.Ordinal))
+                    continue;
+
+                if (_aspectKind == AspectKind.Composed)
+                {
+                    AdviceType? adviceType = GetMethodAdviceType(m);
+                    if (!adviceType.HasValue)
+                        continue;
+
+                    MethodDefinition baseMethod = type.BaseType?.Resolve().GetMethod(m, true);
+
+                    Features methodFeatures = Features.None;
+                    if (baseMethod != null)
+                        _inheritedMethodFeatures.TryGetValue(baseMethod, out methodFeatures);
+
+                    methodFeatures |= AnalyzeAdvice(m);
+
+                    _inheritedMethodFeatures[m] = methodFeatures;
+
+                    AddAnalyzedFeaturesAttribute(m, methodFeatures);
+
+                    _inheritedTypeFeatures |= methodFeatures;
+                }
+                else
+                {
+                    // Get the base definition from the aspect interface that is being implemented or overridden.
+                    Features typeFeatures;
+                    MethodDefinition baseDefinition = GetBaseDefinition(m, _aspectKind, out typeFeatures);
+                    if (baseDefinition == null)
+                        continue;
+
+                    // Join method features inherited from the overriden method with those analyzed now.
+                    Features methodFeatures;
+                    _inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
+
+                    methodFeatures |= AnalyzeAdvice(m);
+
+                    _inheritedMethodFeatures[baseDefinition] = methodFeatures;
+
+                    AddAnalyzedFeaturesAttribute(m, methodFeatures);
+
+                    // Add type and method level features that this advice uses.
+                    _inheritedTypeFeatures |= typeFeatures | methodFeatures;
+                }
+            }
+
+            AddAnalyzedFeaturesAttribute(type, _inheritedTypeFeatures);
+
+            Debug.Assert(HasAttribute(type, _mwc.Spinner.AnalyzedFeaturesAttribute));
         }
 
         /// <summary>
@@ -188,7 +197,7 @@ namespace Spinner.Fody.Analysis
 
             // Try to determine the aspect kind from the current type
             if (!ak.HasValue)
-                ak = mwc.GetAspectKind(type);
+                ak = mwc.GetAspectKind(type, false);
 
             // If aspect kind was determined by current type or a base type, add it to the list.
             if (ak.HasValue)

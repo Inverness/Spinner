@@ -31,13 +31,13 @@ namespace Spinner.Fody.Weavers
         private FieldDefinition _invokerDelegateField;
         private MethodDefinition _invokerMethod;
 
-        internal EventInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo add, AdviceInfo remove, AdviceInfo invoke, EventDefinition evt)
+        internal EventInterceptionAdviceWeaver(AspectWeaver parent, EventInterceptionAdviceGroup group, EventDefinition evt)
             : base(parent, evt)
         {
             _evt = evt;
-            _addAdvice = add;
-            _removeAdvice = remove;
-            _invokeAdvice = invoke;
+            _addAdvice = group.AddHandler;
+            _removeAdvice = group.RemoveHandler;
+            _invokeAdvice = group.InvokeHandler;
         }
 
         public override void Weave()

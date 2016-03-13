@@ -4,10 +4,10 @@ namespace Spinner.Fody.Weavers
 {
     internal sealed class LocationInterceptionAdviceGroup : AdviceGroup
     {
-        public LocationInterceptionAdviceGroup(AdviceInfo parent)
-            : base(parent)
+        public LocationInterceptionAdviceGroup(AdviceInfo master)
+            : base(master)
         {
-            SetProperty(parent);
+            SetProperty(master);
         }
 
         internal AdviceInfo GetValue { get; private set; }

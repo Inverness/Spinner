@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Mono.Cecil;
 using Spinner.Extensibility;
 
