@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using Mono.Collections.Generic;
 using Spinner.Aspects;
 
 namespace Spinner.Fody.Analysis
@@ -189,7 +188,7 @@ namespace Spinner.Fody.Analysis
 
             // Try to determine the aspect kind from the current type
             if (!ak.HasValue)
-                ak = GetAspectKind(mwc, type);
+                ak = mwc.GetAspectKind(type);
 
             // If aspect kind was determined by current type or a base type, add it to the list.
             if (ak.HasValue)
@@ -198,42 +197,6 @@ namespace Spinner.Fody.Analysis
                     inheritanceList = new List<TypeDefinition>();
                 inheritanceList.Add(type);
             }
-        }
-
-        /// <summary>
-        /// Finds if a type implements one of the aspect interfaces.
-        /// </summary>
-        private static AspectKind? GetAspectKind(ModuleWeavingContext mwc, TypeDefinition type)
-        {
-            if (type == null || !type.HasInterfaces)
-                return null;
-
-            Collection<TypeReference> interfaces = type.Interfaces;
-            WellKnownSpinnerMembers spinner = mwc.Spinner;
-
-            for (int i = 0; i < interfaces.Count; i++)
-            {
-                TypeReference iref = interfaces[i];
-
-                // Before resolving, try examining the name.
-                if (!iref.Name.EndsWith(AspectInterfaceNameSuffix, StringComparison.Ordinal))
-                    continue;
-
-                TypeDefinition idef = iref.Resolve();
-
-                if (idef == spinner.IAspect)
-                    return AspectKind.Composed;
-                if (idef == spinner.IMethodBoundaryAspect)
-                    return AspectKind.MethodBoundary;
-                if (idef == spinner.IMethodInterceptionAspect)
-                    return AspectKind.MethodInterception;
-                if (idef == spinner.ILocationInterceptionAspect)
-                    return AspectKind.PropertyInterception;
-                if (idef == spinner.IEventInterceptionAspect)
-                    return AspectKind.EventInterception;
-            }
-
-            return null;
         }
 
         /// <summary>

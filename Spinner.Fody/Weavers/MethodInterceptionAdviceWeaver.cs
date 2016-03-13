@@ -86,12 +86,10 @@ namespace Spinner.Fody.Weavers
             int offset,
             VariableDefinition argumentsVariable)
         {
-            ModuleDefinition module = method.Module;
-            
             TypeReference miaType;
             MethodReference constructor;
             
-            if (method.ReturnType == module.TypeSystem.Void)
+            if (method.IsReturnVoid())
             {
                 TypeDefinition miaTypeDef = Context.Spinner.BoundMethodInterceptionArgs;
                 miaType = Context.SafeImport(miaTypeDef);
@@ -145,7 +143,7 @@ namespace Spinner.Fody.Weavers
 
             TypeReference baseType;
 
-            if (_method.ReturnType == module.TypeSystem.Void)
+            if (_method.IsReturnVoid())
             {
                 baseType = Context.SafeImport(Context.Spinner.MethodBinding);
             }

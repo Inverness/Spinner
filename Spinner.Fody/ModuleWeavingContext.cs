@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Mono.Cecil;
+using Mono.Collections.Generic;
 using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
 
@@ -14,6 +15,8 @@ namespace Spinner.Fody
     /// </summary>
     internal class ModuleWeavingContext
     {
+        private const string AspectInterfaceNameSuffix = "Aspect";
+
         /// <summary>
         /// The module currently being weaved.
         /// </summary>
@@ -179,7 +182,7 @@ namespace Spinner.Fody
         /// <summary>
         /// Get the features declared for a type. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
         /// </summary>
-        internal Features GetFeatures(TypeDefinition aspectType)
+        internal Features? GetFeatures(TypeDefinition aspectType)
         {
             TypeDefinition attrType = Spinner.FeaturesAttribute;
             TypeDefinition analyzedAttrType = Spinner.AnalyzedFeaturesAttribute;
@@ -215,13 +218,13 @@ namespace Spinner.Fody
                 current = current.BaseType?.Resolve();
             }
 
-            return Features.None;
+            return null;
         }
 
         /// <summary>
         /// Get the features declared for an advice. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.
         /// </summary>
-        internal Features GetFeatures(MethodDefinition advice)
+        internal Features? GetFeatures(MethodDefinition advice)
         {
             TypeDefinition attrType = Spinner.FeaturesAttribute;
             TypeDefinition analyzedAttrType = Spinner.AnalyzedFeaturesAttribute;
@@ -256,7 +259,43 @@ namespace Spinner.Fody
                 current = current.DeclaringType.BaseType?.Resolve()?.GetMethod(advice, true);
             }
 
-            return Features.None;
+            return null;
+        }
+
+        /// <summary>
+        /// Finds if a class implements one of the aspect interfaces.
+        /// </summary>
+        internal AspectKind? GetAspectKind(TypeDefinition type)
+        {
+            if (type == null || !type.HasInterfaces || !type.IsClass)
+                return null;
+
+            Collection<TypeReference> interfaces = type.Interfaces;
+            WellKnownSpinnerMembers spinner = Spinner;
+
+            for (int i = 0; i < interfaces.Count; i++)
+            {
+                TypeReference iref = interfaces[i];
+
+                // Before resolving, try examining the name.
+                if (!iref.Name.EndsWith(AspectInterfaceNameSuffix, StringComparison.Ordinal))
+                    continue;
+
+                TypeDefinition idef = iref.Resolve();
+
+                if (idef == spinner.IAspect)
+                    return AspectKind.Composed;
+                if (idef == spinner.IMethodBoundaryAspect)
+                    return AspectKind.MethodBoundary;
+                if (idef == spinner.IMethodInterceptionAspect)
+                    return AspectKind.MethodInterception;
+                if (idef == spinner.ILocationInterceptionAspect)
+                    return AspectKind.PropertyInterception;
+                if (idef == spinner.IEventInterceptionAspect)
+                    return AspectKind.EventInterception;
+            }
+
+            return null;
         }
 
         private class TypeReferenceIsSameComparer : IEqualityComparer<TypeReference>

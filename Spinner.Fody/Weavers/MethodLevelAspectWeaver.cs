@@ -1,8 +1,5 @@
-using System;
 using System.Collections.Generic;
 using Mono.Cecil;
-using Spinner.Extensibility;
-using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weavers
 {

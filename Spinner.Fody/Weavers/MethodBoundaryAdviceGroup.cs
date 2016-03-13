@@ -32,15 +32,7 @@ namespace Spinner.Fody.Weavers
 
         internal override AdviceWeaver CreateWeaver(AspectWeaver parent, IMetadataTokenProvider target)
         {
-            return new MethodBoundaryAdviceWeaver(parent,
-                                                  Entry,
-                                                  Exit,
-                                                  Success,
-                                                  Exception,
-                                                  FilterException,
-                                                  Yield,
-                                                  Resume,
-                                                  (MethodDefinition) target);
+            return new MethodBoundaryAdviceWeaver(parent, this, (MethodDefinition) target);
         }
 
         private void SetProperty(AdviceInfo advice)
@@ -81,21 +73,4 @@ namespace Spinner.Fody.Weavers
             }
         }
     }
-
-    //internal sealed class PropertyInterceptionAdviceGroup : AdviceGroup
-    //{
-    //    public PropertyInterceptionAdviceGroup(AdviceInfo parent)
-    //        : base(parent)
-    //    {
-    //    }
-
-    //    internal AdviceInfo GetValue { get; private set; }
-
-    //    internal AdviceInfo SetValue { get; private set; }
-
-    //    internal override AdviceWeaver CreateWeaver(AspectWeaver parent)
-    //    {
-    //        return new PropertyInterceptionAdviceWeaver(parent, GetValue, SetValue, ((PropertyLevelAspectWeaver) parent).Property);
-    //    }
-    //}
 }

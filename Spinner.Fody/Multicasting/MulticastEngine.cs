@@ -212,7 +212,7 @@ namespace Spinner.Fody.Multicasting
             if ((args.TargetElements & methodTargetType) != 0)
                 results.Add(method);
 
-            if ((args.TargetElements & MulticastTargets.ReturnValue) != 0 && method.ReturnType != method.Module.TypeSystem.Void)
+            if ((args.TargetElements & MulticastTargets.ReturnValue) != 0 && !method.IsReturnVoid())
                 results.Add(method.MethodReturnType);
 
             if (method.HasParameters && (args.TargetElements & MulticastTargets.Parameter) != 0)
@@ -642,7 +642,7 @@ namespace Spinner.Fody.Multicasting
                 return;
             filter.Add(method);
 
-            if (method.ReturnType != method.Module.TypeSystem.Void)
+            if (!method.IsReturnVoid())
                 AddChildItem(method, method.MethodReturnType);
 
             if (method.HasParameters)
@@ -655,7 +655,7 @@ namespace Spinner.Fody.Multicasting
 
             if (overrides != null)
             {
-                bool returnsVoid = method.ReturnType == method.Module.TypeSystem.Void;
+                bool returnsVoid = method.IsReturnVoid();
 
                 foreach (MethodDefinition ov in overrides)
                 {

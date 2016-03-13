@@ -68,8 +68,11 @@
     <Compile Include="Weavers\AspectWeaver.cs" />
     <Compile Include="Weavers\AspectWeaverFactory.cs" />
     <Compile Include="Weavers\EventInterceptionAdviceWeaver.cs" />
+    <Compile Include="Weavers\EventLevelAspectWeaver.cs" />
     <Compile Include="Weavers\FeaturesExtensions.cs" />
     <Compile Include="Weavers\ILProcessorExtensions.cs" />
+    <Compile Include="Weavers\LocationInterceptionAdviceGroup.cs" />
+    <Compile Include="Weavers\LocationLevelAspectWeaver.cs" />
     <Compile Include="Weavers\MethodBoundaryAdviceGroup.cs" />
     <Compile Include="Weavers\MethodBoundaryAdviceInfo.cs" />
     <Compile Include="Weavers\MethodBoundaryAdviceWeaver.cs" />

@@ -246,7 +246,7 @@ namespace Spinner.Fody.Weavers
 
                 bil.Emit(OpCodes.Callvirt, delegateInvokeMethod);
 
-                if (delegateInvokeMethod.ReturnType.IsSame(module.TypeSystem.Void))
+                if (delegateInvokeMethod.IsReturnVoid())
                     bil.Emit(OpCodes.Ldnull);
 
                 bil.Emit(OpCodes.Ret);

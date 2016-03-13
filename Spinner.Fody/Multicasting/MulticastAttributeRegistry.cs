@@ -12,7 +12,7 @@ namespace Spinner.Fody.Multicasting
     /// </summary>
     internal class MulticastAttributeRegistry
     {
-        private static readonly IList<MulticastAttributeInstance> s_noInstances = new MulticastAttributeInstance[0];
+        private static readonly IReadOnlyList<MulticastAttributeInstance> s_noInstances = new MulticastAttributeInstance[0];
 
         private readonly ModuleWeavingContext _mwc;
         private readonly ModuleDefinition _module;
@@ -37,7 +37,7 @@ namespace Spinner.Fody.Multicasting
             _multicastAttributeType = mwc.Spinner.MulticastAttribute;
         }
 
-        internal IList<MulticastAttributeInstance> GetMulticasts(ICustomAttributeProvider provider)
+        internal IReadOnlyList<MulticastAttributeInstance> GetMulticasts(ICustomAttributeProvider provider)
         {
             List<MulticastAttributeInstance> multicasts;
             // ReSharper disable once InconsistentlySynchronizedField

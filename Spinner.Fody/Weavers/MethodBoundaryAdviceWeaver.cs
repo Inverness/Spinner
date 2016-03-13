@@ -31,26 +31,20 @@ namespace Spinner.Fody.Weavers
 
         internal MethodBoundaryAdviceWeaver(
             AspectWeaver parent,
-            AdviceInfo entry,
-            AdviceInfo exit,
-            AdviceInfo success,
-            AdviceInfo exception,
-            AdviceInfo filterException,
-            AdviceInfo yield,
-            AdviceInfo resume,
+            MethodBoundaryAdviceGroup adviceGroup,
             MethodDefinition method)
             : base(parent, method)
         {
             //Debug.Assert(advices.All(a => a.Aspect == aspect), "advices must be for the same aspect");
 
             //_advices = advices;
-            _entryAdvice = entry;
-            _exitAdvice = exit;
-            _successAdvice = success;
-            _exceptionAdvice = exception;
-            _filterExceptionAdvice = filterException;
-            _yieldAdvice = yield;
-            _resumeAdvice = resume;
+            _entryAdvice = adviceGroup.Entry;
+            _exitAdvice = adviceGroup.Exit;
+            _successAdvice = adviceGroup.Success;
+            _exceptionAdvice = adviceGroup.Exception;
+            _filterExceptionAdvice = adviceGroup.FilterException;
+            _yieldAdvice = adviceGroup.Yield;
+            _resumeAdvice = adviceGroup.Resume;
             _method = method;
             _applyToStateMachine =
                 parent.Aspect.Source.Attribute.GetNamedArgumentValue(
@@ -70,9 +64,7 @@ namespace Spinner.Fody.Weavers
             switch (stateMachineKind)
             {
                 case StateMachineKind.None:
-                    _effectiveReturnType = _method.ReturnType != Context.Module.TypeSystem.Void
-                        ? Context.SafeImport(_method.ReturnType)
-                        : null;
+                    _effectiveReturnType = !_method.IsReturnVoid() ? Context.SafeImport(_method.ReturnType) : null;
 
                     _method.Body.SimplifyMacros();
                     // Preserve existing Nops in a debug build. These are used for optimal breakpoint placement.
@@ -601,7 +593,7 @@ namespace Spinner.Fody.Weavers
                 }
                 else if (eoffYield != -1 && mr.Name == "GetResult" && mr.DeclaringType.IsSame(awaiterType))
                 {
-                    if (mr.ReturnType == mr.Module.TypeSystem.Void)
+                    if (mr.IsReturnVoid())
                     {
                         // Resume after GetResult() is called, which will be a void method for Task
                         eoffResume = insc.Count - i + 1;

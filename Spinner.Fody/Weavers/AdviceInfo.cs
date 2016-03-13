@@ -21,9 +21,9 @@ namespace Spinner.Fody.Weavers
             MethodDefinition sourceMethod;
             TypeDefinition sourceType;
             if ((sourceMethod = source as MethodDefinition) != null)
-                Features = aspect.Context.GetFeatures(sourceMethod);
+                Features = aspect.Context.GetFeatures(sourceMethod) ?? Features.None;
             else if ((sourceType = source as TypeDefinition) != null)
-                Features = aspect.Context.GetFeatures(sourceType);
+                Features = aspect.Context.GetFeatures(sourceType) ?? Features.None;
         }
 
         public abstract AdviceType AdviceType { get; }

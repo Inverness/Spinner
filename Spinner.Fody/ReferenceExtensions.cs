@@ -351,5 +351,10 @@ namespace Spinner.Fody
         {
             return (MethodDefinition) r.Method;
         }
+
+        internal static bool IsReturnVoid(this MethodReference method)
+        {
+            return method.ReturnType == method.Module.TypeSystem.Void;
+        }
     }
 }

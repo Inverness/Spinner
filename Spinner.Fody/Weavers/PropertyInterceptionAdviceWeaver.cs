@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
@@ -21,11 +20,11 @@ namespace Spinner.Fody.Weavers
         private MethodDefinition _originalGetter;
         private MethodDefinition _originalSetter;
 
-        internal PropertyInterceptionAdviceWeaver(AspectWeaver parent, AdviceInfo get, AdviceInfo set, PropertyDefinition property)
+        internal PropertyInterceptionAdviceWeaver(AspectWeaver parent, LocationInterceptionAdviceGroup group, PropertyDefinition property)
             : base(parent, property)
         {
-            _getAdvice = get;
-            _setAdvice = set;
+            _getAdvice = group.GetValue;
+            _setAdvice = group.SetValue;
             _property = property;
             Debug.Assert(_property.GetMethod != null || _property.SetMethod != null);
         }

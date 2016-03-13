@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
+using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weavers
@@ -55,10 +56,10 @@ namespace Spinner.Fody.Weavers
             if (aspects == null)
                 return null;
 
-            var advices = new List<AdviceInfo>();
-            var weavers = new List<AspectWeaver>();
+            // Create AdviceInfo instances for everything that is applicable.
 
-            //return new TypeWeaver(mwc, type, aspects);
+            var advices = new List<AdviceInfo>();
+            
             foreach (AspectInfo aspect in aspects)
             {
                 AddAdvices(mwc, aspect, aspect.AspectType, advices);
@@ -66,10 +67,27 @@ namespace Spinner.Fody.Weavers
                 foreach (IMemberDefinition member in aspect.AspectType.GetMembers())
                 {
                     AddAdvices(mwc, aspect, member, advices);
+
+                    var method = member as MethodDefinition;
+                    if (method != null)
+                    {
+                        if (!method.IsReturnVoid())
+                            AddAdvices(mwc, aspect, method.MethodReturnType, advices);
+
+                        if (method.HasParameters)
+                        {
+                            foreach (ParameterDefinition p in method.Parameters)
+                                AddAdvices(mwc, aspect, p, advices);
+                        }
+                    }
                 }
             }
 
             var groups = CreateGroups(advices);
+
+            // Create a weaver for each aspect
+
+            var weavers = new List<AspectWeaver>();
 
             foreach (IGrouping<AspectInfo, AdviceGroup> groupsByAspect in groups.GroupBy(g => g.Master.Aspect))
             {
@@ -86,8 +104,10 @@ namespace Spinner.Fody.Weavers
                         weaver = new MethodLevelAspectWeaver(groupsByAspect.Key, groupsByAspect, (MethodDefinition) target);
                         break;
                     case ProviderType.Property:
+                        weaver = new LocationLevelAspectWeaver(groupsByAspect.Key, groupsByAspect, (PropertyDefinition) target);
                         break;
                     case ProviderType.Event:
+                        weaver = new EventLevelAspectWeaver(groupsByAspect.Key, groupsByAspect, (EventDefinition) target);
                         break;
                     case ProviderType.Field:
                         break;
@@ -104,77 +124,27 @@ namespace Spinner.Fody.Weavers
             }
 
             return weavers.ToArray();
-
-            //var targets = new MultiValueDictionary<ICustomAttributeProvider, AdviceGroup>();
-
-            //Func<MethodDefinition, bool> temporaryDebugTest =
-            //    m => m.IsPublic && !m.IsStatic && !m.IsAbstract && m.HasBody &&
-            //         m.SemanticsAttributes == MethodSemanticsAttributes.None;
-
-            //foreach (AdviceGroup a in groups)
-            //{
-            //    switch (a.Parent.AdviceType)
-            //    {
-            //        case AdviceType.MethodEntry:
-            //        case AdviceType.MethodExit:
-            //        case AdviceType.MethodSuccess:
-            //        case AdviceType.MethodException:
-            //        case AdviceType.MethodYield:
-            //        case AdviceType.MethodResume:
-            //        case AdviceType.MethodInvoke:
-            //            TypeDefinition targetType;
-            //            MethodDefinition targetMethod;
-
-            //            if ((targetType = a.Parent.Aspect.Target as TypeDefinition) != null)
-            //            {
-            //                IEnumerable<MethodDefinition> adviceTargets = targetType.Methods.Where(temporaryDebugTest);
-
-            //                foreach (MethodDefinition target in adviceTargets)
-            //                {
-            //                    targets.Add(target, a);
-            //                }
-            //            }
-            //            else if ((targetMethod = a.Parent.Aspect.Target as MethodDefinition) != null)
-            //            {
-            //                targets.Add(targetMethod, a);
-            //            }
-            //            break;
-            //        case AdviceType.LocationGetValue:
-            //        case AdviceType.LocationSetValue:
-            //        case AdviceType.EventAddHandler:
-            //        case AdviceType.EventRemoveHandler:
-            //        case AdviceType.EventInvokeHandler:
-            //            throw new NotImplementedException();
-            //        default:
-            //            throw new ArgumentOutOfRangeException();
-            //    }
-            //}
-
-            //foreach (AdviceGroup group in groups)
-            //{
-            //    if (!group.PointcutType.HasValue)
-            //        continue;
-
-            //    switch (group.PointcutType.Value)
-            //    {
-            //        case PointcutType.Self:
-            //            break;
-            //        case PointcutType.Multicast:
-            //            break;
-            //        case PointcutType.Method:
-            //            break;
-            //        default:
-            //            throw new ArgumentOutOfRangeException();
-            //    }
-            //}
         }
 
         private static void AddAspects(ModuleWeavingContext mwc, MulticastAttributeRegistry mar, ICustomAttributeProvider target, ref List<AspectInfo> aspects, ref int orderCounter)
         {
+            IReadOnlyList<MulticastAttributeInstance> multicasts = mar.GetMulticasts(target);
+            if (multicasts.Count == 0)
+                return;
+
             TypeDefinition aspectInterfaceType = mwc.Spinner.IAspect;
 
-            foreach (MulticastAttributeInstance m in mar.GetMulticasts(target))
+            foreach (MulticastAttributeInstance m in multicasts)
             {
+                //Features? features = mwc.GetFeatures(m.AttributeType);
+                //if (features.HasValue)
+                //{
+                //    var info = new AspectInfo(mwc, m, target, mwc.NewAspectIndex(), orderCounter++);
+
+                //    if (aspects == null)
+                //        aspects = new List<AspectInfo>();
+                //    aspects.Add(info);
+                //}
                 if (m.AttributeType.HasInterface(aspectInterfaceType, true))
                 {
                     var info = new AspectInfo(mwc, m, target, mwc.NewAspectIndex(), orderCounter++);

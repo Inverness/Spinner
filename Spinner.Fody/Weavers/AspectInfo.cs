@@ -19,7 +19,7 @@ namespace Spinner.Fody.Weavers
             Index = index;
             Target = target;
             Order = order;
-            Features = mwc.GetFeatures(mi.AttributeType);
+            Features = mwc.GetFeatures(mi.AttributeType) ?? Features.None;
         }
 
         public ModuleWeavingContext Context { get; }
