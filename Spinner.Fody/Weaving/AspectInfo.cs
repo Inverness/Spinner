@@ -2,7 +2,7 @@ using Mono.Cecil;
 using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal class AspectInfo
     {

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Mono.Cecil;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal class LocationLevelAspectWeaver : AspectWeaver
     {

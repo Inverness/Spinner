@@ -2,7 +2,7 @@ using Mono.Cecil;
 using Spinner.Aspects.Advices;
 using Spinner.Extensibility;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal sealed class MethodBoundaryAdviceInfo : AdviceInfo
     {

@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.Serialization;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     [Serializable]
     internal class ValidationException : Exception

@@ -1,6 +1,6 @@
 using Spinner.Aspects;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal static class FeaturesExtensions
     {

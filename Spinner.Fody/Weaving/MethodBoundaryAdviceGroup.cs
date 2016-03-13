@@ -1,6 +1,7 @@
 using Mono.Cecil;
+using Spinner.Fody.Weaving.AdviceWeavers;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal class MethodBoundaryAdviceGroup : AdviceGroup
     {

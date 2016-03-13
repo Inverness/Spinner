@@ -5,7 +5,7 @@ using Mono.Cecil;
 using Spinner.Extensibility;
 using Spinner.Fody.Multicasting;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal class AspectWeaver
     {

@@ -7,7 +7,7 @@ using Mono.Cecil.Rocks;
 using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving.AdviceWeavers
 {
     /// <summary>
     /// Base class for aspect weavers
@@ -60,7 +60,7 @@ namespace Spinner.Fody.Weavers
             Parent.AddCompilerGeneratedAttribute(original);
 
             original.Parameters.AddRange(method.Parameters);
-            original.GenericParameters.AddRange(method.GenericParameters.Select(p => p.Clone(original)));
+            original.GenericParameters.AddRange(method.GenericParameters.Select(p => ReferenceExtensions.Clone(p, original)));
             original.ImplAttributes = method.ImplAttributes;
             original.SemanticsAttributes = method.SemanticsAttributes;
 

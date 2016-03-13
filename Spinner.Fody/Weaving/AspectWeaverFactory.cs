@@ -6,7 +6,7 @@ using Mono.Cecil;
 using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     /// <summary>
     /// Creates aspect weavers for all aspect applied to a type and its members.

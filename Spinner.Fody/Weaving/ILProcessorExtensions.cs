@@ -2,7 +2,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Spinner.Fody.Utilities;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     /// <summary>
     /// Extensions specific to aspect weaving.

@@ -61,34 +61,34 @@
     <Compile Include="Utilities\ILProcessorEx.cs" />
     <Compile Include="Utilities\LabelProcessor.cs" />
     <Compile Include="Utilities\NameUtility.cs" />
-    <Compile Include="Weavers\AdviceGroup.cs" />
-    <Compile Include="Weavers\AdviceInfo.cs" />
-    <Compile Include="Weavers\AspectInfo.cs" />
-    <Compile Include="Weavers\AdviceWeaver.cs" />
-    <Compile Include="Weavers\AspectWeaver.cs" />
-    <Compile Include="Weavers\AspectWeaverFactory.cs" />
-    <Compile Include="Weavers\EventInterceptionAdviceGroup.cs" />
-    <Compile Include="Weavers\EventInterceptionAdviceInfo.cs" />
-    <Compile Include="Weavers\EventInterceptionAdviceWeaver.cs" />
-    <Compile Include="Weavers\EventLevelAspectWeaver.cs" />
-    <Compile Include="Weavers\FeaturesExtensions.cs" />
-    <Compile Include="Weavers\ILProcessorExtensions.cs" />
-    <Compile Include="Weavers\LocationInterceptionAdviceGroup.cs" />
-    <Compile Include="Weavers\LocationInterceptionAdviceInfo.cs" />
-    <Compile Include="Weavers\LocationLevelAspectWeaver.cs" />
-    <Compile Include="Weavers\MethodBoundaryAdviceGroup.cs" />
-    <Compile Include="Weavers\MethodBoundaryAdviceInfo.cs" />
-    <Compile Include="Weavers\MethodBoundaryAdviceWeaver.cs" />
-    <Compile Include="Weavers\MethodInterceptionAdviceGroup.cs" />
-    <Compile Include="Weavers\MethodInterceptionAdviceWeaver.cs" />
-    <Compile Include="Weavers\MethodInterceptionAdviceInfo.cs" />
-    <Compile Include="Weavers\MethodLevelAspectWeaver.cs" />
-    <Compile Include="Weavers\NameGenerator.cs" />
-    <Compile Include="Weavers\PointcutType.cs" />
-    <Compile Include="Weavers\PropertyInterceptionAdviceWeaver.cs" />
-    <Compile Include="Weavers\StateMachineKind.cs" />
-    <Compile Include="Weavers\TypeLevelAspectWeaver.cs" />
-    <Compile Include="Weavers\ValidationException.cs" />
+    <Compile Include="Weaving\AdviceGroup.cs" />
+    <Compile Include="Weaving\AdviceInfo.cs" />
+    <Compile Include="Weaving\AdviceWeavers\AdviceWeaver.cs" />
+    <Compile Include="Weaving\AdviceWeavers\EventInterceptionAdviceWeaver.cs" />
+    <Compile Include="Weaving\AdviceWeavers\MethodBoundaryAdviceWeaver.cs" />
+    <Compile Include="Weaving\AdviceWeavers\MethodInterceptionAdviceWeaver.cs" />
+    <Compile Include="Weaving\AdviceWeavers\PropertyInterceptionAdviceWeaver.cs" />
+    <Compile Include="Weaving\AspectInfo.cs" />
+    <Compile Include="Weaving\AspectWeaver.cs" />
+    <Compile Include="Weaving\AspectWeaverFactory.cs" />
+    <Compile Include="Weaving\EventInterceptionAdviceGroup.cs" />
+    <Compile Include="Weaving\EventInterceptionAdviceInfo.cs" />
+    <Compile Include="Weaving\EventLevelAspectWeaver.cs" />
+    <Compile Include="Weaving\FeaturesExtensions.cs" />
+    <Compile Include="Weaving\ILProcessorExtensions.cs" />
+    <Compile Include="Weaving\LocationInterceptionAdviceGroup.cs" />
+    <Compile Include="Weaving\LocationInterceptionAdviceInfo.cs" />
+    <Compile Include="Weaving\LocationLevelAspectWeaver.cs" />
+    <Compile Include="Weaving\MethodBoundaryAdviceGroup.cs" />
+    <Compile Include="Weaving\MethodBoundaryAdviceInfo.cs" />
+    <Compile Include="Weaving\MethodInterceptionAdviceGroup.cs" />
+    <Compile Include="Weaving\MethodInterceptionAdviceInfo.cs" />
+    <Compile Include="Weaving\MethodLevelAspectWeaver.cs" />
+    <Compile Include="Weaving\NameGenerator.cs" />
+    <Compile Include="Weaving\PointcutType.cs" />
+    <Compile Include="Weaving\StateMachineKind.cs" />
+    <Compile Include="Weaving\TypeLevelAspectWeaver.cs" />
+    <Compile Include="Weaving\ValidationException.cs" />
     <Compile Include="WellKnownFrameworkMembers.cs" />
     <Compile Include="WellKnownSpinnerMembers.cs" />
   </ItemGroup>
@@ -101,6 +101,7 @@
       <Name>Spinner</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     /// <summary>
     /// Generates names for weaved members.

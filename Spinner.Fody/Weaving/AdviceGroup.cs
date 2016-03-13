@@ -6,8 +6,9 @@ using Spinner.Aspects.Advices;
 using Spinner.Extensibility;
 using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
+using Spinner.Fody.Weaving.AdviceWeavers;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal abstract class AdviceGroup
     {
@@ -77,7 +78,7 @@ namespace Spinner.Fody.Weavers
             {
                 if (ca.AttributeType.IsSame(mwc.Spinner.SelfPointcut))
                 {
-                    PointcutType = Weavers.PointcutType.Self;
+                    PointcutType = Weaving.PointcutType.Self;
                 }
                 else if (ca.AttributeType.IsSame(mwc.Spinner.MulticastPointcut))
                 {
@@ -85,7 +86,7 @@ namespace Spinner.Fody.Weavers
                     uint targets = ca.GetNamedArgumentValue(nameof(MulticastPointcut.Targets)) as uint? ?? 0;
                     string memberName = ca.GetNamedArgumentValue(nameof(MulticastPointcut.MemberName)) as string;
 
-                    PointcutType = Weavers.PointcutType.Multicast;
+                    PointcutType = Weaving.PointcutType.Multicast;
                     PointcutAttributes = (MulticastAttributes) attributes;
                     PointcutTargets = (MulticastTargets) targets;
                     PointcutMemberName = StringMatcher.Create(memberName);

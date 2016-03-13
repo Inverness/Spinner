@@ -4,7 +4,7 @@ using Mono.Cecil.Rocks;
 using Spinner.Aspects;
 using Spinner.Fody.Utilities;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving.AdviceWeavers
 {
     /// <summary>
     /// Applies the method interception aspect to a method.

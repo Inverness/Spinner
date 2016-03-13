@@ -12,7 +12,7 @@ using Ins = Mono.Cecil.Cil.Instruction;
 
 // ReSharper disable UnusedMember.Local -- Left in for future reference
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving.AdviceWeavers
 {
     internal sealed class MethodBoundaryAdviceWeaver : AdviceWeaver
     {

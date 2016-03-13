@@ -1,4 +1,4 @@
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal enum StateMachineKind
     {

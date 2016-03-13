@@ -11,7 +11,7 @@ using Spinner.Aspects;
 using Spinner.Fody.Analysis;
 using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
-using Spinner.Fody.Weavers;
+using Spinner.Fody.Weaving;
 
 namespace Spinner.Fody
 {

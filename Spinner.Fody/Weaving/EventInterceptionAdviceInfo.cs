@@ -1,7 +1,7 @@
 using Mono.Cecil;
 using Spinner.Extensibility;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal sealed class EventInterceptionAdviceInfo : AdviceInfo
     {

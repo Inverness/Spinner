@@ -4,7 +4,7 @@ using Spinner.Aspects;
 using Spinner.Aspects.Advices;
 using Spinner.Extensibility;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     [DebuggerDisplay("{Aspect.AspectType.Name} {Aspect.Index} {AdviceType}")]
     internal abstract class AdviceInfo

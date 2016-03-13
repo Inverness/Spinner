@@ -1,7 +1,8 @@
 using System.Diagnostics;
 using Mono.Cecil;
+using Spinner.Fody.Weaving.AdviceWeavers;
 
-namespace Spinner.Fody.Weavers
+namespace Spinner.Fody.Weaving
 {
     internal sealed class MethodInterceptionAdviceGroup : AdviceGroup
     {
