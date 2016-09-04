@@ -587,7 +587,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
                     Debug.Assert(IsBranching(insc[i + 1]) && !IsBranching(insc[i + 2]));
 
-                    eoffYield = insc.Count - i + 2;
+                    eoffYield = insc.Count - i - 2;
 
                     awaiterType = mr.DeclaringType;
                 }
