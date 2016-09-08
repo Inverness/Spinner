@@ -65,24 +65,121 @@ namespace Spinner.Fody.Weaving
             
             foreach (AspectInfo aspect in aspects)
             {
-                AddAdvices(mwc, aspect, aspect.AspectType, advices);
-
-                foreach (IMemberDefinition member in aspect.AspectType.GetMembers())
+                switch (aspect.Kind)
                 {
-                    AddAdvices(mwc, aspect, member, advices);
-
-                    var method = member as MethodDefinition;
-                    if (method != null)
-                    {
-                        if (!method.IsReturnVoid())
-                            AddAdvices(mwc, aspect, method.MethodReturnType, advices);
-
-                        if (method.HasParameters)
+                    case AspectKind.Composed:
+                        AddAdvices(mwc, aspect, aspect.AspectType, advices);
+                
+                        foreach (IMemberDefinition member in aspect.AspectType.GetMembers())
                         {
-                            foreach (ParameterDefinition p in method.Parameters)
-                                AddAdvices(mwc, aspect, p, advices);
+                            AddAdvices(mwc, aspect, member, advices);
+
+                            var method = member as MethodDefinition;
+                            if (method != null)
+                            {
+                                if (!method.IsReturnVoid())
+                                    AddAdvices(mwc, aspect, method.MethodReturnType, advices);
+
+                                if (method.HasParameters)
+                                {
+                                    foreach (ParameterDefinition p in method.Parameters)
+                                        AddAdvices(mwc, aspect, p, advices);
+                                }
+                            }
                         }
-                    }
+                        break;
+                    case AspectKind.MethodBoundary:
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnEntry,
+                                             AdviceType.MethodEntry,
+                                             mwc.Spinner.IMethodBoundaryAspect_OnEntry);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnExit,
+                                             AdviceType.MethodExit,
+                                             mwc.Spinner.IMethodBoundaryAspect_OnExit);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnSuccess,
+                                             AdviceType.MethodSuccess,
+                                             mwc.Spinner.IMethodBoundaryAspect_OnSuccess);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnException,
+                                             AdviceType.MethodException,
+                                             mwc.Spinner.IMethodBoundaryAspect_OnException);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnException,
+                                             AdviceType.MethodFilterException,
+                                             mwc.Spinner.IMethodBoundaryAspect_FilterException);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnYield,
+                                             AdviceType.MethodYield,
+                                             mwc.Spinner.IMethodBoundaryAspect_OnYield);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             Features.OnResume,
+                                             AdviceType.MethodResume,
+                                             mwc.Spinner.IMethodBoundaryAspect_OnResume);
+
+                        GroupAspectClassAdvices(aspect, advices);
+                        
+                        break;
+                    case AspectKind.MethodInterception:
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             null,
+                                             AdviceType.MethodInvoke,
+                                             mwc.Spinner.IMethodInterceptionAspect_OnInvoke);
+                        break;
+                    case AspectKind.PropertyInterception:
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             null,
+                                             AdviceType.LocationGetValue,
+                                             mwc.Spinner.ILocationInterceptionAspect_OnGetValue);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             null,
+                                             AdviceType.LocationSetValue,
+                                             mwc.Spinner.ILocationInterceptionAspect_OnSetValue);
+
+                        GroupAspectClassAdvices(aspect, advices);
+
+                        break;
+                    case AspectKind.EventInterception:
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             null,
+                                             AdviceType.EventAddHandler,
+                                             mwc.Spinner.IEventInterceptionAspect_OnAddHandler);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             null,
+                                             AdviceType.EventRemoveHandler,
+                                             mwc.Spinner.IEventInterceptionAspect_OnRemoveHandler);
+
+                        AddAspectClassAdvice(aspect,
+                                             advices,
+                                             null,
+                                             AdviceType.EventInvokeHandler,
+                                             mwc.Spinner.IEventInterceptionAspect_OnInvokeHandler);
+
+                        GroupAspectClassAdvices(aspect, advices);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
 
@@ -103,7 +200,6 @@ namespace Spinner.Fody.Weaving
                         if (advice.Aspect == other.Aspect && advice.Master == ((IMemberDefinition) other.Source).Name)
                         {
                             advice.MasterObject = other;
-
                             break;
                         }
                     }
@@ -180,9 +276,9 @@ namespace Spinner.Fody.Weaving
             {
                 AspectKind? aspectKind = mwc.GetAspectKind(m.AttributeType, true);
 
-                if (aspectKind.HasValue && aspectKind.Value == AspectKind.Composed)
+                if (aspectKind.HasValue)
                 {
-                    var info = new AspectInfo(mwc, m, target, mwc.NewAspectIndex(), orderCounter++);
+                    var info = new AspectInfo(mwc, m, aspectKind.Value, target, mwc.NewAspectIndex(), orderCounter++);
 
                     if (aspects == null)
                         aspects = new List<AspectInfo>();
@@ -216,8 +312,10 @@ namespace Spinner.Fody.Weaving
             AdviceType type,
             AspectInfo aspect,
             IMetadataTokenProvider source,
-            CustomAttribute attr)
+            CustomAttribute attr,
+            string master = null)
         {
+            AdviceInfo result;
             switch (type)
             {
                 case AdviceType.MethodEntry:
@@ -227,19 +325,28 @@ namespace Spinner.Fody.Weaving
                 case AdviceType.MethodFilterException:
                 case AdviceType.MethodYield:
                 case AdviceType.MethodResume:
-                    return new MethodBoundaryAdviceInfo(type, aspect, (MethodDefinition) source, attr);
+                    result = new MethodBoundaryAdviceInfo(type, aspect, (MethodDefinition) source, attr);
+                    break;
                 case AdviceType.MethodInvoke:
-                    return new MethodInterceptionAdviceInfo(aspect, (MethodDefinition) source, attr);
+                    result = new MethodInterceptionAdviceInfo(aspect, (MethodDefinition) source, attr);
+                    break;
                 case AdviceType.LocationGetValue:
                 case AdviceType.LocationSetValue:
-                    return new LocationInterceptionAdviceInfo(type, aspect, (PropertyDefinition) source, attr);
+                    result = new LocationInterceptionAdviceInfo(type, aspect, (PropertyDefinition) source, attr);
+                    break;
                 case AdviceType.EventAddHandler:
                 case AdviceType.EventRemoveHandler:
                 case AdviceType.EventInvokeHandler:
-                    return new EventInterceptionAdviceInfo(type, aspect, (EventDefinition) source, attr);
+                    result = new EventInterceptionAdviceInfo(type, aspect, (EventDefinition) source, attr);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+
+            if (master != null)
+                result.Master = master;
+
+            return result;
         }
 
         private static AdviceGroup CreateGroup(AdviceInfo advice)
@@ -250,6 +357,7 @@ namespace Spinner.Fody.Weaving
                 case AdviceType.MethodExit:
                 case AdviceType.MethodSuccess:
                 case AdviceType.MethodException:
+                case AdviceType.MethodFilterException:
                 case AdviceType.MethodYield:
                 case AdviceType.MethodResume:
                     return new MethodBoundaryAdviceGroup(advice);
@@ -264,6 +372,50 @@ namespace Spinner.Fody.Weaving
                     return new EventInterceptionAdviceGroup(advice);
                 default:
                     throw new NotImplementedException();
+            }
+        }
+
+        private static void AddAspectClassAdvice(
+            AspectInfo aspect,
+            List<AdviceInfo> advices,
+            Features? typeFeature,
+            AdviceType adviceType,
+            MethodReference interfaceMethod)
+        {
+            if (typeFeature == null || aspect.Features.Has(typeFeature.Value))
+            {
+                MethodDefinition md = aspect.AspectType.GetMethod(interfaceMethod, true);
+
+                advices.Add(CreateAdviceInfo(adviceType, aspect, md, null));
+            }
+        }
+
+        private static void GroupAspectClassAdvices(AspectInfo aspect, List<AdviceInfo> advices)
+        {
+            int first = advices.Count;
+            for (int i = advices.Count - 1; i > -1; i--)
+            {
+                if (advices[i].Aspect == aspect)
+                {
+                    first = i;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            string masterName = null;
+            for (int i = first; i < advices.Count; i++)
+            {
+                if (masterName == null)
+                {
+                    masterName = advices[i].Source.GetName();
+                }
+                else
+                {
+                    advices[i].Master = masterName;
+                }
             }
         }
     }

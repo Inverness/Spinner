@@ -32,7 +32,10 @@ namespace Spinner.Fody.Weaving
                 ThrowIfDuplicate(Invoke);
                 Invoke = advice;
             }
-            ThrowInvalidAdviceForGroup(advice);
+            else
+            {
+                ThrowInvalidAdviceForGroup(advice);
+            }
         }
     }
 }

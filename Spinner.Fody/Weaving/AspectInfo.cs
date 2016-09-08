@@ -9,6 +9,7 @@ namespace Spinner.Fody.Weaving
         internal AspectInfo(
             ModuleWeavingContext mwc,
             MulticastAttributeInstance mi,
+            AspectKind kind,
             ICustomAttributeProvider target,
             int index,
             int order)
@@ -16,6 +17,7 @@ namespace Spinner.Fody.Weaving
             Context = mwc;
             Source = mi;
             AspectType = mi.AttributeType;
+            Kind = kind;
             Index = index;
             Target = target;
             Order = order;
@@ -25,6 +27,8 @@ namespace Spinner.Fody.Weaving
         public ModuleWeavingContext Context { get; }
 
         public TypeDefinition AspectType { get; }
+
+        public AspectKind Kind { get; }
 
         public int Index { get; }
 

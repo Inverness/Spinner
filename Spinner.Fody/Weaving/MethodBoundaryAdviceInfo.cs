@@ -22,7 +22,7 @@ namespace Spinner.Fody.Weaving
         {
             base.ParseAttribute();
             
-            ApplyToStateMachine = (bool?) Attribute.GetNamedArgumentValue(nameof(MethodBoundaryAdvice.ApplyToStateMachine));
+            ApplyToStateMachine = (bool?) Attribute?.GetNamedArgumentValue(nameof(MethodBoundaryAdvice.ApplyToStateMachine));
         }
     }
 }

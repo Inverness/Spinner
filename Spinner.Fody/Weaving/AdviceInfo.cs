@@ -15,8 +15,11 @@ namespace Spinner.Fody.Weaving
             Source = source;
             Attribute = attr;
 
-            // ReSharper disable once VirtualMemberCallInContructor
-            ParseAttribute();
+            if (attr != null)
+            {
+                // ReSharper disable once VirtualMemberCallInContructor
+                ParseAttribute();
+            }
 
             MethodDefinition sourceMethod;
             TypeDefinition sourceType;
@@ -38,7 +41,7 @@ namespace Spinner.Fody.Weaving
 
         public bool Applied { get; set; }
 
-        public string Master { get; private set; }
+        public string Master { get; set; }
 
         public AdviceInfo MasterObject { get; set; }
 

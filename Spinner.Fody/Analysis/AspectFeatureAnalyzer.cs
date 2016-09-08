@@ -43,6 +43,10 @@ namespace Spinner.Fody.Analysis
             Debug.Assert(inheritanceList.Last() == type);
         }
 
+        /// <summary>
+        /// Checks basic properties of the type to determine if it could potentially be an aspect type and requires
+        /// further inspection of the inheritence list.
+        /// </summary>
         internal static bool IsMaybeAspect(TypeDefinition type)
         {
             return type.IsClass &&
