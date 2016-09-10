@@ -1,14 +1,13 @@
-using System.Collections.Generic;
 using Mono.Cecil;
 
 namespace Spinner.Fody.Weaving
 {
     internal class MethodLevelAspectWeaver : AspectWeaver
     {
-        public MethodLevelAspectWeaver(AspectInfo aspect, IEnumerable<AdviceGroup> advices, MethodDefinition method)
-            : base(aspect, advices, method)
+        public MethodLevelAspectWeaver(AspectInstance instance)
+            : base(instance)
         {
-            TargetMethod = method;
+            TargetMethod = (MethodDefinition) instance.Target;
         }
 
         internal MethodDefinition TargetMethod { get; }

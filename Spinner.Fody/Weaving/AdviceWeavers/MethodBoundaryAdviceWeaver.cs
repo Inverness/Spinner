@@ -47,7 +47,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             _resumeAdvice = adviceGroup.Resume;
             _method = method;
             _applyToStateMachine =
-                parent.Aspect.Source.Attribute.GetNamedArgumentValue(
+                parent.Instance.Source.Attribute.GetNamedArgumentValue(
                     nameof(MethodBoundaryAspect.AttributeApplyToStateMachine)) as bool? ?? true;
         }
 
@@ -698,7 +698,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             TypeReference meaType = Context.SafeImport(Context.Spinner.MethodExecutionArgs);
             MethodReference meaCtor = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ctor);
 
-            string fieldName = NameGenerator.MakeAdviceArgsFieldName(Aspect.Index);
+            string fieldName = NameGenerator.MakeAdviceArgsFieldName(Instance.Index);
             meaField = new FieldDefinition(fieldName, FieldAttributes.Private, meaType);
             stateMachine.DeclaringType.Fields.Add(meaField);
 

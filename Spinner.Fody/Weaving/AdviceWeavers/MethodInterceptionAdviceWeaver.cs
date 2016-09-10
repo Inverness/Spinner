@@ -152,7 +152,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 baseType = Context.SafeImport(Context.Spinner.MethodBindingT1).MakeGenericInstanceType(_method.ReturnType);
             }
 
-            string name = NameGenerator.MakeMethodBindingName(_method.Name, Aspect.Index);
+            string name = NameGenerator.MakeMethodBindingName(_method.Name, Instance.Index);
 
             CreateBindingClass(baseType, name);
 

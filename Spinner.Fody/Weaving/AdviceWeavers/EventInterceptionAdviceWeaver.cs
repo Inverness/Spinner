@@ -140,7 +140,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             MethodDefinition delegateInvokeMethodDef = delegateTypeDef.Methods.Single(m => m.Name == "Invoke");
             MethodReference delegateInvokeMethod = Context.SafeImport(delegateInvokeMethodDef);
 
-            string name = NameGenerator.MakeEventBindingName(_evt.Name, Aspect.Index);
+            string name = NameGenerator.MakeEventBindingName(_evt.Name, Instance.Index);
             TypeReference baseType = Context.SafeImport(Context.Spinner.EventBinding);
             CreateBindingClass(baseType, name);
 
@@ -304,7 +304,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
         {
             Debug.Assert(_evt.AddMethod != null);
 
-            string name = NameGenerator.MakeEventInvokerDelegateCacheName(_evt.Name, Aspect.Index);
+            string name = NameGenerator.MakeEventInvokerDelegateCacheName(_evt.Name, Instance.Index);
 
             var attrs = FieldAttributes.Private | (_evt.AddMethod.IsStatic ? FieldAttributes.Static : 0);
 
@@ -328,7 +328,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             // Create the method definition
 
-            string name = NameGenerator.MakeEventInvokerName(_evt.Name, Aspect.Index);
+            string name = NameGenerator.MakeEventInvokerName(_evt.Name, Instance.Index);
             var attrs = MethodAttributes.Private |
                         MethodAttributes.HideBySig |
                         (_evtBackingField.IsStatic ? MethodAttributes.Static : 0);

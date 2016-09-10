@@ -133,7 +133,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
         {
             ModuleDefinition module = _property.Module;
 
-            string name = NameGenerator.MakePropertyBindingName(_property.Name, Aspect.Index);
+            string name = NameGenerator.MakePropertyBindingName(_property.Name, Instance.Index);
             TypeReference baseType = Context.SafeImport(Context.Spinner.LocationBindingT1).MakeGenericInstanceType(_property.PropertyType);
 
             CreateBindingClass(baseType, name);

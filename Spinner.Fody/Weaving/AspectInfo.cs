@@ -1,27 +1,22 @@
+using System.Collections.Generic;
 using Mono.Cecil;
 using Spinner.Aspects;
-using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weaving
 {
+    /// <summary>
+    /// Contains information about an aspect type such as the kind, features, and advice groups.
+    /// </summary>
     internal class AspectInfo
     {
-        internal AspectInfo(
-            ModuleWeavingContext mwc,
-            MulticastAttributeInstance mi,
-            AspectKind kind,
-            ICustomAttributeProvider target,
-            int index,
-            int order)
+        private readonly List<AdviceGroup> _adviceGroups = new List<AdviceGroup>();
+
+        internal AspectInfo(ModuleWeavingContext mwc, TypeDefinition aspectType, AspectKind kind)
         {
             Context = mwc;
-            Source = mi;
-            AspectType = mi.AttributeType;
+            AspectType = aspectType;
             Kind = kind;
-            Index = index;
-            Target = target;
-            Order = order;
-            Features = mwc.GetFeatures(mi.AttributeType) ?? Features.None;
+            Features = mwc.GetFeatures(aspectType) ?? Features.None;
         }
 
         public ModuleWeavingContext Context { get; }
@@ -30,14 +25,13 @@ namespace Spinner.Fody.Weaving
 
         public AspectKind Kind { get; }
 
-        public int Index { get; }
-
-        public int Order { get; }
-
-        public ICustomAttributeProvider Target { get; }
-
-        public MulticastAttributeInstance Source { get; }
-
         public Features Features { get; }
+
+        public IReadOnlyList<AdviceGroup> AdviceGroups => _adviceGroups;
+
+        internal void AddAdviceGroup(AdviceGroup g)
+        {
+            _adviceGroups.Add(g);
+        }
     }
 }

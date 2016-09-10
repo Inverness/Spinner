@@ -1,14 +1,13 @@
-using System.Collections.Generic;
 using Mono.Cecil;
 
 namespace Spinner.Fody.Weaving
 {
     internal class EventLevelAspectWeaver : AspectWeaver
     {
-        public EventLevelAspectWeaver(AspectInfo aspect, IEnumerable<AdviceGroup> advices, EventDefinition target)
-            : base(aspect, advices, target)
+        public EventLevelAspectWeaver(AspectInstance instance)
+            : base(instance)
         {
-            TargetEvent = target;
+            TargetEvent = (EventDefinition) instance.Target;
         }
 
         public EventDefinition TargetEvent { get; }

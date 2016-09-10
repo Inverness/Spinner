@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Mono.Cecil;
 using Spinner.Extensibility;
 using Spinner.Fody.Multicasting;
@@ -11,19 +10,13 @@ namespace Spinner.Fody.Weaving
     {
         private HashSet<MethodDefinition> _wroteInitFor; 
 
-        internal AspectWeaver(AspectInfo aspect, IEnumerable<AdviceGroup> advices, ICustomAttributeProvider target)
+        internal AspectWeaver(AspectInstance instance)
         {
-            Aspect = aspect;
-            AdviceGroups = advices.ToArray();
-            Target = target;
-            Context = aspect.Context;
+            Instance = instance;
+            Context = instance.Aspect.Context;
         }
 
-        internal AspectInfo Aspect { get; }
-
-        internal IReadOnlyList<AdviceGroup> AdviceGroups { get; }
-
-        internal ICustomAttributeProvider Target { get; }
+        internal AspectInstance Instance { get; }
 
         internal ModuleWeavingContext Context { get; }
 
@@ -31,9 +24,9 @@ namespace Spinner.Fody.Weaving
 
         public virtual void Weave()
         {
-            MulticastTargets targetType = Target.GetMulticastTargetType();
+            MulticastTargets targetType = Instance.Target.GetMulticastTargetType();
 
-            foreach (AdviceGroup group in AdviceGroups)
+            foreach (AdviceGroup group in Instance.Aspect.AdviceGroups)
             {
                 AdviceInfo master = group.Master;
 
@@ -43,7 +36,7 @@ namespace Spinner.Fody.Weaving
                     case PointcutType.Self:
                         if ((group.Master.ValidTargets & targetType) != 0)
                         {
-                            var w = group.CreateWeaver(this, Target);
+                            var w = group.CreateWeaver(this, Instance.Target);
                             w.Weave();
                         }
 
@@ -57,7 +50,7 @@ namespace Spinner.Fody.Weaving
                             TargetMembers = group.PointcutMemberName
                         };
 
-                        foreach (IMetadataTokenProvider d in Context.MulticastEngine.GetDescendants(Target, ma))
+                        foreach (IMetadataTokenProvider d in Context.MulticastEngine.GetDescendants(Instance.Target, ma))
                         {
                             var w = group.CreateWeaver(this, d);
                             w.Weave();
@@ -90,37 +83,37 @@ namespace Spinner.Fody.Weaving
 
             IMemberDefinition member;
             TypeDefinition hostType;
-            switch (Target.GetProviderType())
+            switch (Instance.Target.GetProviderType())
             {
                 case ProviderType.Assembly:
                     throw new InvalidOperationException();
                 case ProviderType.Type:
-                    member = hostType = (TypeDefinition) Target;
+                    member = hostType = (TypeDefinition) Instance.Target;
                     break;
                 case ProviderType.Method:
                 case ProviderType.Property:
                 case ProviderType.Event:
                 case ProviderType.Field:
-                    member = (IMemberDefinition) Target;
+                    member = (IMemberDefinition) Instance.Target;
                     hostType = member.DeclaringType;
                     break;
                 case ProviderType.Parameter:
-                    member = ((ParameterDefinition) Target).GetMethodDefinition();
+                    member = ((ParameterDefinition) Instance.Target).GetMethodDefinition();
                     hostType = member.DeclaringType;
                     break;
                 case ProviderType.MethodReturn:
-                    member = ((MethodReturnType) Target).GetMethodDefinition();
+                    member = ((MethodReturnType) Instance.Target).GetMethodDefinition();
                     hostType = member.DeclaringType;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
 
-            string name = NameGenerator.MakeAspectFieldName(member.Name, Aspect.Index);
+            string name = NameGenerator.MakeAspectFieldName(member.Name, Instance.Index);
 
             var fattrs = FieldAttributes.Private | FieldAttributes.Static;
 
-            var aspectFieldDef = new FieldDefinition(name, fattrs, Context.SafeImport(Aspect.AspectType));
+            var aspectFieldDef = new FieldDefinition(name, fattrs, Context.SafeImport(Instance.Aspect.AspectType));
             AddCompilerGeneratedAttribute(aspectFieldDef);
 
             hostType.Fields.Add(aspectFieldDef);

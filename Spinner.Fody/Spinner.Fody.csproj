@@ -69,6 +69,8 @@
     <Compile Include="Weaving\AdviceWeavers\MethodInterceptionAdviceWeaver.cs" />
     <Compile Include="Weaving\AdviceWeavers\PropertyInterceptionAdviceWeaver.cs" />
     <Compile Include="Weaving\AspectInfo.cs" />
+    <Compile Include="Weaving\AspectInfoFactory.cs" />
+    <Compile Include="Weaving\AspectInstance.cs" />
     <Compile Include="Weaving\AspectWeaver.cs" />
     <Compile Include="Weaving\AspectWeaverFactory.cs" />
     <Compile Include="Weaving\EventInterceptionAdviceGroup.cs" />

@@ -6,12 +6,16 @@ using Spinner.Extensibility;
 
 namespace Spinner.Fody.Weaving
 {
-    [DebuggerDisplay("{Aspect.AspectType.Name} {Aspect.Index} {AdviceType}")]
+    /// <summary>
+    /// Contains information about an a single advice.
+    /// </summary>
+    [DebuggerDisplay("{Aspect.AspectType.Name} {AdviceType}")]
     internal abstract class AdviceInfo
     {
         internal AdviceInfo(AspectInfo aspect, ICustomAttributeProvider source, CustomAttribute attr)
         {
             Aspect = aspect;
+            Context = aspect.Context;
             Source = source;
             Attribute = attr;
 
@@ -24,10 +28,12 @@ namespace Spinner.Fody.Weaving
             MethodDefinition sourceMethod;
             TypeDefinition sourceType;
             if ((sourceMethod = source as MethodDefinition) != null)
-                Features = aspect.Context.GetFeatures(sourceMethod) ?? Features.None;
+                Features = Context.GetFeatures(sourceMethod) ?? Features.None;
             else if ((sourceType = source as TypeDefinition) != null)
-                Features = aspect.Context.GetFeatures(sourceType) ?? Features.None;
+                Features = Context.GetFeatures(sourceType) ?? Features.None;
         }
+
+        public ModuleWeavingContext Context { get; }
 
         public abstract AdviceType AdviceType { get; }
 
@@ -39,8 +45,6 @@ namespace Spinner.Fody.Weaving
 
         public CustomAttribute Attribute { get; }
 
-        public bool Applied { get; set; }
-
         public string Master { get; set; }
 
         public AdviceInfo MasterObject { get; set; }
@@ -51,7 +55,7 @@ namespace Spinner.Fody.Weaving
 
         public MethodReference ImportSourceMethod()
         {
-            return Aspect.Context.SafeImport((MethodReference) Source);
+            return Context.SafeImport((MethodReference) Source);
         }
 
         protected virtual void ParseAttribute()

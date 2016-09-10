@@ -8,6 +8,7 @@ using Mono.Cecil;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
 using Spinner.Fody.Multicasting;
+using Spinner.Fody.Weaving;
 
 namespace Spinner.Fody
 {
@@ -40,6 +41,9 @@ namespace Spinner.Fody
         private readonly ConcurrentDictionary<TypeDefinition, AspectKind?> _aspectKinds =
             new ConcurrentDictionary<TypeDefinition, AspectKind?>();
         private int _aspectIndexCounter;
+        
+        private readonly ConcurrentDictionary<TypeDefinition, AspectInfo> _aspectInfo =
+            new ConcurrentDictionary<TypeDefinition, AspectInfo>();
 
         internal ModuleWeavingContext(ModuleWeaver weaver, ModuleDefinition module, ModuleDefinition libraryModule)
         {
@@ -285,6 +289,19 @@ namespace Spinner.Fody
             }
 
             return null;
+        }
+
+        internal AspectInfo GetAspectInfo(TypeDefinition type)
+        {
+            AspectInfo info;
+            if (_aspectInfo.TryGetValue(type, out info))
+                return info;
+            
+            AspectKind? kind = GetAspectKind(type, true);
+
+            info = kind.HasValue ? AspectInfoFactory.Create(this, type, kind.Value) : null;
+
+            return _aspectInfo.TryAdd(type, info) ? info : _aspectInfo[type];
         }
 
         /// <summary>

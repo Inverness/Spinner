@@ -21,6 +21,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
         // ReSharper disable InconsistentNaming
         internal readonly AspectInfo Aspect;
+        internal readonly AspectInstance Instance;
         internal readonly ModuleWeavingContext Context;
         internal readonly AspectWeaver Parent;
         internal readonly IMetadataTokenProvider Target;
@@ -32,7 +33,8 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
         protected AdviceWeaver(AspectWeaver parent, IMetadataTokenProvider adviceTarget)
         {
             Parent = parent;
-            Aspect = parent.Aspect;
+            Aspect = parent.Instance.Aspect;
+            Instance = parent.Instance;
             Context = parent.Context;
             Target = adviceTarget;
         }
@@ -50,7 +52,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             // Duplicate the target method under a new name: <Name>z__OriginalMethod
 
-            string originalName = NameGenerator.MakeOriginalMethodName(method.Name, Aspect.Index);
+            string originalName = NameGenerator.MakeOriginalMethodName(method.Name, Instance.Index);
 
             MethodAttributes originalAttributes = method.Attributes & preservedAttributes |
                                                   MethodAttributes.Private;
@@ -137,7 +139,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             MethodDefinition constructorDef = Context.Spinner.ArgumentsT_ctor[effectiveParameterCount];
             MethodReference constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
 
-            string fieldName = NameGenerator.MakeAdviceArgsFieldName(Aspect.Index);
+            string fieldName = NameGenerator.MakeAdviceArgsFieldName(Instance.Index);
             arguments = new FieldDefinition(fieldName, FieldAttributes.Private, argumentsType);
 
             stateMachine.DeclaringType.Fields.Add(arguments);
@@ -436,7 +438,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 return;
 
             // Figure out if the attribute has any arguments that need to be initialized
-            CustomAttribute attr = Aspect.Source.Attribute;
+            CustomAttribute attr = Instance.Source.Attribute;
 
             int argCount = attr.HasConstructorArguments ? attr.ConstructorArguments.Count : 0;
             int propCount = attr.HasProperties ? attr.Properties.Count : 0;
@@ -731,7 +733,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             TypeReference baseType,
             string name)
         {
-            IMemberDefinition targetMember = (IMemberDefinition) Aspect.Target;
+            IMemberDefinition targetMember = (IMemberDefinition) Instance.Target;
 
             var tattrs = TypeAttributes.NestedPrivate |
                          TypeAttributes.Class |
