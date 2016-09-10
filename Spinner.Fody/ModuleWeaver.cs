@@ -1,4 +1,4 @@
-﻿//#define WITH_THREADING
+﻿#define WITH_THREADING
 
 using System;
 using System.Collections.Generic;
@@ -76,7 +76,9 @@ namespace Spinner.Fody
 
             stopwatch.Restart();
 
-            Task[] analysisTasks = types.Select(CreateAnalysisAction)
+            var analysisLocks = new LockTargetProvider<TypeDefinition>();
+
+            Task[] analysisTasks = types.Select(t => CreateAnalysisAction(t, analysisLocks))
                                         .Where(a => a != null)
                                         .Select(RunTask)
                                         .ToArray();
@@ -121,28 +123,24 @@ namespace Spinner.Fody
 
         private Action CreateWeaveAction(TypeDefinition type)
         {
-            List<Tuple<IMemberDefinition, MulticastAttributeInstance, AspectKind>> aspects = null;
-
             // State machine weaving is handled by its owning method. Trying to treat state machines as their own type
             // causes threading issues with the declaring type's weaver.
-
-            char typeChar;
-            if (NameUtility.TryParseGeneratedName(type.Name, out typeChar) && typeChar == 'd')
-                return null;
-
-            AspectWeaver[] weavers = AspectWeaverFactory.TryCreate(_mwc, _multicastAttributeRegistry, type);
-
-            if (weavers == null)
+            if (NameUtility.IsStateMachineName(type.Name))
                 return null;
 
             return () =>
             {
-                foreach (AspectWeaver w in weavers)
-                    w.Weave();
+                AspectWeaver[] weavers = AspectWeaverFactory.TryCreate(_mwc, _multicastAttributeRegistry, type);
+
+                if (weavers != null)
+                {
+                    foreach (AspectWeaver w in weavers)
+                        w.Weave();
+                }
             };
         }
 
-        private Action CreateAnalysisAction(TypeDefinition type)
+        private Action CreateAnalysisAction(TypeDefinition type, LockTargetProvider<TypeDefinition> ltp)
         {
             if (!AspectFeatureAnalyzer.IsMaybeAspect(type))
                 return null;
@@ -151,7 +149,7 @@ namespace Spinner.Fody
             {
                 try
                 {
-                    AspectFeatureAnalyzer.Analyze(_mwc, type);
+                    AspectFeatureAnalyzer.Analyze(_mwc, type, ltp);
                 }
                 catch (Exception ex)
                 {

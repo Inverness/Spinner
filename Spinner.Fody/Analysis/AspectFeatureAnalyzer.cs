@@ -5,6 +5,7 @@ using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Spinner.Aspects;
+using Spinner.Fody.Utilities;
 
 namespace Spinner.Fody.Analysis
 {
@@ -23,6 +24,7 @@ namespace Spinner.Fody.Analysis
 
         private readonly ModuleWeavingContext _mwc;
         private readonly TypeDefinition _type;
+        private readonly LockTargetProvider<TypeDefinition> _ltp;
         private readonly AspectKind _aspectKind;
         private readonly TypeDefinition[] _inheritanceList;
         private readonly Dictionary<MethodDefinition, Features> _inheritedMethodFeatures =
@@ -32,11 +34,13 @@ namespace Spinner.Fody.Analysis
         private AspectFeatureAnalyzer(
             ModuleWeavingContext mwc,
             TypeDefinition type,
+            LockTargetProvider<TypeDefinition> ltp,
             AspectKind aspectKind,
             TypeDefinition[] inheritanceList)
         {
             _mwc = mwc;
             _type = type;
+            _ltp = ltp;
             _aspectKind = aspectKind;
             _inheritanceList = inheritanceList;
 
@@ -61,7 +65,7 @@ namespace Spinner.Fody.Analysis
         /// Analyzes a type and adds AnalyzedFeatureAttribute to the type and its methods where necessary.
         /// It is safe to invoke this in parallel with different types.
         /// </summary>
-        internal static void Analyze(ModuleWeavingContext mwc, TypeDefinition type)
+        internal static void Analyze(ModuleWeavingContext mwc, TypeDefinition type, LockTargetProvider<TypeDefinition> ltp)
         {
             // Aspects can only be types that are valid as attributes.
             Debug.Assert(IsMaybeAspect(type), "this should be checked before starting analysis");
@@ -73,7 +77,7 @@ namespace Spinner.Fody.Analysis
 
             // The type might not actually be an aspect.
             if (kind.HasValue)
-                new AspectFeatureAnalyzer(mwc, type, kind.Value, inheritanceList.ToArray()).Analyze();
+                new AspectFeatureAnalyzer(mwc, type, ltp, kind.Value, inheritanceList.ToArray()).Analyze();
         }
 
         private void Analyze()
@@ -84,7 +88,7 @@ namespace Spinner.Fody.Analysis
                     continue;
 
                 // Do not analyze the same type more than once.
-                lock (type)
+                lock (_ltp.Get(type))
                 {
                     AnalyzeType(type);
                 }

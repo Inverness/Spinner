@@ -4,6 +4,12 @@ namespace Spinner.Fody.Utilities
 {
     public static class NameUtility
     {
+        public static bool IsStateMachineName(string name)
+        {
+            char typeChar;
+            return TryParseGeneratedName(name, out typeChar) && typeChar == 'd';
+        }
+
         /// <summary>
         /// Parse the original name inside angle brackets from a compiler-generated name.
         /// </summary>

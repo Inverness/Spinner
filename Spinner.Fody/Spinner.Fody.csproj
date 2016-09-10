@@ -60,6 +60,7 @@
     <Compile Include="Utilities\CollectionUtility.cs" />
     <Compile Include="Utilities\ILProcessorEx.cs" />
     <Compile Include="Utilities\LabelProcessor.cs" />
+    <Compile Include="Utilities\LockTargetProvider.cs" />
     <Compile Include="Utilities\NameUtility.cs" />
     <Compile Include="Weaving\AdviceGroup.cs" />
     <Compile Include="Weaving\AdviceInfo.cs" />
