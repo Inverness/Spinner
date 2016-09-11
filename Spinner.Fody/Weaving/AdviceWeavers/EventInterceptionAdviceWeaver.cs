@@ -326,6 +326,10 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             MethodDefinition invokeEventMethodDef = Context.Spinner.WeaverHelpers_InvokeEventAdvice;
             MethodReference invokeEventMethod = Context.SafeImport(invokeEventMethodDef);
 
+            TypeReference actionT1Type = Context.SafeImport(Context.Framework.ActionT1);
+            TypeReference eiaBaseType = Context.SafeImport(Context.Spinner.EventInterceptionArgs);
+            MethodReference actionT1Ctor = Context.SafeImport(Context.Framework.ActionT1_ctor);
+
             // Create the method definition
 
             string name = NameGenerator.MakeEventInvokerName(_evt.Name, Instance.Index);
@@ -400,15 +404,16 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             VariableDefinition eiaVar;
             WriteEiaInit(_invokerMethod, _invokerMethod.Body.Instructions.Count, argumentsVar, out eiaVar);
 
-            MethodDefinition actionCtorDef = Context.Framework.ActionT1_ctor;
-            GenericInstanceMethod actionCtor = new GenericInstanceMethod(Context.SafeImport(actionCtorDef));
-            actionCtor.GenericArguments.Add(eiaVar.VariableType);
+            var genActionType = new GenericInstanceType(actionT1Type);
+            genActionType.GenericArguments.Add(eiaBaseType);
+            MethodReference actionCtor = actionT1Ctor.WithGenericDeclaringType(genActionType);
             
             // The remaining work is handed off to a helper method since the code is not type-specific.
 
             il.Emit(OpCodes.Ldloc, handlerVar);
             il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            il.Emit(OpCodes.Ldftn, (MethodReference) advice.Source);
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldvirtftn, (MethodReference) advice.Source);
             il.Emit(OpCodes.Newobj, actionCtor);
             il.Emit(OpCodes.Ldloc, eiaVar);
             il.Emit(OpCodes.Call, invokeEventMethod);
