@@ -354,7 +354,7 @@ namespace Spinner.Fody
 
         internal static bool IsReturnVoid(this MethodReference method)
         {
-            return method.ReturnType == method.Module.TypeSystem.Void;
+            return method.ReturnType.IsSame(method.Module.TypeSystem.Void);
         }
     }
 }
