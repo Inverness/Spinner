@@ -5,7 +5,7 @@ namespace Spinner.Fody.Weaving
 {
     internal sealed class LocationInterceptionAdviceInfo : AdviceInfo
     {
-        public LocationInterceptionAdviceInfo(AdviceType type, AspectInfo aspect, PropertyDefinition source, CustomAttribute attr)
+        public LocationInterceptionAdviceInfo(AdviceType type, AspectInfo aspect, MethodDefinition source, CustomAttribute attr)
             : base(aspect, source, attr)
         {
             AdviceType = type;

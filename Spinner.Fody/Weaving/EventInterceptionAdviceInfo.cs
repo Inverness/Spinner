@@ -5,7 +5,7 @@ namespace Spinner.Fody.Weaving
 {
     internal sealed class EventInterceptionAdviceInfo : AdviceInfo
     {
-        public EventInterceptionAdviceInfo(AdviceType type, AspectInfo aspect, ICustomAttributeProvider source, CustomAttribute attr)
+        public EventInterceptionAdviceInfo(AdviceType type, AspectInfo aspect, MethodDefinition source, CustomAttribute attr)
             : base(aspect, source, attr)
         {
             AdviceType = type;

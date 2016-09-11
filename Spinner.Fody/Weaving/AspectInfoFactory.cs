@@ -225,12 +225,12 @@ namespace Spinner.Fody.Weaving
                     break;
                 case AdviceType.LocationGetValue:
                 case AdviceType.LocationSetValue:
-                    result = new LocationInterceptionAdviceInfo(type, aspect, (PropertyDefinition) source, attr);
+                    result = new LocationInterceptionAdviceInfo(type, aspect, (MethodDefinition) source, attr);
                     break;
                 case AdviceType.EventAddHandler:
                 case AdviceType.EventRemoveHandler:
                 case AdviceType.EventInvokeHandler:
-                    result = new EventInterceptionAdviceInfo(type, aspect, (EventDefinition) source, attr);
+                    result = new EventInterceptionAdviceInfo(type, aspect, (MethodDefinition) source, attr);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
