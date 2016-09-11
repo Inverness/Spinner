@@ -404,17 +404,32 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             VariableDefinition eiaVar;
             WriteEiaInit(_invokerMethod, _invokerMethod.Body.Instructions.Count, argumentsVar, out eiaVar);
 
+            // Create the OnInvokeHandler delegate
+
             var genActionType = new GenericInstanceType(actionT1Type);
             genActionType.GenericArguments.Add(eiaBaseType);
             MethodReference actionCtor = actionT1Ctor.WithGenericDeclaringType(genActionType);
+
+            VariableDefinition adviceDelegateVar = il.Body.AddVariableDefinition(genActionType);
+            var adviceSourceMethod = (MethodReference) advice.Source;
+
+            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
+            if (adviceSourceMethod.Resolve().IsVirtual)
+            {
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Ldvirtftn, adviceSourceMethod);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldftn, adviceSourceMethod);
+            }
+            il.Emit(OpCodes.Newobj, actionCtor);
+            il.Emit(OpCodes.Stloc, adviceDelegateVar);
             
             // The remaining work is handed off to a helper method since the code is not type-specific.
 
             il.Emit(OpCodes.Ldloc, handlerVar);
-            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            il.Emit(OpCodes.Dup);
-            il.Emit(OpCodes.Ldvirtftn, (MethodReference) advice.Source);
-            il.Emit(OpCodes.Newobj, actionCtor);
+            il.Emit(OpCodes.Ldloc, adviceDelegateVar);
             il.Emit(OpCodes.Ldloc, eiaVar);
             il.Emit(OpCodes.Call, invokeEventMethod);
             il.Emit(OpCodes.Ret);
