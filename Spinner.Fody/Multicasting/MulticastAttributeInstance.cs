@@ -109,26 +109,6 @@ namespace Spinner.Fody.Multicasting
 
         public MulticastArguments Arguments => _a;
 
-        //public MulticastTargets TargetElements => _a.TargetElements;
-
-        //public StringMatcher TargetAssemblies => _a.TargetAssemblies;
-
-        //public StringMatcher TargetTypes => _a.TargetTypes;
-
-        //public MulticastAttributes TargetTypeAttributes => _a.TargetTypeAttributes;
-
-        //public MulticastAttributes TargetExternalTypeAttributes => _a.TargetExternalTypeAttributes;
-
-        //public StringMatcher TargetMembers => _a.TargetMembers;
-
-        //public MulticastAttributes TargetMemberAttributes => _a.TargetMemberAttributes;
-
-        //public MulticastAttributes TargetExternalMemberAttributes => _a.TargetExternalMemberAttributes;
-
-        //public StringMatcher TargetParameters => _a.TargetParameters;
-
-        //public MulticastAttributes TargetParameterAttributes => _a.TargetParameterAttributes;
-
         public MulticastAttributeInstance WithTarget(ICustomAttributeProvider newTarget)
         {
             Debug.Assert(newTarget.GetType() == Target.GetType());

@@ -7,7 +7,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
-using Spinner.Aspects;
 using Spinner.Fody.Analysis;
 using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
@@ -17,8 +16,6 @@ namespace Spinner.Fody
 {
     public class ModuleWeaver
     {
-        private static bool s_test;
-
         public ModuleDefinition ModuleDefinition { get; set; }
 
         public Action<string> LogDebug { get; set; }
@@ -45,6 +42,11 @@ namespace Spinner.Fody
         {
             LogInfo($"---- Beginning aspect weaving for: {ModuleDefinition.Assembly.FullName} ----");
 
+            //
+            // Initialize the module weaving context, which contains global state and services for the
+            // analyzers, multicast engine, and weavers
+            //
+
             AssemblyNameReference spinnerName = ModuleDefinition.AssemblyReferences.FirstOrDefault(a => a.Name == "Spinner");
 
             if (spinnerName == null)
@@ -58,19 +60,28 @@ namespace Spinner.Fody
                                             ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
-            var stopwatch = new Stopwatch();
+
+            //
+            // Create the multicast attribute registry. This will identify all multicast attributes in the current
+            // module and any referenced modules and cast them onto their target objects. This is observational
+            // only and does not edit any modules.
+            //
 
             LogInfo("Beginning attribute multicasting...");
 
-            stopwatch.Start();
+            var stopwatch = Stopwatch.StartNew();
 
             _multicastAttributeRegistry = MulticastAttributeRegistry.Create(_mwc);
 
             stopwatch.Stop();
 
             LogInfo($"Finished attribute multicasting in {stopwatch.ElapsedMilliseconds} ms");
-            
-            // Analyze aspect types in parallel.
+
+            //
+            // Analyze aspect types in the current module to identify what features of an aspect they use.
+            // Feature information allows the apect weavers to optimize out code that wont be used. Attributes will
+            // be added to relevant methods and types. This executes in parallel for each type.
+            //
 
             LogInfo("Beginning aspect feature analysis...");
 
@@ -94,10 +105,10 @@ namespace Spinner.Fody
 
             stopwatch.Restart();
 
-            // Execute type weavings in parallel. The ModuleWeavingContext provides thread-safe imports.
-            // Weaving does not require any other module-level changes.
-
-            // Tasks are only created when there is actual work to be done for a type.
+            //
+            // Weave aspects for types in the current module. This executes in parallel for each type.
+            //
+            
             Task[] weaveTasks = types.Select(CreateWeaveAction)
                                      .Where(a => a != null)
                                      .Select(RunTask)

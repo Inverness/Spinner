@@ -72,27 +72,27 @@ namespace Spinner.Fody.Multicasting
                 if (derivedList.Count == 0)
                     continue;
 
-                foreach (MulticastAttributeInstance mi in item.Value.Item2)
+                foreach (MulticastAttributeInstance inst in item.Value.Item2)
                 {
-                    if (mi.Inheritance == MulticastInheritance.None)
+                    if (inst.Inheritance == MulticastInheritance.None)
                         continue;
 
-                    foreach (ICustomAttributeProvider d in derivedList.OfType<ICustomAttributeProvider>())
+                    foreach (ICustomAttributeProvider derived in derivedList.OfType<ICustomAttributeProvider>())
                     {
-                        MulticastAttributeInstance nmi = mi.WithTarget(d);
-
-                        Tuple<int, List<MulticastAttributeInstance>> mis;
-                        if (!_instances.TryGetValue(d, out mis))
+                        MulticastAttributeInstance newInst = inst.WithTarget(derived);
+                        
+                        Tuple<int, List<MulticastAttributeInstance>> derivedInsts;
+                        if (!_instances.TryGetValue(derived, out derivedInsts))
                         {
                             // Inherit order counter ensures that inherited instances are applied first
-                            int initOrder = _inheritOrderCounter++;
-                            mis = Tuple.Create(initOrder, new List<MulticastAttributeInstance>());
-                            _instances.Add(d, mis);
+                            derivedInsts = Tuple.Create(_inheritOrderCounter++, new List<MulticastAttributeInstance>());
+
+                            _instances.Add(derived, derivedInsts);
                         }
+                        
+                        derivedInsts.Item2.Add(newInst);
 
-                        mis.Item2.Add(nmi);
-
-                        _mwc.LogDebug($"Multicast Inheritance: AttributeType: {mi.AttributeType}, Origin: {mi.Origin}, Inheritor: {d}");
+                        _mwc.LogDebug($"Multicast Inheritance: AttributeType: {inst.AttributeType}, Origin: {inst.Origin}, Inheritor: {derived}");
                     }
                 }
             }
