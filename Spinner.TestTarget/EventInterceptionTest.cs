@@ -13,13 +13,13 @@ namespace Spinner.TestTarget
     {
         private EventHandler _customHandlers;
 
-        //[BasicLoggingEia]
+        [BasicLoggingEia]
         public event EventHandler Normal;
 
-        //[BasicLoggingEia]
+        [BasicLoggingEia]
         public static event EventHandler NormalStatic;
 
-        //[BasicLoggingEia]
+        [BasicLoggingEia]
         public event EventHandler Custom
         {
             add { _customHandlers += value; }
