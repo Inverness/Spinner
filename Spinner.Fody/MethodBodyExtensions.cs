@@ -142,6 +142,21 @@ namespace Spinner.Fody
             return def;
         }
 
+        internal static HashSet<Instruction> GetNops(this MethodBody self)
+        {
+            var s = new HashSet<Instruction>();
+
+            foreach (Instruction i in self.Instructions)
+            {
+                if (i.OpCode == OpCodes.Nop)
+                {
+                    s.Add(i);
+                }
+            }
+
+            return s;
+        }
+
         /// <summary>
         /// Removes all Nop's from the body's instructions and fixes up instruction operands and exception handlers.
         /// </summary>

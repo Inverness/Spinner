@@ -6,6 +6,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weaving.AdviceWeavers
@@ -257,7 +258,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
         }
 
         /// <summary>
-        /// Write MethodExecutionArgs initialization.
+        /// Write EventInterceptionArgs initialization.
         /// </summary>
         private void WriteEiaInit(
             MethodDefinition method,
@@ -268,33 +269,37 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             TypeReference eiaType = Context.SafeImport(Context.Spinner.BoundEventInterceptionArgs);
             MethodReference eiaCtor = Context.SafeImport(Context.Spinner.BoundEventInterceptionArgs_ctor);
 
+            // eiaVar = new EventInterceptionArgs(instance, arguments, bindingInstance)
+
             eiaVar = method.Body.AddVariableDefinition(eiaType);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
             if (method.IsStatic)
             {
-                insc.Add(Ins.Create(OpCodes.Ldnull));
+                il.Emit(OpCodes.Ldnull);
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                il.Emit(OpCodes.Ldarg_0);
+
+                // Need to box a value type in object.
                 if (method.DeclaringType.IsValueType)
                 {
-                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
-                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
+                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
+                    il.Emit(OpCodes.Box, method.DeclaringType);
                 }
             }
 
-            insc.Add(argumentsVarOpt == null ? Ins.Create(OpCodes.Ldnull) : Ins.Create(OpCodes.Ldloc, argumentsVarOpt));
+            il.EmitLoadOrNull(argumentsVarOpt, null);
 
-            insc.Add(Ins.Create(OpCodes.Ldsfld, BindingInstanceField));
+            il.Emit(OpCodes.Ldsfld, BindingInstanceField);
 
-            insc.Add(Ins.Create(OpCodes.Newobj, eiaCtor));
+            il.Emit(OpCodes.Newobj, eiaCtor);
 
-            insc.Add(Ins.Create(OpCodes.Stloc, eiaVar));
+            il.Emit(OpCodes.Stloc, eiaVar);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         /// <summary>
@@ -323,16 +328,12 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
         /// </summary>
         private void CreateEventInvoker(AdviceInfo advice)
         {
-            MethodDefinition invokeEventMethodDef = Context.Spinner.WeaverHelpers_InvokeEventAdvice;
-            MethodReference invokeEventMethod = Context.SafeImport(invokeEventMethodDef);
-
-            TypeReference actionT1Type = Context.SafeImport(Context.Framework.ActionT1);
-            TypeReference eiaBaseType = Context.SafeImport(Context.Spinner.EventInterceptionArgs);
-            MethodReference actionT1Ctor = Context.SafeImport(Context.Framework.ActionT1_ctor);
-
-            // Create the method definition
+            //
+            // Create invoker method definition and add it to the declaring type.
+            //
 
             string name = NameGenerator.MakeEventInvokerName(_evt.Name, Instance.Index);
+
             var attrs = MethodAttributes.Private |
                         MethodAttributes.HideBySig |
                         (_evtBackingField.IsStatic ? MethodAttributes.Static : 0);
@@ -345,14 +346,18 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             Parent.AddCompilerGeneratedAttribute(_invokerMethod);
             
             _evt.DeclaringType.Methods.Add(_invokerMethod);
-            
-            // Add parameters matching the event delegate
 
-            var delegateInvokeMethod = _evtBackingField.FieldType.Resolve().Methods.Single(m => m.Name == "Invoke");
+            Collection<Instruction> insc = _invokerMethod.Body.Instructions;
 
-            if (delegateInvokeMethod.HasParameters)
+            //
+            // Examine the event delegate's Invoke() method for the needed parameters.
+            //
+
+            var evtDelInvokeMethodDef = _evtBackingField.FieldType.Resolve().Methods.Single(m => m.Name == "Invoke");
+
+            if (evtDelInvokeMethodDef.HasParameters)
             {
-                foreach (ParameterDefinition p in delegateInvokeMethod.Parameters)
+                foreach (ParameterDefinition p in evtDelInvokeMethodDef.Parameters)
                 {
                     _invokerMethod.Parameters.Add(new ParameterDefinition(p.Name,
                                                                           ParameterAttributes.None,
@@ -360,7 +365,10 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 }
             }
 
-            // Start writing the body by capturing the event backing field and checking if its null.
+            //
+            // Start writing the body of the method.
+            // Get the event backing field (storing its delegate) and return if its currently null.
+            //
 
             VariableDefinition handlerVar = _invokerMethod.Body.AddVariableDefinition(_evtBackingField.FieldType);
 
@@ -386,31 +394,38 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             il.Append(notNullLabel);
             il.Emit(OpCodes.Stloc, handlerVar);
 
-            // Capture arguments
+            //
+            // Capture arguments and initialize the aspect, binding, and advice arguments.
+            //
 
             VariableDefinition argumentsVar = null;
             if (_invokerMethod.HasParameters)
             {
-                WriteArgumentContainerInit(_invokerMethod, _invokerMethod.Body.Instructions.Count, out argumentsVar);
-                WriteCopyArgumentsToContainer(_invokerMethod, _invokerMethod.Body.Instructions.Count, argumentsVar, true);
+                WriteArgumentContainerInit(_invokerMethod, insc.Count, out argumentsVar);
+                WriteCopyArgumentsToContainer(_invokerMethod, insc.Count, argumentsVar, true);
             }
 
-            // Initialize the EventInterceptionArgs
+            WriteAspectInit(_invokerMethod, insc.Count);
 
-            WriteAspectInit(_invokerMethod, _invokerMethod.Body.Instructions.Count);
-
-            WriteBindingInit(_invokerMethod, _invokerMethod.Body.Instructions.Count);
+            WriteBindingInit(_invokerMethod, insc.Count);
 
             VariableDefinition eiaVar;
-            WriteEiaInit(_invokerMethod, _invokerMethod.Body.Instructions.Count, argumentsVar, out eiaVar);
+            WriteEiaInit(_invokerMethod, insc.Count, argumentsVar, out eiaVar);
 
-            // Create the OnInvokeHandler delegate
+            //
+            // Create an Action<EventInterceptionArgs> delegate from the OnInvokeHandler method.
+            //
 
-            var genActionType = new GenericInstanceType(actionT1Type);
-            genActionType.GenericArguments.Add(eiaBaseType);
-            MethodReference actionCtor = actionT1Ctor.WithGenericDeclaringType(genActionType);
+            TypeReference actionT1Type = Context.SafeImport(Context.Framework.ActionT1);
+            TypeReference eiaBaseType = Context.SafeImport(Context.Spinner.EventInterceptionArgs);
+            MethodReference actionT1Ctor = Context.SafeImport(Context.Framework.ActionT1_ctor);
 
-            VariableDefinition adviceDelegateVar = il.Body.AddVariableDefinition(genActionType);
+            var actionT1TypeInst = new GenericInstanceType(actionT1Type);
+            actionT1TypeInst.GenericArguments.Add(eiaBaseType);
+
+            MethodReference actionCtor = actionT1Ctor.WithGenericDeclaringType(actionT1TypeInst);
+
+            VariableDefinition adviceDelegateVar = il.Body.AddVariableDefinition(actionT1TypeInst);
             var adviceSourceMethod = (MethodReference) advice.Source;
 
             il.Emit(OpCodes.Ldsfld, Parent.AspectField);
@@ -426,12 +441,17 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             il.Emit(OpCodes.Newobj, actionCtor);
             il.Emit(OpCodes.Stloc, adviceDelegateVar);
             
-            // The remaining work is handed off to a helper method since the code is not type-specific.
+            //
+            // Call: void WeaverHelpers.InvokeEventAdvice(Delegate, Action<EventInterceptionArgs>, EventInterceptionArgs)
+            //
+
+            MethodDefinition invokeEventAdviceMethodDef = Context.Spinner.WeaverHelpers_InvokeEventAdvice;
+            MethodReference invokeEventAdviceMethod = Context.SafeImport(invokeEventAdviceMethodDef);
 
             il.Emit(OpCodes.Ldloc, handlerVar);
             il.Emit(OpCodes.Ldloc, adviceDelegateVar);
             il.Emit(OpCodes.Ldloc, eiaVar);
-            il.Emit(OpCodes.Call, invokeEventMethod);
+            il.Emit(OpCodes.Call, invokeEventAdviceMethod);
             il.Emit(OpCodes.Ret);
 
             _invokerMethod.Body.RemoveNops();
@@ -448,7 +468,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             bool isStatic = _evtBackingField.IsStatic;
 
             Collection<Ins> insc = method.Body.Instructions;
-            Collection<Ins> newinsc = null;
+            ILProcessorEx il = null;
             MethodReference delegateCtor = null;
             HashSet<Ins> existingNops = null;
 
@@ -467,10 +487,10 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 insc[i].Operand = _invokerDelegateField;
 
                 // Lazily initialize some stuff the first time work needs to be done
-                if (newinsc == null)
+                if (il == null)
                 {
-                    newinsc = new Collection<Ins>();
-                    existingNops = new HashSet<Ins>(insc.Where(ir => ir.OpCode == OpCodes.Nop));
+                    il = new ILProcessorEx();
+                    existingNops = method.Body.GetNops();
 
                     MethodDefinition delegateCtorDef = _evt.EventType.Resolve().Methods.Single(m => m.IsConstructor);
                     delegateCtor = Context.SafeImport(delegateCtorDef);
@@ -482,36 +502,37 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 Ins notNullLabel = Ins.Create(OpCodes.Nop);
                 if (isStatic)
                 {
-                    newinsc.Add(Ins.Create(OpCodes.Ldsfld, _invokerDelegateField));
-                    newinsc.Add(Ins.Create(OpCodes.Brtrue, notNullLabel));
-                    newinsc.Add(Ins.Create(OpCodes.Ldnull));
-                    newinsc.Add(Ins.Create(OpCodes.Ldftn, _invokerMethod));
-                    newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
-                    newinsc.Add(Ins.Create(OpCodes.Stsfld, _invokerDelegateField));
-                    newinsc.Add(notNullLabel);
+                    il.Emit(OpCodes.Ldsfld, _invokerDelegateField);
+                    il.Emit(OpCodes.Brtrue, notNullLabel);
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Ldftn, _invokerMethod);
+                    il.Emit(OpCodes.Newobj, delegateCtor);
+                    il.Emit(OpCodes.Stsfld, _invokerDelegateField);
+                    il.Append(notNullLabel);
 
-                    method.Body.InsertInstructions(i, true, newinsc);
+                    method.Body.InsertInstructions(i, true, il.Instructions);
                 }
                 else
                 {
-                    newinsc.Add(Ins.Create(OpCodes.Ldarg_0));
-                    newinsc.Add(Ins.Create(OpCodes.Ldfld, _invokerDelegateField));
-                    newinsc.Add(Ins.Create(OpCodes.Brtrue, notNullLabel));
-                    newinsc.Add(Ins.Create(OpCodes.Ldarg_0));
-                    newinsc.Add(Ins.Create(OpCodes.Dup));
-                    newinsc.Add(Ins.Create(OpCodes.Ldftn, _invokerMethod));
-                    newinsc.Add(Ins.Create(OpCodes.Newobj, delegateCtor));
-                    newinsc.Add(Ins.Create(OpCodes.Stfld, _invokerDelegateField));
-                    newinsc.Add(notNullLabel);
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldfld, _invokerDelegateField);
+                    il.Emit(OpCodes.Brtrue, notNullLabel);
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Ldftn, _invokerMethod);
+                    il.Emit(OpCodes.Newobj, delegateCtor);
+                    il.Emit(OpCodes.Stfld, _invokerDelegateField);
+                    il.Append(notNullLabel);
                     
+                    // Insert before the 'this' load
                     Debug.Assert(insc[i - 1].OpCode == OpCodes.Ldarg_0 || insc[i - 1].OpCode == OpCodes.Ldarg);
-                    method.Body.InsertInstructions(i - 1, true, newinsc);
+                    method.Body.InsertInstructions(i - 1, true, il.Instructions);
                 }
 
-                newinsc.Clear();
+                il.Instructions.Clear();
             }
 
-            if (newinsc != null)
+            if (il != null)
             {
                 method.Body.RemoveNops(existingNops);
                 method.Body.OptimizeMacros();
