@@ -49,6 +49,8 @@ namespace Spinner.Fody.Weaving
 
         internal MulticastTargets PointcutTargets { get; private set; }
 
+        internal string PointcutMethodName { get; private set; }
+
         internal virtual void AddChild(AdviceInfo advice)
         {
             Debug.Assert(advice.Aspect == Master.Aspect);
@@ -93,7 +95,8 @@ namespace Spinner.Fody.Weaving
                 }
                 else if (ca.AttributeType.IsSame(mwc.Spinner.MethodPointcut))
                 {
-                    throw new NotImplementedException();
+                    PointcutType = Weaving.PointcutType.Method;
+                    PointcutMethodName = (string) (ca.GetArgumentValue(0) ?? ca.GetNamedArgumentValue(nameof(MethodPointcut.MethodName)));
                 }
             }
         }

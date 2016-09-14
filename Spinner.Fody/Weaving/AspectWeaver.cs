@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using Mono.Cecil;
-using Spinner.Extensibility;
 using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weaving
@@ -24,8 +25,6 @@ namespace Spinner.Fody.Weaving
 
         public virtual void Weave()
         {
-            MulticastTargets targetType = Instance.Target.GetMulticastTargetType();
-
             foreach (AdviceGroup group in Instance.Aspect.AdviceGroups)
             {
                 AdviceInfo master = group.Master;
@@ -34,13 +33,13 @@ namespace Spinner.Fody.Weaving
                 {
                     case null:
                     case PointcutType.Self:
-                        if ((group.Master.ValidTargets & targetType) != 0)
+                        if ((group.Master.ValidTargets & Instance.Target.GetMulticastTargetType()) != 0)
                         {
-                            var w = group.CreateWeaver(this, Instance.Target);
-                            w.Weave();
+                            group.CreateWeaver(this, Instance.Target).Weave();
                         }
 
                         break;
+
                     case PointcutType.Multicast:
                         var ma = new MulticastArguments
                         {
@@ -52,12 +51,32 @@ namespace Spinner.Fody.Weaving
 
                         foreach (IMetadataTokenProvider d in Context.MulticastEngine.GetDescendants(Instance.Target, ma))
                         {
-                            var w = group.CreateWeaver(this, d);
-                            w.Weave();
+                            group.CreateWeaver(this, d).Weave();
                         }
+
                         break;
+
                     case PointcutType.Method:
-                        throw new NotImplementedException();
+                        string methodName = group.PointcutMethodName;
+                        MethodDefinition methodDef = Instance.Aspect.AspectType.Methods.First(m => m.Name == methodName);
+
+                        Debug.Assert(Instance.Target is IMemberDefinition, "Instance.Target is IMemberDefinition");
+
+                        TypeDefinition targetTypeDef = Instance.Target as TypeDefinition;
+                        if (targetTypeDef == null)
+                            targetTypeDef = ((IMemberDefinition) Instance.Target).DeclaringType;
+
+                        MemberReference[] members = Context.BuildTimeExecutionEngine.ExecuteMethodPointcut(methodDef, targetTypeDef);
+
+                        foreach (MemberReference m in members)
+                        {
+                            if ((m.GetMulticastTargetType() & master.ValidTargets) != 0)
+                            {
+                                group.CreateWeaver(this, m.Resolve()).Weave();
+                            }
+                        }
+
+                        break;
                     default:
                         throw new ArgumentOutOfRangeException();
                 }

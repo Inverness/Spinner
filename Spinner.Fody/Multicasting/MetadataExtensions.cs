@@ -21,8 +21,9 @@ namespace Spinner.Fody.Multicasting
 
         public static ProviderType GetProviderType(this IMetadataTokenProvider target)
         {
-            if (target is MethodReturnType)
+            if (target.MetadataToken.TokenType == TokenType.Param && target is MethodReturnType)
                 return ProviderType.MethodReturn;
+
             return s_providerTypes[target.MetadataToken.TokenType];
         }
 

@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Mono.Cecil;
+using Mono.Collections.Generic;
+using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody
 {
@@ -217,6 +220,48 @@ namespace Spinner.Fody
             return null;
         }
 
+        internal static EventDefinition GetEvent(this TypeDefinition self, string name, bool inherited)
+        {
+            TypeDefinition current = self;
+            while (current != null)
+            {
+                if (current.HasEvents)
+                {
+                    for (int i = 0; i < current.Events.Count; i++)
+                    {
+                        if (current.Events[i].Name == name)
+                            return current.Events[i];
+                    }
+                }
+
+                if (!inherited)
+                    break;
+
+                current = current.BaseType?.Resolve();
+            }
+
+            return null;
+        }
+
+        internal static IMemberDefinition Resolve(this MemberReference self)
+        {
+            switch (self.GetProviderType())
+            {
+                case ProviderType.Type:
+                    return ((TypeReference) self).Resolve();
+                case ProviderType.Method:
+                    return ((MethodReference) self).Resolve();
+                case ProviderType.Property:
+                    return ((PropertyReference) self).Resolve();
+                case ProviderType.Event:
+                    return ((EventReference) self).Resolve();
+                case ProviderType.Field:
+                    return ((FieldReference) self).Resolve();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(self));
+            }
+        }
+
         /// <summary>
         /// Check if this type or one of its bases implements an interface. Does not check the interface's own inheritance.
         /// </summary>
@@ -302,6 +347,13 @@ namespace Spinner.Fody
             }
 
             return null;
+        }
+
+        internal static object GetArgumentValue(this CustomAttribute self, int index)
+        {
+            return self.HasConstructorArguments && index < self.ConstructorArguments.Count
+                ? self.ConstructorArguments[index].Value
+                : null;
         }
 
         internal static object GetNamedArgumentValue(this CustomAttribute self, string name)

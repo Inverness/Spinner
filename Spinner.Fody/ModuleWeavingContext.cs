@@ -7,6 +7,7 @@ using System.Threading;
 using Mono.Cecil;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Execution;
 using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
 using Spinner.Fody.Weaving;
@@ -107,6 +108,8 @@ namespace Spinner.Fody
             };
 
             MulticastEngine = new MulticastEngine(this);
+
+            BuildTimeExecutionEngine = new BuildTimeExecutionEngine(this);
         }
 
         /// <summary>
@@ -126,40 +129,37 @@ namespace Spinner.Fody
 
         internal MulticastEngine MulticastEngine { get; }
 
+        internal BuildTimeExecutionEngine BuildTimeExecutionEngine { get; }
+
         internal TypeReference SafeImport(Type type)
         {
-            lock (Module)
-                return Module.Import(type);
+            return Module.Import(type);
         }
 
         internal TypeReference SafeImport(TypeReference type)
         {
             if (type.Module == Module)
                 return type;
-            lock (Module)
-                return Module.Import(type);
+            return Module.Import(type);
         }
 
         internal MethodReference SafeImport(MethodReference method)
         {
             if (method.Module == Module)
                 return method;
-            lock (Module)
-                return Module.Import(method);
+            return Module.Import(method);
         }
 
         internal FieldReference SafeImport(FieldReference field)
         {
             if (field.Module == Module)
                 return field;
-            lock (Module)
-                return Module.Import(field);
+            return Module.Import(field);
         }
 
         internal TypeDefinition SafeGetType(string fullName)
         {
-            lock (Module)
-                return Module.GetType(fullName);
+            return Module.GetType(fullName);
         }
 
         [Conditional("DEBUG")]

@@ -120,6 +120,8 @@ namespace Spinner.Fody
             stopwatch.Stop();
 
             LogInfo($"Finished aspect weaving for {weaveTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
+
+            _mwc.BuildTimeExecutionEngine.Shutdown();
         }
 
         private static Task RunTask(Action action)

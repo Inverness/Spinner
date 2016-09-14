@@ -44,6 +44,8 @@
     <Compile Include="AdviceType.cs" />
     <Compile Include="Analysis\AspectFeatureAnalyzer.cs" />
     <Compile Include="CollectionExtensions.cs" />
+    <Compile Include="Execution\BuildTimeExecutionEngine.cs" />
+    <Compile Include="Execution\BuildTimeExecutionGuest.cs" />
     <Compile Include="ModuleWeavingContext.cs" />
     <Compile Include="MethodBodyExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />
