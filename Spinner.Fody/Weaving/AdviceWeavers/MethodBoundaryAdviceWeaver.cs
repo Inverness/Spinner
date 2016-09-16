@@ -64,7 +64,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             switch (stateMachineKind)
             {
                 case StateMachineKind.None:
-                    _effectiveReturnType = !_method.IsReturnVoid() ? Context.SafeImport(_method.ReturnType) : null;
+                    _effectiveReturnType = !_method.IsReturnVoid() ? Context.Import(_method.ReturnType) : null;
 
                     _method.Body.SimplifyMacros();
                     // Preserve existing Nops in a debug build. These are used for optimal breakpoint placement.
@@ -78,7 +78,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
                 case StateMachineKind.Iterator:
                     _effectiveReturnType = _method.ReturnType.IsGenericInstance
-                        ? Context.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
+                        ? Context.Import(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
                         : _method.Module.TypeSystem.Object;
 
                     _stateMachine.Body.SimplifyMacros();
@@ -94,7 +94,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 case StateMachineKind.Async:
                     // void for Task and T for Task<T>
                     _effectiveReturnType = _method.ReturnType.IsGenericInstance
-                        ? Context.SafeImport(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
+                        ? Context.Import(((GenericInstanceType) _method.ReturnType).GenericArguments.Single())
                         : null;
 
                     _stateMachine.Body.SimplifyMacros();
@@ -649,8 +649,8 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             int offset,
             out VariableDefinition meaVar)
         {
-            TypeReference meaType = Context.SafeImport(Context.Spinner.MethodExecutionArgs);
-            MethodReference meaCtor = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ctor);
+            TypeReference meaType = Context.Import(Context.Spinner.MethodExecutionArgs);
+            MethodReference meaCtor = Context.Import(Context.Spinner.MethodExecutionArgs_ctor);
 
             meaVar = method.Body.AddVariableDefinition(meaType);
 
@@ -695,8 +695,8 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             int offset,
             out FieldDefinition meaField)
         {
-            TypeReference meaType = Context.SafeImport(Context.Spinner.MethodExecutionArgs);
-            MethodReference meaCtor = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ctor);
+            TypeReference meaType = Context.Import(Context.Spinner.MethodExecutionArgs);
+            MethodReference meaCtor = Context.Import(Context.Spinner.MethodExecutionArgs_ctor);
 
             string fieldName = NameGenerator.MakeAdviceArgsFieldName(Instance.Index);
             meaField = new FieldDefinition(fieldName, FieldAttributes.Private, meaType);
@@ -892,7 +892,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             if (returnVarOpt != null && (meaVarOpt != null || meaFieldOpt != null))
             {
-                MethodReference setReturnValue = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
+                MethodReference setReturnValue = Context.Import(Context.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
 
                 il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Ldloc, returnVarOpt);
@@ -910,7 +910,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             if (returnVarOpt != null && (meaVarOpt != null || meaFieldOpt != null))
             {
-                MethodReference getReturnValue = Context.SafeImport(Context.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
+                MethodReference getReturnValue = Context.Import(Context.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
 
                 il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Callvirt, getReturnValue);
@@ -936,7 +936,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 onFilterException = _filterExceptionAdvice.ImportSourceMethod();
 
             MethodReference onException = _exceptionAdvice.ImportSourceMethod();
-            TypeReference exceptionType = Context.SafeImport(Context.Framework.Exception);
+            TypeReference exceptionType = Context.Import(Context.Framework.Exception);
 
             MethodDefinition targetMethod = stateMachineOpt ?? method;
 
@@ -988,7 +988,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             // Call OnException()
             if (meaVar != null || meaField != null)
             {
-                MethodReference setException = Context.SafeImport(Context.Spinner.MethodExecutionArgs_Exception.SetMethod);
+                MethodReference setException = Context.Import(Context.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
                 il.EmitLoadOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Ldloc, exceptionHolder);

@@ -112,9 +112,9 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             int offset,
             VariableDefinition piaVariable)
         {
-            MethodReference getTypeFromHandle = Context.SafeImport(Context.Framework.Type_GetTypeFromHandle);
-            MethodReference setProperty = Context.SafeImport(Context.Spinner.LocationInterceptionArgs_Property.SetMethod);
-            MethodReference getPropertyInfo = Context.SafeImport(Context.Spinner.WeaverHelpers_GetPropertyInfo);
+            MethodReference getTypeFromHandle = Context.Import(Context.Framework.Type_GetTypeFromHandle);
+            MethodReference setProperty = Context.Import(Context.Spinner.LocationInterceptionArgs_Property.SetMethod);
+            MethodReference getPropertyInfo = Context.Import(Context.Spinner.WeaverHelpers_GetPropertyInfo);
 
             var insc = new[]
             {
@@ -134,7 +134,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             ModuleDefinition module = _property.Module;
 
             string name = NameGenerator.MakePropertyBindingName(_property.Name, Instance.Index);
-            TypeReference baseType = Context.SafeImport(Context.Spinner.LocationBindingT1).MakeGenericInstanceType(_property.PropertyType);
+            TypeReference baseType = Context.Import(Context.Spinner.LocationBindingT1).MakeGenericInstanceType(_property.PropertyType);
 
             CreateBindingClass(baseType, name);
 
@@ -151,7 +151,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 BindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = Context.SafeImport(Context.Spinner.Arguments);
+                TypeReference argumentsBaseType = Context.Import(Context.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -233,7 +233,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 BindingClass.Methods.Add(bmethod);
 
                 TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-                TypeReference argumentsBaseType = Context.SafeImport(Context.Spinner.Arguments);
+                TypeReference argumentsBaseType = Context.Import(Context.Spinner.Arguments);
 
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
@@ -305,14 +305,14 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             out FieldReference valueField)
         {
             TypeDefinition piaTypeDef = Context.Spinner.BoundLocationInterceptionArgsT1;
-            GenericInstanceType genericPiaType = Context.SafeImport(piaTypeDef).MakeGenericInstanceType(_property.PropertyType);
+            GenericInstanceType genericPiaType = Context.Import(piaTypeDef).MakeGenericInstanceType(_property.PropertyType);
             TypeReference piaType = genericPiaType;
 
             MethodDefinition constructorDef = Context.Spinner.BoundLocationInterceptionArgsT1_ctor;
-            MethodReference constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(genericPiaType);
+            MethodReference constructor = Context.Import(constructorDef).WithGenericDeclaringType(genericPiaType);
 
             FieldDefinition valueFieldDef = Context.Spinner.BoundLocationInterceptionArgsT1_TypedValue;
-            valueField = Context.SafeImport(valueFieldDef).WithGenericDeclaringType(genericPiaType);
+            valueField = Context.Import(valueFieldDef).WithGenericDeclaringType(genericPiaType);
 
             iaVariable = method.Body.AddVariableDefinition(piaType);
 

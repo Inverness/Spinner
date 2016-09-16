@@ -74,15 +74,15 @@ namespace Spinner.Fody.Weaving
 
         private void ParsePointcutAttribute()
         {
-            var mwc = Master.Aspect.Context;
+            var context = Master.Aspect.Context;
 
             foreach (CustomAttribute ca in Master.Source.CustomAttributes)
             {
-                if (ca.AttributeType.IsSame(mwc.Spinner.SelfPointcut))
+                if (ca.AttributeType.IsSame(context.Spinner.SelfPointcut))
                 {
                     PointcutType = Weaving.PointcutType.Self;
                 }
-                else if (ca.AttributeType.IsSame(mwc.Spinner.MulticastPointcut))
+                else if (ca.AttributeType.IsSame(context.Spinner.MulticastPointcut))
                 {
                     uint attributes = ca.GetNamedArgumentValue(nameof(MulticastPointcut.Attributes)) as uint? ?? 0;
                     uint targets = ca.GetNamedArgumentValue(nameof(MulticastPointcut.Targets)) as uint? ?? 0;
@@ -93,7 +93,7 @@ namespace Spinner.Fody.Weaving
                     PointcutTargets = (MulticastTargets) targets;
                     PointcutMemberName = StringMatcher.Create(memberName);
                 }
-                else if (ca.AttributeType.IsSame(mwc.Spinner.MethodPointcut))
+                else if (ca.AttributeType.IsSame(context.Spinner.MethodPointcut))
                 {
                     PointcutType = Weaving.PointcutType.Method;
                     PointcutMethodName = (string) (ca.GetArgumentValue(0) ?? ca.GetNamedArgumentValue(nameof(MethodPointcut.MethodName)));

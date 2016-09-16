@@ -11,20 +11,20 @@ namespace Spinner.Fody.Weaving
     /// </summary>
     internal static class AspectWeaverFactory
     {
-        public static AspectWeaver[] TryCreate(ModuleWeavingContext mwc, MulticastAttributeRegistry mar, TypeDefinition type)
+        public static AspectWeaver[] TryCreate(SpinnerContext context, MulticastAttributeRegistry mar, TypeDefinition type)
         {
             // Identifies aspects that have been applied to the type first
 
             List<AspectInstance> aspects = null;
             int orderCounter = 0;
 
-            AddAspects(mwc, mar, type, ref aspects, ref orderCounter);
+            AddAspects(context, mar, type, ref aspects, ref orderCounter);
 
             if (type.HasProperties)
             {
                 foreach (PropertyDefinition prop in type.Properties)
                 {
-                    AddAspects(mwc, mar, prop, ref aspects, ref orderCounter);
+                    AddAspects(context, mar, prop, ref aspects, ref orderCounter);
                 }
             }
 
@@ -32,7 +32,7 @@ namespace Spinner.Fody.Weaving
             {
                 foreach (EventDefinition evt in type.Events)
                 {
-                    AddAspects(mwc, mar, evt, ref aspects, ref orderCounter);
+                    AddAspects(context, mar, evt, ref aspects, ref orderCounter);
                 }
             }
 
@@ -40,17 +40,17 @@ namespace Spinner.Fody.Weaving
             {
                 foreach (MethodDefinition method in type.Methods)
                 {
-                    AddAspects(mwc, mar, method, ref aspects, ref orderCounter);
+                    AddAspects(context, mar, method, ref aspects, ref orderCounter);
 
                     if (method.HasParameters)
                     {
                         foreach (ParameterDefinition parameter in method.Parameters)
                         {
-                            AddAspects(mwc, mar, parameter, ref aspects, ref orderCounter);
+                            AddAspects(context, mar, parameter, ref aspects, ref orderCounter);
                         }
                     }
 
-                    AddAspects(mwc, mar, method.MethodReturnType, ref aspects, ref orderCounter);
+                    AddAspects(context, mar, method.MethodReturnType, ref aspects, ref orderCounter);
                 }
             }
 
@@ -100,7 +100,7 @@ namespace Spinner.Fody.Weaving
         }
 
         private static void AddAspects(
-            ModuleWeavingContext mwc,
+            SpinnerContext context,
             MulticastAttributeRegistry mar,
             ICustomAttributeProvider target,
             ref List<AspectInstance> aspects,
@@ -112,11 +112,11 @@ namespace Spinner.Fody.Weaving
 
             foreach (MulticastAttributeInstance m in multicasts)
             {
-                var info = mwc.GetAspectInfo(m.AttributeType);
+                var info = context.GetAspectInfo(m.AttributeType);
 
                 if (info != null)
                 {
-                    var instance = new AspectInstance(info, m, target, mwc.NewAspectIndex(), orderCounter++);
+                    var instance = new AspectInstance(info, m, target, context.NewAspectIndex(), orderCounter++);
 
                     if (aspects == null)
                         aspects = new List<AspectInstance>();

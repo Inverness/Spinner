@@ -33,7 +33,7 @@ namespace Spinner.Fody.Weaving
                 Features = Context.GetFeatures(sourceType) ?? Features.None;
         }
 
-        public ModuleWeavingContext Context { get; }
+        public SpinnerContext Context { get; }
 
         public abstract AdviceType AdviceType { get; }
 
@@ -55,7 +55,7 @@ namespace Spinner.Fody.Weaving
 
         public MethodReference ImportSourceMethod()
         {
-            return Context.SafeImport((MethodReference) Source);
+            return Context.Import((MethodReference) Source);
         }
 
         protected virtual void ParseAttribute()

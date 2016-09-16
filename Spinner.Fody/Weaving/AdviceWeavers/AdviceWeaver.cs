@@ -22,7 +22,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
         // ReSharper disable InconsistentNaming
         internal readonly AspectInfo Aspect;
         internal readonly AspectInstance Instance;
-        internal readonly ModuleWeavingContext Context;
+        internal readonly SpinnerContext Context;
         internal readonly AspectWeaver Parent;
         internal readonly IMetadataTokenProvider Target;
         
@@ -107,7 +107,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             GetArgumentContainerInfo(method, out argumentsType, out argumentFields);
 
             MethodDefinition constructorDef = Context.Spinner.ArgumentsT_ctor[effectiveParameterCount];
-            MethodReference constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodReference constructor = Context.Import(constructorDef).WithGenericDeclaringType(argumentsType);
 
             argumentsVariable = method.Body.AddVariableDefinition("arguments", argumentsType);
 
@@ -137,7 +137,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             GetArgumentContainerInfo(method, out argumentsType, out argumentFields);
 
             MethodDefinition constructorDef = Context.Spinner.ArgumentsT_ctor[effectiveParameterCount];
-            MethodReference constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(argumentsType);
+            MethodReference constructor = Context.Import(constructorDef).WithGenericDeclaringType(argumentsType);
 
             string fieldName = NameGenerator.MakeAdviceArgsFieldName(Instance.Index);
             arguments = new FieldDefinition(fieldName, FieldAttributes.Private, argumentsType);
@@ -178,18 +178,18 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 if (pt.IsByReference)
                     pt = pt.GetElementType();
 
-                baseParameterTypes[i] = Context.SafeImport(pt);
+                baseParameterTypes[i] = Context.Import(pt);
             }
 
             TypeDefinition typeDef = Context.Spinner.ArgumentsT[effectiveParameterCount];
-            type = Context.SafeImport(typeDef).MakeGenericInstanceType(baseParameterTypes);
+            type = Context.Import(typeDef).MakeGenericInstanceType(baseParameterTypes);
 
             fields = new FieldReference[effectiveParameterCount];
 
             for (int i = 0; i < effectiveParameterCount; i++)
             {
                 FieldDefinition fieldDef = Context.Spinner.ArgumentsT_Item[effectiveParameterCount][i];
-                FieldReference field = Context.SafeImport(fieldDef).WithGenericDeclaringType(type);
+                FieldReference field = Context.Import(fieldDef).WithGenericDeclaringType(type);
 
                 fields[i] = field;
             }
@@ -454,13 +454,13 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             if (argCount == 0)
             {
                 // NOTE: Aspect type can't be generic since its declared by an attribute
-                ctor = Context.SafeImport(Aspect.AspectType.GetConstructor(0));
+                ctor = Context.Import(Aspect.AspectType.GetConstructor(0));
             }
             else
             {
                 List<TypeReference> argTypes = attr.ConstructorArguments.Select(c => c.Type).ToList();
 
-                ctor = Context.SafeImport(Aspect.AspectType.GetConstructor(argTypes));
+                ctor = Context.Import(Aspect.AspectType.GetConstructor(argTypes));
 
                 for (int i = 0; i < attr.ConstructorArguments.Count; i++)
                     EmitAttributeArgument(il, attr.ConstructorArguments[i]);
@@ -474,7 +474,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 {
                     CustomAttributeNamedArgument na = attr.Fields[i];
 
-                    FieldReference field = Context.SafeImport(Aspect.AspectType.GetField(na.Name, true));
+                    FieldReference field = Context.Import(Aspect.AspectType.GetField(na.Name, true));
 
                     il.Emit(OpCodes.Dup);
                     EmitAttributeArgument(il, na.Argument);
@@ -492,7 +492,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                     if (na.Name.StartsWith(MulticastAttributePropertyPrefix))
                         continue;
 
-                    MethodReference setter = Context.SafeImport(Aspect.AspectType.GetProperty(na.Name, true).SetMethod);
+                    MethodReference setter = Context.Import(Aspect.AspectType.GetProperty(na.Name, true).SetMethod);
 
                     il.Emit(OpCodes.Dup);
                     EmitAttributeArgument(il, na.Argument);
@@ -573,14 +573,14 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             }
             else if (value is TypeReference)
             {
-                MethodReference getTypeFromHandle = Context.SafeImport(Context.Framework.Type_GetTypeFromHandle);
+                MethodReference getTypeFromHandle = Context.Import(Context.Framework.Type_GetTypeFromHandle);
                 il.Emit(OpCodes.Ldtoken, (TypeReference) value);
                 il.Emit(OpCodes.Call, getTypeFromHandle);
             }
             else if (value is CustomAttributeArgument[])
             {
                 var caaArray = (CustomAttributeArgument[]) value;
-                TypeReference elementType = Context.SafeImport(type.GetElementType());
+                TypeReference elementType = Context.Import(type.GetElementType());
                 TypeReference objectType = elementType.Module.TypeSystem.Object;
                 OpCode stelemOpCode = GetStelemOpCode(elementType);
 
@@ -642,7 +642,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             VariableDefinition iaVariableOpt)
         {
             MethodDefinition adviceDef = Aspect.AspectType.GetMethod(baseReference, true);
-            MethodReference advice = Context.SafeImport(adviceDef);
+            MethodReference advice = Context.Import(adviceDef);
 
             var insc = new[]
             {
@@ -685,9 +685,9 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             FieldReference maFieldOpt)
         {
             MethodDefinition target = stateMachineOpt ?? method;
-            MethodReference getMethodFromHandle = Context.SafeImport(Context.Framework.MethodBase_GetMethodFromHandle);
-            MethodReference setMethod = Context.SafeImport(Context.Spinner.MethodArgs_Method.SetMethod);
-            TypeReference methodInfo = Context.SafeImport(Context.Framework.MethodInfo);
+            MethodReference getMethodFromHandle = Context.Import(Context.Framework.MethodBase_GetMethodFromHandle);
+            MethodReference setMethod = Context.Import(Context.Spinner.MethodArgs_Method.SetMethod);
+            TypeReference methodInfo = Context.Import(Context.Framework.MethodInfo);
 
             var il = new ILProcessorEx();
 
@@ -708,8 +708,8 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             MethodDefinition baseCtorDef = baseTypeDef.Methods.Single(m => !m.IsStatic && m.Parameters.Count == 0);
 
             MethodReference baseCtor = type.BaseType.IsGenericInstance
-                ? Context.SafeImport(baseCtorDef).WithGenericDeclaringType((GenericInstanceType) type.BaseType)
-                : Context.SafeImport(baseCtorDef);
+                ? Context.Import(baseCtorDef).WithGenericDeclaringType((GenericInstanceType) type.BaseType)
+                : Context.Import(baseCtorDef);
 
             var attrs = MethodAttributes.Public |
                         MethodAttributes.HideBySig |

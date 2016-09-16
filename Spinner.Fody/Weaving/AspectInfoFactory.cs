@@ -13,7 +13,7 @@ namespace Spinner.Fody.Weaving
     /// </summary>
     internal static class AspectInfoFactory
     {
-        internal static AspectInfo Create(ModuleWeavingContext context, TypeDefinition type, AspectKind kind)
+        internal static AspectInfo Create(SpinnerContext context, TypeDefinition type, AspectKind kind)
         {
             var info = new AspectInfo(context, type, kind);
             var advices = new List<AdviceInfo>();

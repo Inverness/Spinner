@@ -16,7 +16,7 @@ namespace Spinner.Fody
     /// <summary>
     /// Provides global context and functionality for weavers.
     /// </summary>
-    internal class ModuleWeavingContext
+    internal class SpinnerContext
     {
         private const string AspectInterfaceNameSuffix = "Aspect";
 
@@ -46,7 +46,7 @@ namespace Spinner.Fody
             new ConcurrentDictionary<TypeDefinition, AspectInfo>();
         private readonly LockTargetProvider<TypeDefinition> _aspectInfoLocks = new LockTargetProvider<TypeDefinition>();
 
-        internal ModuleWeavingContext(ModuleDefinition module, ModuleDefinition libraryModule)
+        internal SpinnerContext(ModuleDefinition module, ModuleDefinition libraryModule)
         {
             Module = module;
             Spinner = new WellKnownSpinnerMembers(libraryModule);
@@ -128,41 +128,17 @@ namespace Spinner.Fody
 
         internal BuildTimeExecutionEngine BuildTimeExecutionEngine { get; }
 
-        internal TypeReference SafeImport(Type type)
-        {
-            return Module.Import(type);
-        }
+        internal TypeReference Import(Type type) => Module.Import(type);
 
-        internal TypeReference SafeImport(TypeReference type)
-        {
-            if (type.Module == Module)
-                return type;
-            return Module.Import(type);
-        }
+        internal TypeReference Import(TypeReference type) => type.Module == Module ? type : Module.Import(type);
 
-        internal MethodReference SafeImport(MethodReference method)
-        {
-            if (method.Module == Module)
-                return method;
-            return Module.Import(method);
-        }
+        internal MethodReference Import(MethodReference method) => method.Module == Module ? method : Module.Import(method);
 
-        internal FieldReference SafeImport(FieldReference field)
-        {
-            if (field.Module == Module)
-                return field;
-            return Module.Import(field);
-        }
+        internal FieldReference Import(FieldReference field) => field.Module == Module ? field : Module.Import(field);
 
-        internal TypeDefinition SafeGetType(string fullName)
-        {
-            return Module.GetType(fullName);
-        }
+        internal TypeDefinition GetType(string fullName) => Module.GetType(fullName);
 
-        internal int NewAspectIndex()
-        {
-            return Interlocked.Increment(ref _aspectIndexCounter);
-        }
+        internal int NewAspectIndex() => Interlocked.Increment(ref _aspectIndexCounter);
 
         /// <summary>
         /// Get the features declared for a type. AnalzyedFeaturesAttribute takes precedence over FeaturesAttribute.

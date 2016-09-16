@@ -16,7 +16,7 @@ namespace Spinner.Fody.Multicasting
         private static readonly Logger s_log = LogManager.GetCurrentClassLogger();
         private static readonly IReadOnlyList<MulticastAttributeInstance> s_noInstances = new MulticastAttributeInstance[0];
 
-        private readonly ModuleWeavingContext _mwc;
+        private readonly SpinnerContext _context;
         private readonly ModuleDefinition _module;
         private readonly TypeDefinition _compilerGeneratedAttributeType;
         private readonly TypeDefinition _multicastAttributeType;
@@ -31,12 +31,12 @@ namespace Spinner.Fody.Multicasting
         private int _inheritOrderCounter = int.MinValue;
         private int _directOrderCounter;
 
-        private MulticastAttributeRegistry(ModuleWeavingContext mwc)
+        private MulticastAttributeRegistry(SpinnerContext context)
         {
-            _mwc = mwc;
-            _module = mwc.Module;
-            _compilerGeneratedAttributeType = mwc.Framework.CompilerGeneratedAttribute;
-            _multicastAttributeType = mwc.Spinner.MulticastAttribute;
+            _context = context;
+            _module = context.Module;
+            _compilerGeneratedAttributeType = context.Framework.CompilerGeneratedAttribute;
+            _multicastAttributeType = context.Spinner.MulticastAttribute;
         }
 
         internal IReadOnlyList<MulticastAttributeInstance> GetMulticasts(ICustomAttributeProvider provider)
@@ -46,9 +46,9 @@ namespace Spinner.Fody.Multicasting
             return _targets.TryGetValue(provider, out multicasts) ? multicasts : s_noInstances;
         }
 
-        internal static MulticastAttributeRegistry Create(ModuleWeavingContext mwc)
+        internal static MulticastAttributeRegistry Create(SpinnerContext context)
         {
-            var inst = new MulticastAttributeRegistry(mwc);
+            var inst = new MulticastAttributeRegistry(context);
             inst.Initialize();
             return inst;
         }
@@ -70,7 +70,7 @@ namespace Spinner.Fody.Multicasting
 
             foreach (KeyValuePair<ICustomAttributeProvider, Tuple<int, List<MulticastAttributeInstance>>> item in _instances.ToList())
             {
-                IReadOnlyList<IMetadataTokenProvider> derivedList = _mwc.MulticastEngine.GetDerived(item.Key);
+                IReadOnlyList<IMetadataTokenProvider> derivedList = _context.MulticastEngine.GetDerived(item.Key);
                 if (derivedList.Count == 0)
                     continue;
 
@@ -359,7 +359,7 @@ namespace Spinner.Fody.Multicasting
             // directly specified in the source code.
             if (mi.Origin == mi.Target || mi.Inheritance == MulticastInheritance.Multicast)
             {
-                foreach (IMetadataTokenProvider item in _mwc.MulticastEngine.GetDescendants(mi.Target, mi.Arguments))
+                foreach (IMetadataTokenProvider item in _context.MulticastEngine.GetDescendants(mi.Target, mi.Arguments))
                     AddMulticastTarget(mi, (ICustomAttributeProvider) item);
             }
 

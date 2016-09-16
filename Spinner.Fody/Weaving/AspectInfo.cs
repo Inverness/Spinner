@@ -11,15 +11,15 @@ namespace Spinner.Fody.Weaving
     {
         private readonly List<AdviceGroup> _adviceGroups = new List<AdviceGroup>();
 
-        internal AspectInfo(ModuleWeavingContext mwc, TypeDefinition aspectType, AspectKind kind)
+        internal AspectInfo(SpinnerContext context, TypeDefinition aspectType, AspectKind kind)
         {
-            Context = mwc;
+            Context = context;
             AspectType = aspectType;
             Kind = kind;
-            Features = mwc.GetFeatures(aspectType) ?? Features.None;
+            Features = context.GetFeatures(aspectType) ?? Features.None;
         }
 
-        public ModuleWeavingContext Context { get; }
+        public SpinnerContext Context { get; }
 
         public TypeDefinition AspectType { get; }
 

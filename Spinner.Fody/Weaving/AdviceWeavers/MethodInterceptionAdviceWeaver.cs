@@ -92,22 +92,22 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             if (method.IsReturnVoid())
             {
                 TypeDefinition miaTypeDef = Context.Spinner.BoundMethodInterceptionArgs;
-                miaType = Context.SafeImport(miaTypeDef);
+                miaType = Context.Import(miaTypeDef);
 
                 MethodDefinition constructorDef = Context.Spinner.BoundMethodInterceptionArgs_ctor;
-                constructor = Context.SafeImport(constructorDef);
+                constructor = Context.Import(constructorDef);
             }
             else
             {
                 TypeDefinition miaTypeDef = Context.Spinner.BoundMethodInterceptionArgsT1;
-                GenericInstanceType genericMiaType = Context.SafeImport(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
+                GenericInstanceType genericMiaType = Context.Import(miaTypeDef).MakeGenericInstanceType(method.ReturnType);
                 miaType = genericMiaType;
 
                 MethodDefinition constructorDef = Context.Spinner.BoundMethodInterceptionArgsT1_ctor;
-                constructor = Context.SafeImport(constructorDef).WithGenericDeclaringType(genericMiaType);
+                constructor = Context.Import(constructorDef).WithGenericDeclaringType(genericMiaType);
 
                 FieldDefinition returnValueFieldDef = Context.Spinner.BoundMethodInterceptionArgsT1_TypedReturnValue;
-                _returnValueField = Context.SafeImport(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
+                _returnValueField = Context.Import(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
             _miaVar = method.Body.AddVariableDefinition(miaType);
@@ -145,11 +145,11 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             if (_method.IsReturnVoid())
             {
-                baseType = Context.SafeImport(Context.Spinner.MethodBinding);
+                baseType = Context.Import(Context.Spinner.MethodBinding);
             }
             else
             {
-                baseType = Context.SafeImport(Context.Spinner.MethodBindingT1).MakeGenericInstanceType(_method.ReturnType);
+                baseType = Context.Import(Context.Spinner.MethodBindingT1).MakeGenericInstanceType(_method.ReturnType);
             }
 
             string name = NameGenerator.MakeMethodBindingName(_method.Name, Instance.Index);
@@ -169,7 +169,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             BindingClass.Methods.Add(invokeMethod);
 
             TypeReference instanceType = module.TypeSystem.Object.MakeByReferenceType();
-            TypeReference argumentsBaseType = Context.SafeImport(Context.Spinner.Arguments);
+            TypeReference argumentsBaseType = Context.Import(Context.Spinner.Arguments);
 
             invokeMethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
             invokeMethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));

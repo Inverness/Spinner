@@ -19,7 +19,7 @@ namespace Spinner.Fody.Weaving
 
         internal AspectInstance Instance { get; }
 
-        internal ModuleWeavingContext Context { get; }
+        internal SpinnerContext Context { get; }
 
         internal FieldReference AspectField { get; set; }
 
@@ -132,7 +132,7 @@ namespace Spinner.Fody.Weaving
 
             var fattrs = FieldAttributes.Private | FieldAttributes.Static;
 
-            var aspectFieldDef = new FieldDefinition(name, fattrs, Context.SafeImport(Instance.Aspect.AspectType));
+            var aspectFieldDef = new FieldDefinition(name, fattrs, Context.Import(Instance.Aspect.AspectType));
             AddCompilerGeneratedAttribute(aspectFieldDef);
 
             hostType.Fields.Add(aspectFieldDef);
@@ -142,7 +142,7 @@ namespace Spinner.Fody.Weaving
 
         internal void AddCompilerGeneratedAttribute(ICustomAttributeProvider definition)
         {
-            MethodReference ctor = Context.SafeImport(Context.Framework.CompilerGeneratedAttribute_ctor);
+            MethodReference ctor = Context.Import(Context.Framework.CompilerGeneratedAttribute_ctor);
 
             definition.CustomAttributes.Add(new CustomAttribute(ctor));
         }

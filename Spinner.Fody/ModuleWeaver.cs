@@ -31,7 +31,7 @@ namespace Spinner.Fody
         public Action<string> LogError { get; set; }
 
         // Definition for IMethodInterceptionAspect
-        private ModuleWeavingContext _mwc;
+        private SpinnerContext _context;
         private MulticastAttributeRegistry _multicastAttributeRegistry;
 
         public ModuleWeaver()
@@ -83,8 +83,8 @@ namespace Spinner.Fody
                 return;
             }
 
-            _mwc = new ModuleWeavingContext(ModuleDefinition,
-                                            ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
+            _context = new SpinnerContext(ModuleDefinition,
+                                          ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
 
@@ -98,7 +98,7 @@ namespace Spinner.Fody
 
             var stopwatch = Stopwatch.StartNew();
 
-            _multicastAttributeRegistry = MulticastAttributeRegistry.Create(_mwc);
+            _multicastAttributeRegistry = MulticastAttributeRegistry.Create(_context);
 
             stopwatch.Stop();
 
@@ -148,7 +148,7 @@ namespace Spinner.Fody
 
             s_log.Info("---- Finished aspect weaving for {0} types in {1} ms ----", weaveTasks.Length, stopwatch.ElapsedMilliseconds);
 
-            _mwc.BuildTimeExecutionEngine.Shutdown();
+            _context.BuildTimeExecutionEngine.Shutdown();
         }
 
         private static Task RunTask(Action action)
@@ -170,7 +170,7 @@ namespace Spinner.Fody
 
             return () =>
             {
-                AspectWeaver[] weavers = AspectWeaverFactory.TryCreate(_mwc, _multicastAttributeRegistry, type);
+                AspectWeaver[] weavers = AspectWeaverFactory.TryCreate(_context, _multicastAttributeRegistry, type);
 
                 if (weavers != null)
                 {
@@ -189,7 +189,7 @@ namespace Spinner.Fody
             {
                 try
                 {
-                    AspectFeatureAnalyzer.Analyze(_mwc, type, ltp);
+                    AspectFeatureAnalyzer.Analyze(_context, type, ltp);
                 }
                 catch (Exception ex)
                 {
