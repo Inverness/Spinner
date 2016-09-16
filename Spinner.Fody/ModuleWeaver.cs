@@ -7,6 +7,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
+using NLog;
+using NLog.Config;
 using Spinner.Fody.Analysis;
 using Spinner.Fody.Multicasting;
 using Spinner.Fody.Utilities;
@@ -16,6 +18,8 @@ namespace Spinner.Fody
 {
     public class ModuleWeaver
     {
+        private static readonly Logger s_log = LogManager.GetCurrentClassLogger();
+
         public ModuleDefinition ModuleDefinition { get; set; }
 
         public Action<string> LogDebug { get; set; }
@@ -40,7 +44,31 @@ namespace Spinner.Fody
 
         public void Execute()
         {
-            LogInfo($"---- Beginning aspect weaving for: {ModuleDefinition.Assembly.FullName} ----");
+            //
+            // Initialize logging from NLog to Fody.
+            //
+
+            LogLevel minLevel =
+#if TRACE
+                LogLevel.Trace;
+#elif DEBUG
+                LogLevel.Debug;
+#else
+                LogLevel.Info;
+#endif
+            var fodyTarget = new FodyLogTarget(LogError, LogWarning, LogInfo, LogDebug)
+            {
+                Layout = "${level:uppercase=true} [${threadid}] ${logger} - ${message}",
+                Name = "fody"
+            };
+
+            if (LogManager.Configuration == null)
+                LogManager.Configuration = new LoggingConfiguration();
+            LogManager.Configuration.AddTarget(fodyTarget);
+            LogManager.Configuration.AddRule(minLevel, LogLevel.Fatal, fodyTarget);
+            LogManager.ReconfigExistingLoggers();
+            
+            s_log.Info("---- Beginning aspect weaving for: {0} ----", ModuleDefinition.Assembly.FullName);
 
             //
             // Initialize the module weaving context, which contains global state and services for the
@@ -51,12 +79,11 @@ namespace Spinner.Fody
 
             if (spinnerName == null)
             {
-                LogWarning("No reference to Spinner assembly detected. Doing nothing.");
+                s_log.Warn("No reference to Spinner assembly detected. Doing nothing.");
                 return;
             }
 
-            _mwc = new ModuleWeavingContext(this,
-                                            ModuleDefinition,
+            _mwc = new ModuleWeavingContext(ModuleDefinition,
                                             ModuleDefinition.AssemblyResolver.Resolve(spinnerName).MainModule);
 
             List<TypeDefinition> types = ModuleDefinition.GetAllTypes().ToList();
@@ -67,7 +94,7 @@ namespace Spinner.Fody
             // only and does not edit any modules.
             //
 
-            LogInfo("Beginning attribute multicasting...");
+            s_log.Info("Beginning attribute multicasting...");
 
             var stopwatch = Stopwatch.StartNew();
 
@@ -75,7 +102,7 @@ namespace Spinner.Fody
 
             stopwatch.Stop();
 
-            LogInfo($"Finished attribute multicasting in {stopwatch.ElapsedMilliseconds} ms");
+            s_log.Info("Finished attribute multicasting in {0} ms", stopwatch.ElapsedMilliseconds);
 
             //
             // Analyze aspect types in the current module to identify what features of an aspect they use.
@@ -83,7 +110,7 @@ namespace Spinner.Fody
             // be added to relevant methods and types. This executes in parallel for each type.
             //
 
-            LogInfo("Beginning aspect feature analysis...");
+            s_log.Info("Beginning aspect feature analysis...");
 
             stopwatch.Restart();
 
@@ -99,9 +126,9 @@ namespace Spinner.Fody
 
             stopwatch.Stop();
 
-            LogInfo($"Finished feature analysis for {analysisTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
+            s_log.Info("Finished feature analysis for {0} types in {1} ms", analysisTasks.Length, stopwatch.ElapsedMilliseconds);
 
-            LogInfo("Beginning aspect weaving...");
+            s_log.Info("Beginning aspect weaving...");
 
             stopwatch.Restart();
 
@@ -119,7 +146,7 @@ namespace Spinner.Fody
 
             stopwatch.Stop();
 
-            LogInfo($"Finished aspect weaving for {weaveTasks.Length} types in {stopwatch.ElapsedMilliseconds} ms");
+            s_log.Info("---- Finished aspect weaving for {0} types in {1} ms ----", weaveTasks.Length, stopwatch.ElapsedMilliseconds);
 
             _mwc.BuildTimeExecutionEngine.Shutdown();
         }

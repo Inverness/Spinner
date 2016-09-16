@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Mono.Cecil;
@@ -35,8 +34,7 @@ namespace Spinner.Fody
         /// Well known .NET members.
         /// </summary>
         internal readonly WellKnownFrameworkMembers Framework;
-
-        private readonly ModuleWeaver _weaver;
+        
         private readonly Dictionary<MethodDefinition, Features> _methodFeatures;
         private readonly Dictionary<MethodDefinition, Features> _typeFeatures;
         private readonly Dictionary<TypeReference, AdviceType> _adviceTypes;
@@ -48,9 +46,8 @@ namespace Spinner.Fody
             new ConcurrentDictionary<TypeDefinition, AspectInfo>();
         private readonly LockTargetProvider<TypeDefinition> _aspectInfoLocks = new LockTargetProvider<TypeDefinition>();
 
-        internal ModuleWeavingContext(ModuleWeaver weaver, ModuleDefinition module, ModuleDefinition libraryModule)
+        internal ModuleWeavingContext(ModuleDefinition module, ModuleDefinition libraryModule)
         {
-            _weaver = weaver;
             Module = module;
             Spinner = new WellKnownSpinnerMembers(libraryModule);
             Framework = new WellKnownFrameworkMembers(module);
@@ -160,27 +157,6 @@ namespace Spinner.Fody
         internal TypeDefinition SafeGetType(string fullName)
         {
             return Module.GetType(fullName);
-        }
-
-        [Conditional("DEBUG")]
-        internal void LogDebug(string text)
-        {
-            _weaver.LogDebug(text);
-        }
-
-        internal void LogInfo(string text)
-        {
-            _weaver.LogInfo(text);
-        }
-
-        internal void LogWarning(string text)
-        {
-            _weaver.LogWarning(text);
-        }
-
-        internal void LogError(string text)
-        {
-            _weaver.LogError(text);
         }
 
         internal int NewAspectIndex()

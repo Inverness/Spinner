@@ -46,6 +46,7 @@
     <Compile Include="CollectionExtensions.cs" />
     <Compile Include="Execution\BuildTimeExecutionEngine.cs" />
     <Compile Include="Execution\BuildTimeExecutionGuest.cs" />
+    <Compile Include="FodyLogTarget.cs" />
     <Compile Include="ModuleWeavingContext.cs" />
     <Compile Include="MethodBodyExtensions.cs" />
     <Compile Include="ModuleWeaver.cs" />

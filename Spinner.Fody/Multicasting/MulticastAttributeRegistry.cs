@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
+using NLog;
 using Spinner.Extensibility;
 
 namespace Spinner.Fody.Multicasting
@@ -12,6 +13,7 @@ namespace Spinner.Fody.Multicasting
     /// </summary>
     internal class MulticastAttributeRegistry
     {
+        private static readonly Logger s_log = LogManager.GetCurrentClassLogger();
         private static readonly IReadOnlyList<MulticastAttributeInstance> s_noInstances = new MulticastAttributeInstance[0];
 
         private readonly ModuleWeavingContext _mwc;
@@ -92,7 +94,7 @@ namespace Spinner.Fody.Multicasting
                         
                         derivedInsts.Item2.Add(newInst);
 
-                        _mwc.LogDebug($"Multicast Inheritance: AttributeType: {inst.AttributeType}, Origin: {inst.Origin}, Inheritor: {derived}");
+                        s_log.Debug("Multicast Inheritance: AttributeType: {0}, Origin: {1}, Inheritor: {2}", inst.AttributeType, inst.Origin, derived);
                     }
                 }
             }

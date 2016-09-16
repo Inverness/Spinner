@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using NLog;
 using Spinner.Aspects;
 using Spinner.Fody.Utilities;
 
@@ -21,6 +22,8 @@ namespace Spinner.Fody.Analysis
         private const string AdviceTypeNameSuffix = "Advice";
         private const string AdviceArgsNamespace = "Spinner.Aspects";
         private const string AdviceNamePrefix = "On";
+
+        private static readonly Logger s_log = LogManager.GetCurrentClassLogger();
 
         private readonly ModuleWeavingContext _mwc;
         private readonly TypeDefinition _type;
@@ -101,7 +104,7 @@ namespace Spinner.Fody.Analysis
             if (HasAttribute(type, _mwc.Spinner.AnalyzedFeaturesAttribute))
                 return;
 
-            _mwc.LogDebug($"Analyzing features for aspect type {type.Name}");
+            s_log.Debug("Analyzing features for aspect type {0}", type.Name);
 
             foreach (MethodDefinition m in type.Methods)
             {

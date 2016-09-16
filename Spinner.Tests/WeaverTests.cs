@@ -67,11 +67,11 @@ namespace Spinner.Tests
             {
                 ModuleDefinition = moduleDefinition,
 #if DEBUG
-                LogDebug = s => _output.WriteLine("Debug: " + s),
+                LogDebug = s => _output.WriteLine(s),
 #endif
                 LogInfo = s => _output.WriteLine(s),
-                LogWarning = s => _output.WriteLine("WARNING: " + s),
-                LogError = s => _output.WriteLine("ERROR: " + s)
+                LogWarning = s => _output.WriteLine(s),
+                LogError = s => _output.WriteLine(s)
             };
 
             weaver.Execute();
