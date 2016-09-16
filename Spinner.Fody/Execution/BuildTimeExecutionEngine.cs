@@ -7,14 +7,14 @@ namespace Spinner.Fody.Execution
 {
     internal class BuildTimeExecutionEngine
     {
-        private readonly ModuleWeavingContext _context;
+        private readonly ModuleDefinition _module;
         private readonly object _loadLock = new object();
         private AppDomain _guestAppDomain;
         private BuildTimeExecutionGuest _guest;
 
-        public BuildTimeExecutionEngine(ModuleWeavingContext context)
+        public BuildTimeExecutionEngine(ModuleDefinition module)
         {
-            _context = context;
+            _module = module;
         }
 
         public MemberReference[] ExecuteMethodPointcut(MethodReference method, TypeReference appliedType)
@@ -60,7 +60,7 @@ namespace Spinner.Fody.Execution
                 if (_guestAppDomain != null)
                     return;
 
-                string guestAssemblyName = _context.Module.Assembly.FullName;
+                string guestAssemblyName = _module.Assembly.FullName;
 
                 _guestAppDomain = AppDomain.CreateDomain("BuildTimeExecution");
                 _guestAppDomain.Load(new AssemblyName(guestAssemblyName));
@@ -75,27 +75,27 @@ namespace Spinner.Fody.Execution
         {
             TypeInfo typeInfo;
             if ((typeInfo = memberInfo as TypeInfo) != null)
-                return _context.Module.Import(typeInfo);
+                return _module.Import(typeInfo);
 
             MethodInfo methodInfo;
             if ((methodInfo = memberInfo as MethodInfo) != null)
-                return _context.Module.Import(methodInfo);
+                return _module.Import(methodInfo);
 
             FieldInfo fieldInfo;
             if ((fieldInfo = memberInfo as FieldInfo) != null)
-                return _context.Module.Import(fieldInfo);
+                return _module.Import(fieldInfo);
 
             PropertyInfo propertyInfo;
             if ((propertyInfo = memberInfo as PropertyInfo) != null)
             {
-                TypeDefinition declaringType = _context.Module.Import(propertyInfo.DeclaringType).Resolve();
+                TypeDefinition declaringType = _module.Import(propertyInfo.DeclaringType).Resolve();
                 return declaringType.GetProperty(propertyInfo.Name, false);
             }
 
             EventInfo eventInfo;
             if ((eventInfo = memberInfo as EventInfo) != null)
             {
-                TypeDefinition declaringType = _context.Module.Import(eventInfo.DeclaringType).Resolve();
+                TypeDefinition declaringType = _module.Import(eventInfo.DeclaringType).Resolve();
                 return declaringType.GetEvent(eventInfo.Name, false);
             }
 

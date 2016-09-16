@@ -107,9 +107,9 @@ namespace Spinner.Fody
                 {Spinner.MethodInvokeAdvice, AdviceType.MethodInvoke}
             };
 
-            MulticastEngine = new MulticastEngine(this);
+            MulticastEngine = new MulticastEngine(Module, Framework.CompilerGeneratedAttribute, Spinner.MulticastAttribute);
 
-            BuildTimeExecutionEngine = new BuildTimeExecutionEngine(this);
+            BuildTimeExecutionEngine = new BuildTimeExecutionEngine(Module);
         }
 
         /// <summary>

@@ -10,10 +10,6 @@ namespace Spinner.Fody.Multicasting
 {
     internal class MulticastEngine
     {
-        private delegate void ResultHandler(IMtp provider);
-
-        private readonly ModuleWeavingContext _mwc;
-        private readonly ModuleDefinition _module;
         private readonly TypeDefinition _compilerGeneratedAttributeType;
         private readonly TypeDefinition _multicastAttributeType;
 
@@ -25,15 +21,16 @@ namespace Spinner.Fody.Multicasting
 
         private readonly IReadOnlyList<IMtp> _noProviders = new IMtp[0];
 
-        internal MulticastEngine(ModuleWeavingContext mwc)
+        internal MulticastEngine(
+            ModuleDefinition module,
+            TypeDefinition compilerGeneratedAttributeType,
+            TypeDefinition multicastAttributeType)
         {
-            _mwc = mwc;
-            _module = mwc.Module;
-            _compilerGeneratedAttributeType = mwc.Framework.CompilerGeneratedAttribute;
-            _multicastAttributeType = mwc.Spinner.MulticastAttribute;
+            _compilerGeneratedAttributeType = compilerGeneratedAttributeType;
+            _multicastAttributeType = multicastAttributeType;
 
             var filter = new HashSet<IMtp>();
-            ProcessAssembly(_mwc.Module.Assembly, null, filter);
+            ProcessAssembly(module.Assembly, null, filter);
 
             foreach (List<IMtp> list in _derived.Values)
                 list?.TrimExcess();
