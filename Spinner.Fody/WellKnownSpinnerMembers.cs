@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Cecil;
-using SpA = Spinner.Aspects;
-using SpAv = Spinner.Aspects.Advices;
-using SpAi = Spinner.Aspects.Internal;
-using SpE = Spinner.Extensibility;
+using SA = Spinner.Aspects;
+using SAv = Spinner.Aspects.Advices;
+using SAi = Spinner.Aspects.Internal;
+using SE = Spinner.Extensibility;
 
 namespace Spinner.Fody
 {
@@ -15,12 +15,12 @@ namespace Spinner.Fody
     {
         internal const int MaxArguments = Aspects.Arguments.MaxItems;
 
-        private const string NsA = "Spinner.Aspects";
-        private const string NsAv = "Spinner.Aspects.Advices";
-        private const string NsAi = "Spinner.Aspects.Internal";
-        private const string NsE = "Spinner.Extensibility";
-        
         // ReSharper disable InconsistentNaming
+        private const string NA = "Spinner.Aspects";
+        private const string NAv = "Spinner.Aspects.Advices";
+        private const string NAi = "Spinner.Aspects.Internal";
+        private const string NE = "Spinner.Extensibility";
+        
         internal readonly ModuleDefinition Module;
 
         internal readonly TypeDefinition IAspect;
@@ -155,9 +155,9 @@ namespace Spinner.Fody
 
             TypeDefinition type;
 
-            IAspect = module.GetType(NsA, nameof(SpA.IAspect));
+            IAspect = module.GetType(NA, nameof(SA.IAspect));
 
-            IMethodBoundaryAspect = type = module.GetType(NsA, nameof(SpA.IMethodBoundaryAspect));
+            IMethodBoundaryAspect = type = module.GetType(NA, nameof(SA.IMethodBoundaryAspect));
             IMethodBoundaryAspect_OnEntry = type.Methods.First(m => m.Name == "OnEntry");
             IMethodBoundaryAspect_OnExit = type.Methods.First(m => m.Name == "OnExit");
             IMethodBoundaryAspect_OnSuccess = type.Methods.First(m => m.Name == "OnSuccess");
@@ -166,22 +166,22 @@ namespace Spinner.Fody
             IMethodBoundaryAspect_OnResume = type.Methods.First(m => m.Name == "OnResume");
             IMethodBoundaryAspect_FilterException = type.Methods.First(m => m.Name == "FilterException");
 
-            IMethodInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IMethodInterceptionAspect));
+            IMethodInterceptionAspect = type = module.GetType(NA, nameof(SA.IMethodInterceptionAspect));
             IMethodInterceptionAspect_OnInvoke = type.Methods.First(m => m.Name == "OnInvoke");
 
-            ILocationInterceptionAspect = type = module.GetType(NsA, nameof(SpA.ILocationInterceptionAspect));
+            ILocationInterceptionAspect = type = module.GetType(NA, nameof(SA.ILocationInterceptionAspect));
             ILocationInterceptionAspect_OnGetValue = type.Methods.First(m => m.Name == "OnGetValue");
             ILocationInterceptionAspect_OnSetValue = type.Methods.First(m => m.Name == "OnSetValue");
 
-            IEventInterceptionAspect = type = module.GetType(NsA, nameof(SpA.IEventInterceptionAspect));
+            IEventInterceptionAspect = type = module.GetType(NA, nameof(SA.IEventInterceptionAspect));
             IEventInterceptionAspect_OnAddHandler = type.Methods.First(m => m.Name == "OnAddHandler");
             IEventInterceptionAspect_OnRemoveHandler = type.Methods.First(m => m.Name == "OnRemoveHandler");
             IEventInterceptionAspect_OnInvokeHandler = type.Methods.First(m => m.Name == "OnInvokeHandler");
 
-            MethodBoundaryAspect = module.GetType(NsA, nameof(SpA.MethodBoundaryAspect));
-            MethodInterceptionAspect = module.GetType(NsA, nameof(SpA.MethodInterceptionAspect));
-            PropertyInterceptionAspect = module.GetType(NsA, nameof(SpA.LocationInterceptionAspect));
-            EventInterceptionAspect = module.GetType(NsA, nameof(SpA.EventInterceptionAspect));
+            MethodBoundaryAspect = module.GetType(NA, nameof(SA.MethodBoundaryAspect));
+            MethodInterceptionAspect = module.GetType(NA, nameof(SA.MethodInterceptionAspect));
+            PropertyInterceptionAspect = module.GetType(NA, nameof(SA.LocationInterceptionAspect));
+            EventInterceptionAspect = module.GetType(NA, nameof(SA.EventInterceptionAspect));
 
             _emptyAspectBaseTypes = new HashSet<TypeDefinition>
             {
@@ -191,65 +191,65 @@ namespace Spinner.Fody
                 EventInterceptionAspect
             };
 
-            AdviceArgs = type = module.GetType(NsA, nameof(SpA.AdviceArgs));
+            AdviceArgs = type = module.GetType(NA, nameof(SA.AdviceArgs));
             AdviceArgs_Instance = type.Properties.First(p => p.Name == "Instance");
             AdviceArgs_Tag = type.Properties.First(p => p.Name == "Tag");
 
-            MethodArgs = type = module.GetType(NsA, nameof(SpA.MethodArgs));
+            MethodArgs = type = module.GetType(NA, nameof(SA.MethodArgs));
             MethodArgs_Method = type.Properties.First(p => p.Name == "Method");
             MethodArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
 
-            MethodExecutionArgs = type = module.GetType(NsA, nameof(SpA.MethodExecutionArgs));
+            MethodExecutionArgs = type = module.GetType(NA, nameof(SA.MethodExecutionArgs));
             MethodExecutionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             MethodExecutionArgs_Exception = type.Properties.First(m => m.Name == "Exception");
             MethodExecutionArgs_FlowBehavior = type.Properties.First(m => m.Name == "FlowBehavior");
             MethodExecutionArgs_ReturnValue = type.Properties.First(m => m.Name == "ReturnValue");
             MethodExecutionArgs_YieldValue = type.Properties.First(m => m.Name == "YieldValue");
 
-            MethodBinding = module.GetType(NsAi, nameof(SpAi.MethodBinding));
-            MethodBindingT1 = module.GetType(NsAi, nameof(SpAi.MethodBinding) + "`1");
-            LocationBindingT1 = module.GetType(NsAi, "LocationBinding`1");
-            EventBinding = module.GetType(NsAi, nameof(SpAi.EventBinding));
+            MethodBinding = module.GetType(NAi, nameof(SAi.MethodBinding));
+            MethodBindingT1 = module.GetType(NAi, nameof(SAi.MethodBinding) + "`1");
+            LocationBindingT1 = module.GetType(NAi, "LocationBinding`1");
+            EventBinding = module.GetType(NAi, nameof(SAi.EventBinding));
 
-            Features = module.GetType(NsA, nameof(SpA.Features));
-            FeaturesAttribute = module.GetType(NsA, nameof(SpA.FeaturesAttribute));
-            AnalyzedFeaturesAttribute = type = module.GetType(NsAi, nameof(SpAi.AnalyzedFeaturesAttribute));
+            Features = module.GetType(NA, nameof(SA.Features));
+            FeaturesAttribute = module.GetType(NA, nameof(SA.FeaturesAttribute));
+            AnalyzedFeaturesAttribute = type = module.GetType(NAi, nameof(SAi.AnalyzedFeaturesAttribute));
             AnalyzedFeaturesAttribute_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            LocationInterceptionArgs = type = module.GetType(NsA, nameof(SpA.LocationInterceptionArgs));
+            LocationInterceptionArgs = type = module.GetType(NA, nameof(SA.LocationInterceptionArgs));
             LocationInterceptionArgs_Property = type.Properties.First(p => p.Name == "Location");
             LocationInterceptionArgs_Index = type.Properties.First(p => p.Name == "Index");
 
-            MethodInterceptionArgs = module.GetType(NsA, nameof(SpA.MethodInterceptionArgs));
+            MethodInterceptionArgs = module.GetType(NA, nameof(SA.MethodInterceptionArgs));
 
-            BoundMethodInterceptionArgs = type = module.GetType(NsAi, nameof(SpAi.BoundMethodInterceptionArgs));
+            BoundMethodInterceptionArgs = type = module.GetType(NAi, nameof(SAi.BoundMethodInterceptionArgs));
             BoundMethodInterceptionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            BoundMethodInterceptionArgsT1 = type = module.GetType(NsAi, nameof(SpAi.BoundMethodInterceptionArgs) + "`1");
+            BoundMethodInterceptionArgsT1 = type = module.GetType(NAi, nameof(SAi.BoundMethodInterceptionArgs) + "`1");
             BoundMethodInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundMethodInterceptionArgsT1_TypedReturnValue = type.Fields.First(f => f.Name == "TypedReturnValue");
 
-            BoundLocationInterceptionArgsT1 = type = module.GetType(NsAi, "BoundLocationInterceptionArgs`1");
+            BoundLocationInterceptionArgsT1 = type = module.GetType(NAi, "BoundLocationInterceptionArgs`1");
             BoundLocationInterceptionArgsT1_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
             BoundLocationInterceptionArgsT1_TypedValue = type.Fields.First(f => f.Name == "TypedValue");
 
-            EventInterceptionArgs = type = module.GetType(NsA, nameof(SpA.EventInterceptionArgs));
+            EventInterceptionArgs = type = module.GetType(NA, nameof(SA.EventInterceptionArgs));
             EventInterceptionArgs_Arguments = type.Properties.First(p => p.Name == "Arguments");
             EventInterceptionArgs_Handler = type.Properties.First(p => p.Name == "Handler");
             EventInterceptionArgs_ReturnValue = type.Properties.First(p => p.Name == "ReturnValue");
             EventInterceptionArgs_Event = type.Properties.First(p => p.Name == "Event");
 
-            BoundEventInterceptionArgs = type = module.GetType(NsAi, nameof(SpAi.BoundEventInterceptionArgs));
+            BoundEventInterceptionArgs = type = module.GetType(NAi, nameof(SAi.BoundEventInterceptionArgs));
             BoundEventInterceptionArgs_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
-            Arguments = type = module.GetType(NsA, nameof(SpA.Arguments));
+            Arguments = type = module.GetType(NA, nameof(SA.Arguments));
             Arguments_set_Item = type.Methods.First(m => m.Name == "set_Item");
             Arguments_SetValue = type.Methods.First(m => m.Name == "SetValue" && !m.HasGenericParameters);
             Arguments_SetValueT = type.Methods.First(m => m.Name == "SetValue" && m.HasGenericParameters);
 
             ArgumentsT = new TypeDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
-                ArgumentsT[i] = module.GetType(NsAi, "Arguments`" + i);
+                ArgumentsT[i] = module.GetType(NAi, "Arguments`" + i);
 
             ArgumentsT_ctor = new MethodDefinition[MaxArguments + 1];
             for (int i = 1; i <= MaxArguments; i++)
@@ -268,32 +268,32 @@ namespace Spinner.Fody
                 ArgumentsT_Item[i] = fields;
             }
 
-            type = module.GetType(NsAi, nameof(SpAi.WeaverHelpers));
+            type = module.GetType(NAi, nameof(SAi.WeaverHelpers));
             WeaverHelpers_InvokeEvent = type.Methods.First(m => m.Name == "InvokeEvent");
             WeaverHelpers_InvokeEventAdvice = type.Methods.First(m => m.Name == "InvokeEventAdvice");
             WeaverHelpers_GetEventInfo = type.Methods.First(m => m.Name == "GetEventInfo");
             WeaverHelpers_GetPropertyInfo = type.Methods.First(m => m.Name == "GetPropertyInfo");
 
-            MulticastAttribute = module.GetType(NsE, nameof(SpE.MulticastAttribute));
-            MulticastAttributes = module.GetType(NsE, nameof(SpE.MulticastAttributes));
-            MulticastInheritance = module.GetType(NsE, nameof(SpE.MulticastInheritance));
-            MulticastTargets = module.GetType(NsE, nameof(SpE.MulticastTargets));
+            MulticastAttribute = module.GetType(NE, nameof(SE.MulticastAttribute));
+            MulticastAttributes = module.GetType(NE, nameof(SE.MulticastAttributes));
+            MulticastInheritance = module.GetType(NE, nameof(SE.MulticastInheritance));
+            MulticastTargets = module.GetType(NE, nameof(SE.MulticastTargets));
 
-            GroupingAdvice = type = module.GetType(NsAv, nameof(SpAv.GroupingAdvice));
-            GroupingAdvice_Master = type.GetProperty(nameof(SpAv.GroupingAdvice.Master), false);
-            MethodInvokeAdvice = module.GetType(NsAv, nameof(SpAv.MethodInvokeAdvice));
-            MethodBoundaryAdvice = type = module.GetType(NsAv, nameof(SpAv.MethodBoundaryAdvice));
-            MethodBoundaryAdvice_ApplyToStateMachine = type.GetProperty(nameof(SpAv.MethodBoundaryAdvice.ApplyToStateMachine), false);
-            MethodEntryAdvice = module.GetType(NsAv, nameof(SpAv.MethodEntryAdvice));
-            MethodExitAdvice = module.GetType(NsAv, nameof(SpAv.MethodExitAdvice));
-            MethodSuccessAdvice = module.GetType(NsAv, nameof(SpAv.MethodSuccessAdvice));
-            MethodExceptionAdvice = module.GetType(NsAv, nameof(SpAv.MethodExceptionAdvice));
-            MethodFilterExceptionAdvice = module.GetType(NsAv, nameof(SpAv.MethodFilterExceptionAdvice));
-            MethodYieldAdvice = module.GetType(NsAv, nameof(SpAv.MethodYieldAdvice));
-            MethodResumeAdvice = module.GetType(NsAv, nameof(SpAv.MethodResumeAdvice));
-            MethodPointcut = module.GetType(NsAv, nameof(SpAv.MethodPointcut));
-            MulticastPointcut = module.GetType(NsAv, nameof(SpAv.MulticastPointcut));
-            SelfPointcut = module.GetType(NsAv, nameof(SpAv.SelfPointcut));
+            GroupingAdvice = type = module.GetType(NAv, nameof(SAv.GroupingAdvice));
+            GroupingAdvice_Master = type.GetProperty(nameof(SAv.GroupingAdvice.Master), false);
+            MethodInvokeAdvice = module.GetType(NAv, nameof(SAv.MethodInvokeAdvice));
+            MethodBoundaryAdvice = type = module.GetType(NAv, nameof(SAv.MethodBoundaryAdvice));
+            MethodBoundaryAdvice_ApplyToStateMachine = type.GetProperty(nameof(SAv.MethodBoundaryAdvice.ApplyToStateMachine), false);
+            MethodEntryAdvice = module.GetType(NAv, nameof(SAv.MethodEntryAdvice));
+            MethodExitAdvice = module.GetType(NAv, nameof(SAv.MethodExitAdvice));
+            MethodSuccessAdvice = module.GetType(NAv, nameof(SAv.MethodSuccessAdvice));
+            MethodExceptionAdvice = module.GetType(NAv, nameof(SAv.MethodExceptionAdvice));
+            MethodFilterExceptionAdvice = module.GetType(NAv, nameof(SAv.MethodFilterExceptionAdvice));
+            MethodYieldAdvice = module.GetType(NAv, nameof(SAv.MethodYieldAdvice));
+            MethodResumeAdvice = module.GetType(NAv, nameof(SAv.MethodResumeAdvice));
+            MethodPointcut = module.GetType(NAv, nameof(SAv.MethodPointcut));
+            MulticastPointcut = module.GetType(NAv, nameof(SAv.MulticastPointcut));
+            SelfPointcut = module.GetType(NAv, nameof(SAv.SelfPointcut));
         }
 
         /// <summary>

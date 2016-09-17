@@ -9,9 +9,9 @@ namespace Spinner.Fody
     /// </summary>
     internal class WellKnownFrameworkMembers
     {
-        private const string NsSystem = "System";
-        private const string NsReflection = "System.Reflection";
-        private const string NsCompilerServices = "System.Runtime.CompilerServices";
+        private const string NSys = "System";
+        private const string NRef = "System.Reflection";
+        private const string NComp = "System.Runtime.CompilerServices";
 
         // ReSharper disable InconsistentNaming
         internal readonly TypeDefinition Exception;
@@ -38,19 +38,19 @@ namespace Spinner.Fody
             AssemblyDefinition runtimeAssembly = currentModule.AssemblyResolver.Resolve(runtimeAssemblyName);
             ModuleDefinition module = runtimeAssembly.MainModule;
 
-            Exception = module.GetType(NsSystem, nameof(Exception));
-            Attribute = module.GetType(NsSystem, nameof(Attribute));
-            AsyncStateMachineAttribute = module.GetType(NsCompilerServices, nameof(AsyncStateMachineAttribute));
-            IteratorStateMachineAttribute = module.GetType(NsCompilerServices, nameof(IteratorStateMachineAttribute));
-            CompilerGeneratedAttribute = module.GetType(NsCompilerServices, nameof(CompilerGeneratedAttribute));
+            Exception = module.GetType(NSys, nameof(Exception));
+            Attribute = module.GetType(NSys, nameof(Attribute));
+            AsyncStateMachineAttribute = module.GetType(NComp, nameof(AsyncStateMachineAttribute));
+            IteratorStateMachineAttribute = module.GetType(NComp, nameof(IteratorStateMachineAttribute));
+            CompilerGeneratedAttribute = module.GetType(NComp, nameof(CompilerGeneratedAttribute));
             CompilerGeneratedAttribute_ctor = CompilerGeneratedAttribute.Methods.First(m => m.IsConstructor && !m.IsStatic && !m.HasParameters);
-            MethodBase = module.GetType(NsReflection, "MethodBase");
+            MethodBase = module.GetType(NRef, "MethodBase");
             MethodBase_GetMethodFromHandle = MethodBase.Methods.First(m => m.Name == "GetMethodFromHandle" && m.Parameters.Count == 1);
-            MethodInfo = module.GetType(NsReflection, "MethodInfo");
-            Delegate = module.GetType(NsSystem, "Delegate");
-            var type = module.GetType(NsSystem, "Type");
+            MethodInfo = module.GetType(NRef, "MethodInfo");
+            Delegate = module.GetType(NSys, "Delegate");
+            var type = module.GetType(NSys, "Type");
             Type_GetTypeFromHandle = type.Methods.First(m => m.Name == "GetTypeFromHandle");
-            ActionT1 = type = module.GetType(NsSystem, "Action`1");
+            ActionT1 = type = module.GetType(NSys, "Action`1");
             ActionT1_ctor = type.GetConstructors().Single();
         }
     }
