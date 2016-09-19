@@ -3,13 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Mono.Cecil;
+using NLog;
 using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weaving
 {
     internal class AspectWeaver
     {
-        private HashSet<MethodDefinition> _wroteInitFor; 
+        private HashSet<MethodDefinition> _wroteInitFor;
+
+        private static readonly Logger s_log = LogManager.GetCurrentClassLogger();
 
         internal AspectWeaver(AspectInstance instance)
         {
@@ -25,17 +28,29 @@ namespace Spinner.Fody.Weaving
 
         public virtual void Weave()
         {
+            ICustomAttributeProvider target = Instance.Target;
+
+            s_log.Trace("Begin weaving aspect {0} for target {1} {2} with {3} advice groups",
+                        Instance.Aspect.AspectType.Name,
+                        target.GetProviderType(),
+                        target.GetName(),
+                        Instance.Aspect.AdviceGroups.Count);
+
             foreach (AdviceGroup group in Instance.Aspect.AdviceGroups)
             {
+                s_log.Trace("  Applying group {0} with pointcut type {1}",
+                            group.Master.Source.GetName(),
+                            group.PointcutType ?? PointcutType.Self);
+
                 AdviceInfo master = group.Master;
 
                 switch (group.PointcutType)
                 {
                     case null:
                     case PointcutType.Self:
-                        if ((group.Master.ValidTargets & Instance.Target.GetMulticastTargetType()) != 0)
+                        if ((group.Master.ValidTargets & target.GetMulticastTargetType()) != 0)
                         {
-                            group.CreateWeaver(this, Instance.Target).Weave();
+                            group.CreateWeaver(this, target).Weave();
                         }
 
                         break;
@@ -49,8 +64,9 @@ namespace Spinner.Fody.Weaving
                             TargetMembers = group.PointcutMemberName
                         };
 
-                        foreach (IMetadataTokenProvider d in Context.MulticastEngine.GetDescendants(Instance.Target, ma))
+                        foreach (IMetadataTokenProvider d in Context.MulticastEngine.GetDescendants(target, ma))
                         {
+                            s_log.Trace("    Apply to {0} {1}", d.GetProviderType(), d.GetName());
                             group.CreateWeaver(this, d).Weave();
                         }
 
@@ -60,11 +76,11 @@ namespace Spinner.Fody.Weaving
                         string methodName = group.PointcutMethodName;
                         MethodDefinition methodDef = Instance.Aspect.AspectType.Methods.First(m => m.Name == methodName);
 
-                        Debug.Assert(Instance.Target is IMemberDefinition, "Instance.Target is IMemberDefinition");
+                        Debug.Assert(target is IMemberDefinition, "target is IMemberDefinition");
 
-                        TypeDefinition targetTypeDef = Instance.Target as TypeDefinition;
+                        TypeDefinition targetTypeDef = target as TypeDefinition;
                         if (targetTypeDef == null)
-                            targetTypeDef = ((IMemberDefinition) Instance.Target).DeclaringType;
+                            targetTypeDef = ((IMemberDefinition) target).DeclaringType;
 
                         MemberReference[] members = Context.BuildTimeExecutionEngine.ExecuteMethodPointcut(methodDef, targetTypeDef);
 
@@ -72,6 +88,7 @@ namespace Spinner.Fody.Weaving
                         {
                             if ((m.GetMulticastTargetType() & master.ValidTargets) != 0)
                             {
+                                s_log.Trace("    Apply to {0} {1}", m.GetProviderType(), m.GetName());
                                 group.CreateWeaver(this, m.Resolve()).Weave();
                             }
                         }
@@ -81,6 +98,8 @@ namespace Spinner.Fody.Weaving
                         throw new ArgumentOutOfRangeException();
                 }
             }
+
+            s_log.Trace("Finished weaving");
         }
 
         internal bool NeedsAspectInit(MethodDefinition method)

@@ -92,7 +92,7 @@ namespace Spinner.Fody.Multicasting
             throw new ArgumentOutOfRangeException(nameof(target));
         }
 
-        public static string GetName(this ICustomAttributeProvider self)
+        public static string GetName(this IMetadataTokenProvider self)
         {
             switch (self.GetProviderType())
             {

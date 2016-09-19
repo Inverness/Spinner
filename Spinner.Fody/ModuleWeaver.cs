@@ -1,4 +1,4 @@
-﻿#define WITH_THREADING
+﻿//#define WITH_THREADING
 
 using System;
 using System.Collections.Generic;
@@ -58,7 +58,7 @@ namespace Spinner.Fody
 #endif
             var fodyTarget = new FodyLogTarget(LogError, LogWarning, LogInfo, LogDebug)
             {
-                Layout = "${level:uppercase=true} [${threadid}] ${logger} - ${message}",
+                Layout = "${level:uppercase=true} [${threadid}] ${logger:shortName=true} - ${message}",
                 Name = "fody"
             };
 

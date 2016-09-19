@@ -70,6 +70,8 @@ namespace Spinner.Fody.Analysis
         /// </summary>
         internal static void Analyze(SpinnerContext context, TypeDefinition type, LockTargetProvider<TypeDefinition> ltp)
         {
+            s_log.Debug("Begin analysis of {0}", type);
+
             // Aspects can only be types that are valid as attributes.
             Debug.Assert(IsMaybeAspect(type), "this should be checked before starting analysis");
 
@@ -80,7 +82,14 @@ namespace Spinner.Fody.Analysis
 
             // The type might not actually be an aspect.
             if (kind.HasValue)
+            {
+                s_log.Debug("  Aspect kind is {0}", kind.Value);
                 new AspectFeatureAnalyzer(context, type, ltp, kind.Value, inheritanceList.ToArray()).Analyze();
+            }
+            else
+            {
+                s_log.Debug("  Not an aspect");
+            }
         }
 
         private void Analyze()
@@ -104,7 +113,7 @@ namespace Spinner.Fody.Analysis
             if (HasAttribute(type, _context.Spinner.AnalyzedFeaturesAttribute))
                 return;
 
-            s_log.Debug("Analyzing features for aspect type {0}", type.Name);
+            s_log.Debug("  Checking methods for type {0}", type);
 
             foreach (MethodDefinition m in type.Methods)
             {
@@ -122,6 +131,8 @@ namespace Spinner.Fody.Analysis
                     if (!adviceType.HasValue)
                         continue;
 
+                    s_log.Debug("    Found advice {0} on method {1}", adviceType.Value, m.Name);
+
                     MethodDefinition baseMethod = type.BaseType?.Resolve().GetMethod(m, true);
 
                     Features methodFeatures = Features.None;
@@ -129,6 +140,8 @@ namespace Spinner.Fody.Analysis
                         _inheritedMethodFeatures.TryGetValue(baseMethod, out methodFeatures);
 
                     methodFeatures |= AnalyzeAdvice(m);
+
+                    s_log.Debug("    Analyzed features: {0}", LogHelper.GetJoinedFeatureString(methodFeatures));
 
                     _inheritedMethodFeatures[m] = methodFeatures;
 
@@ -144,11 +157,15 @@ namespace Spinner.Fody.Analysis
                     if (baseDefinition == null)
                         continue;
 
+                    s_log.Debug("    Found advice method {0}", m.Name);
+
                     // Join method features inherited from the overriden method with those analyzed now.
                     Features methodFeatures;
                     _inheritedMethodFeatures.TryGetValue(baseDefinition, out methodFeatures);
 
                     methodFeatures |= AnalyzeAdvice(m);
+
+                    s_log.Debug("    Analyzed features: {0}", LogHelper.GetJoinedFeatureString(methodFeatures));
 
                     _inheritedMethodFeatures[baseDefinition] = methodFeatures;
 

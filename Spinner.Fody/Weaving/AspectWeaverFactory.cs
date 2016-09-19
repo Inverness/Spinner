@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Mono.Cecil;
-using Spinner.Aspects;
+using NLog;
 using Spinner.Fody.Multicasting;
 
 namespace Spinner.Fody.Weaving
@@ -11,8 +11,12 @@ namespace Spinner.Fody.Weaving
     /// </summary>
     internal static class AspectWeaverFactory
     {
+        private static readonly Logger s_log = LogManager.GetCurrentClassLogger();
+
         public static AspectWeaver[] TryCreate(SpinnerContext context, MulticastAttributeRegistry mar, TypeDefinition type)
         {
+            s_log.Trace("Processing type {0}", type);
+
             // Identifies aspects that have been applied to the type first
 
             List<AspectInstance> aspects = null;
@@ -55,7 +59,12 @@ namespace Spinner.Fody.Weaving
             }
 
             if (aspects == null)
+            {
+                //s_log.Trace("No aspects found for type {0}", type);
                 return null;
+            }
+
+            s_log.Trace("Found {0} aspects for type {1}", aspects.Count, type);
 
             // Create a weaver for each aspect
 
