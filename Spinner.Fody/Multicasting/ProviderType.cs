@@ -1,5 +1,8 @@
 namespace Spinner.Fody.Multicasting
 {
+    /// <summary>
+    /// Enumerates the types of objects that provide metadata tokens.
+    /// </summary>
     internal enum ProviderType
     {
         // AssemblyDefinition

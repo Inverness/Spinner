@@ -87,7 +87,7 @@ namespace Spinner.Fody
         internal readonly TypeDefinition EventBinding;
 
         internal readonly TypeDefinition LocationInterceptionArgs;
-        internal readonly PropertyDefinition LocationInterceptionArgs_Property;
+        internal readonly PropertyDefinition LocationInterceptionArgs_Location;
         internal readonly PropertyDefinition LocationInterceptionArgs_Index;
 
         internal readonly TypeDefinition BoundLocationInterceptionArgsT1;
@@ -217,7 +217,7 @@ namespace Spinner.Fody
             AnalyzedFeaturesAttribute_ctor = type.Methods.First(m => m.IsConstructor && !m.IsStatic);
 
             LocationInterceptionArgs = type = module.GetType(NA, nameof(SA.LocationInterceptionArgs));
-            LocationInterceptionArgs_Property = type.Properties.First(p => p.Name == "Location");
+            LocationInterceptionArgs_Location = type.Properties.First(p => p.Name == "Location");
             LocationInterceptionArgs_Index = type.Properties.First(p => p.Name == "Index");
 
             MethodInterceptionArgs = module.GetType(NA, nameof(SA.MethodInterceptionArgs));

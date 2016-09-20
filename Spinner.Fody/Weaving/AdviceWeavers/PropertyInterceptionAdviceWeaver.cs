@@ -113,7 +113,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             VariableDefinition piaVariable)
         {
             MethodReference getTypeFromHandle = Context.Import(Context.Framework.Type_GetTypeFromHandle);
-            MethodReference setProperty = Context.Import(Context.Spinner.LocationInterceptionArgs_Property.SetMethod);
+            MethodReference setProperty = Context.Import(Context.Spinner.LocationInterceptionArgs_Location.SetMethod);
             MethodReference getPropertyInfo = Context.Import(Context.Spinner.WeaverHelpers_GetPropertyInfo);
 
             var insc = new[]

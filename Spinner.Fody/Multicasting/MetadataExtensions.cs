@@ -21,10 +21,10 @@ namespace Spinner.Fody.Multicasting
 
         public static ProviderType GetProviderType(this IMetadataTokenProvider target)
         {
-            if (target.MetadataToken.TokenType == TokenType.Param && target is MethodReturnType)
+            TokenType tt = target.MetadataToken.TokenType;
+            if (tt == TokenType.Param && target is MethodReturnType)
                 return ProviderType.MethodReturn;
-
-            return s_providerTypes[target.MetadataToken.TokenType];
+            return s_providerTypes[tt];
         }
 
         public static bool IsMatch(this MulticastTargets self, MulticastTargets other)

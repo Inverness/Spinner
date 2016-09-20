@@ -70,7 +70,7 @@ namespace Spinner.Fody
                 {Spinner.MethodExecutionArgs_YieldValue.GetMethod, Features.YieldValue},
                 {Spinner.MethodExecutionArgs_YieldValue.SetMethod, Features.YieldValue},
                 {Spinner.MethodArgs_Method.GetMethod, Features.MemberInfo},
-                {Spinner.LocationInterceptionArgs_Property.GetMethod, Features.MemberInfo},
+                {Spinner.LocationInterceptionArgs_Location.GetMethod, Features.MemberInfo},
                 {Spinner.EventInterceptionArgs_Event.GetMethod, Features.MemberInfo},
                 {Spinner.AdviceArgs_Tag.GetMethod, Features.Tag},
                 {Spinner.AdviceArgs_Tag.SetMethod, Features.Tag},
