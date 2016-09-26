@@ -24,7 +24,7 @@ namespace Spinner.Fody.Weaving
 
         internal SpinnerContext Context { get; }
 
-        internal FieldReference AspectField { get; set; }
+        internal FieldDefinition AspectField { get; set; }
 
         public virtual void Weave()
         {

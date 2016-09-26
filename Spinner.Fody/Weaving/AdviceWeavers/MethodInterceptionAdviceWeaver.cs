@@ -1,4 +1,5 @@
-﻿using Mono.Cecil;
+﻿using System.Diagnostics;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Spinner.Aspects;
@@ -110,9 +111,15 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 _returnValueField = Context.Import(returnValueFieldDef).WithGenericDeclaringType(genericMiaType);
             }
 
+            Debug.Assert(_miaVar == null, "_miaVar == null");
             _miaVar = method.Body.AddVariableDefinition(miaType);
-            var il = new ILProcessorEx();
 
+            // mia  = new MethodInterceptionArgs((object) this,
+            //                                   arguments,
+            //                                   BindingClass.Instance);
+
+            var il = new ILProcessorEx();
+            
             if (method.IsStatic)
             {
                 il.Emit(OpCodes.Ldnull);
@@ -126,8 +133,8 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                     il.Emit(OpCodes.Box, method.DeclaringType);
                 }
             }
-
-            il.EmitLoadOrNull(argumentsVariable, null);
+            
+            il.EmitLoadLocalOrFieldOrNull(argumentsVariable, null);
             
             il.Emit(OpCodes.Ldsfld, BindingInstanceField);
 
@@ -209,10 +216,8 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 il.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
             }
 
-            if (_method.IsStatic || _method.DeclaringType.IsValueType)
-                il.Emit(OpCodes.Call, _original);
-            else
-                il.Emit(OpCodes.Callvirt, _original);
+            // Value type might override 
+            il.EmitCall(_original);
 
             il.Emit(OpCodes.Ret);
         }

@@ -166,7 +166,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("handler", ParameterAttributes.None, baseDelegateType));
 
-                ILProcessor bil = bmethod.Body.GetILProcessor();
+                var bil = new ILProcessorEx(bmethod.Body);
 
                 if (eventMethod != null)
                 {
@@ -182,11 +182,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
                     bil.Emit(OpCodes.Ldarg_2);
                     bil.Emit(OpCodes.Castclass, delegateType);
-
-                    if (eventMethod.IsStatic || eventMethod.DeclaringType.IsValueType)
-                        bil.Emit(OpCodes.Call, original);
-                    else
-                        bil.Emit(OpCodes.Callvirt, original);
+                    bil.EmitCall(original);
                 }
                 // TODO: Manual event add
 
@@ -214,7 +210,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 bmethod.Parameters.Add(new ParameterDefinition("handler", ParameterAttributes.None, baseDelegateType));
                 bmethod.Parameters.Add(new ParameterDefinition("args", ParameterAttributes.None, argumentsBaseType));
 
-                ILProcessor bil = bmethod.Body.GetILProcessor();
+                var bil = new ILProcessorEx(bmethod.Body);
 
                 GenericInstanceType argumentContainerType;
                 FieldReference[] argumentContainerFields;
@@ -225,7 +221,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 VariableDefinition argsContainer = null;
                 if (delegateInvokeMethodDef.Parameters.Count != 0)
                 {
-                    argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
+                    argsContainer = bmethod.Body.AddVariableDefinition(argumentContainerType);
 
                     bil.Emit(OpCodes.Ldarg_3);
                     bil.Emit(OpCodes.Castclass, argumentContainerType);
@@ -291,7 +287,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 }
             }
 
-            il.EmitLoadOrNull(argumentsVarOpt, null);
+            il.EmitLoadLocalOrFieldOrNull(argumentsVarOpt, null);
 
             il.Emit(OpCodes.Ldsfld, BindingInstanceField);
 
@@ -372,17 +368,10 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             VariableDefinition handlerVar = _invokerMethod.Body.AddVariableDefinition(_evtBackingField.FieldType);
 
-            ILProcessor il = _invokerMethod.Body.GetILProcessor();
+            MethodBody body = _invokerMethod.Body;
+            ILProcessorEx il = new ILProcessorEx(body);
 
-            if (_invokerMethod.IsStatic)
-            {
-                il.Emit(OpCodes.Ldsfld, _evtBackingField);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldfld, _evtBackingField);
-            }
+            il.EmitLoadFieldOrStaticField(_evtBackingField);
             il.Emit(OpCodes.Dup);
 
             Ins notNullLabel = Ins.Create(OpCodes.Nop);
@@ -415,43 +404,28 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             //
             // Create an Action<EventInterceptionArgs> delegate from the OnInvokeHandler method.
             //
-
-            TypeReference actionT1Type = Context.Import(Context.Framework.ActionT1);
+            
             TypeReference eiaBaseType = Context.Import(Context.Spinner.EventInterceptionArgs);
-            MethodReference actionT1Ctor = Context.Import(Context.Framework.ActionT1_ctor);
+            GenericInstanceType actionType = Context.Import(Context.Framework.ActionT1).MakeGenericInstanceType(eiaBaseType);
+            MethodReference actionCtor = Context.Import(Context.Framework.ActionT1_ctor).WithGenericDeclaringType(actionType);
 
-            var actionT1TypeInst = new GenericInstanceType(actionT1Type);
-            actionT1TypeInst.GenericArguments.Add(eiaBaseType);
-
-            MethodReference actionCtor = actionT1Ctor.WithGenericDeclaringType(actionT1TypeInst);
-
-            VariableDefinition adviceDelegateVar = il.Body.AddVariableDefinition(actionT1TypeInst);
-            var adviceSourceMethod = (MethodReference) advice.Source;
-
-            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            if (adviceSourceMethod.Resolve().IsVirtual)
-            {
-                il.Emit(OpCodes.Dup);
-                il.Emit(OpCodes.Ldvirtftn, adviceSourceMethod);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldftn, adviceSourceMethod);
-            }
+            VariableDefinition adviceDelegateVar = body.AddVariableDefinition(actionType);
+            
+            il.EmitLoadFieldOrStaticField(Parent.AspectField);
+            il.EmitLoadPointerOrStaticPointer(((MethodReference) advice.Source).Resolve());
             il.Emit(OpCodes.Newobj, actionCtor);
             il.Emit(OpCodes.Stloc, adviceDelegateVar);
             
             //
             // Call: void WeaverHelpers.InvokeEventAdvice(Delegate, Action<EventInterceptionArgs>, EventInterceptionArgs)
             //
-
-            MethodDefinition invokeEventAdviceMethodDef = Context.Spinner.WeaverHelpers_InvokeEventAdvice;
-            MethodReference invokeEventAdviceMethod = Context.Import(invokeEventAdviceMethodDef);
+            
+            MethodReference invokeEventAdvicecMethod = Context.Import(Context.Spinner.WeaverHelpers_InvokeEventAdvice);
 
             il.Emit(OpCodes.Ldloc, handlerVar);
             il.Emit(OpCodes.Ldloc, adviceDelegateVar);
             il.Emit(OpCodes.Ldloc, eiaVar);
-            il.Emit(OpCodes.Call, invokeEventAdviceMethod);
+            il.Emit(OpCodes.Call, invokeEventAdvicecMethod);
             il.Emit(OpCodes.Ret);
 
             _invokerMethod.Body.RemoveNops();

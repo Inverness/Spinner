@@ -5,6 +5,7 @@ using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Mono.Collections.Generic;
 using Spinner.Aspects;
+using Spinner.Fody.Utilities;
 using Ins = Mono.Cecil.Cil.Instruction;
 
 namespace Spinner.Fody.Weaving.AdviceWeavers
@@ -156,7 +157,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 bmethod.Parameters.Add(new ParameterDefinition("instance", ParameterAttributes.None, instanceType));
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
 
-                ILProcessor bil = bmethod.Body.GetILProcessor();
+                var bil = new ILProcessorEx(bmethod.Body);
 
                 if (_property.GetMethod != null)
                 {
@@ -170,7 +171,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                     VariableDefinition argsContainer = null;
                     if (_property.GetMethod.Parameters.Count != 0)
                     {
-                        argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
+                        argsContainer = bmethod.Body.AddVariableDefinition(argumentContainerType);
 
                         bil.Emit(OpCodes.Ldarg_2);
                         bil.Emit(OpCodes.Castclass, argumentContainerType);
@@ -196,16 +197,13 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                         bil.Emit(byRef ? OpCodes.Ldflda : OpCodes.Ldfld, argumentContainerFields[i]);
                     }
 
-                    if (_property.GetMethod.IsStatic || _property.GetMethod.DeclaringType.IsValueType)
-                        bil.Emit(OpCodes.Call, _originalGetter);
-                    else
-                        bil.Emit(OpCodes.Callvirt, _originalGetter);
+                    bil.EmitCall(_originalGetter);
                 }
                 else
                 {
                     if (_property.PropertyType.IsValueType)
                     {
-                        VariableDefinition returnVar = bil.Body.AddVariableDefinition(_property.PropertyType);
+                        VariableDefinition returnVar = bmethod.Body.AddVariableDefinition(_property.PropertyType);
 
                         bil.Emit(OpCodes.Ldloca, returnVar);
                         bil.Emit(OpCodes.Initobj, _property.PropertyType);
@@ -239,7 +237,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 bmethod.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, argumentsBaseType));
                 bmethod.Parameters.Add(new ParameterDefinition("value", ParameterAttributes.None, _property.PropertyType));
 
-                ILProcessor bil = bmethod.Body.GetILProcessor();
+                var bil = new ILProcessorEx(bmethod.Body);
 
                 if (_property.SetMethod != null)
                 {
@@ -255,7 +253,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                     VariableDefinition argsContainer = null;
                     if (_property.SetMethod.Parameters.Count != 1)
                     {
-                        argsContainer = bil.Body.AddVariableDefinition(argumentContainerType);
+                        argsContainer = bmethod.Body.AddVariableDefinition(argumentContainerType);
 
                         bil.Emit(OpCodes.Ldarg_2);
                         bil.Emit(OpCodes.Castclass, argumentContainerType);
@@ -284,10 +282,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                     // Load new property value
                     bil.Emit(OpCodes.Ldarg_3);
 
-                    if (_property.SetMethod.IsStatic || _property.SetMethod.DeclaringType.IsValueType)
-                        bil.Emit(OpCodes.Call, _originalSetter);
-                    else
-                        bil.Emit(OpCodes.Callvirt, _originalSetter);
+                    bil.EmitCall(_originalSetter);
                 }
 
                 bil.Emit(OpCodes.Ret);
@@ -316,32 +311,30 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             iaVariable = method.Body.AddVariableDefinition(piaType);
 
-            var insc = new Collection<Ins>();
+            var il = new ILProcessorEx();
 
             if (method.IsStatic)
             {
-                insc.Add(Ins.Create(OpCodes.Ldnull));
+                il.Emit(OpCodes.Ldnull);
             }
             else
             {
-                insc.Add(Ins.Create(OpCodes.Ldarg_0));
+                il.Emit(OpCodes.Ldarg_0);
                 if (method.DeclaringType.IsValueType)
                 {
-                    insc.Add(Ins.Create(OpCodes.Ldobj, method.DeclaringType));
-                    insc.Add(Ins.Create(OpCodes.Box, method.DeclaringType));
+                    il.Emit(OpCodes.Ldobj, method.DeclaringType);
+                    il.Emit(OpCodes.Box, method.DeclaringType);
                 }
             }
 
-            insc.Add(argumentsVariable == null
-                ? Ins.Create(OpCodes.Ldnull)
-                : Ins.Create(OpCodes.Ldloc, argumentsVariable));
+            il.EmitLoadLocalOrFieldOrNull(argumentsVariable, null);
 
-            insc.Add(Ins.Create(OpCodes.Ldsfld, BindingInstanceField));
+            il.Emit(OpCodes.Ldsfld, BindingInstanceField);
 
-            insc.Add(Ins.Create(OpCodes.Newobj, constructor));
-            insc.Add(Ins.Create(OpCodes.Stloc, iaVariable));
+            il.Emit(OpCodes.Newobj, constructor);
+            il.Emit(OpCodes.Stloc, iaVariable);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
     }
 }

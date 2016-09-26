@@ -219,14 +219,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
                 il.Emit(OpCodes.Ldloc, argumentsVariable);
                 il.Emit(OpCodes.Ldarg, method.Parameters[i]);
-                if (parameterType.IsByReference)
-                {
-                    if (parameterType.GetElementType().IsValueType)
-                        il.Emit(OpCodes.Ldobj, parameterType.GetElementType());
-                    else
-                        il.Emit(OpCodes.Ldind_Ref);
-                }
-
+                il.EmitLoadValueIfRef(parameterType);
                 il.Emit(OpCodes.Stfld, argumentContainerFields[i]);
             }
 
@@ -641,17 +634,14 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             MethodReference baseReference,
             VariableDefinition iaVariableOpt)
         {
-            MethodDefinition adviceDef = Aspect.AspectType.GetMethod(baseReference, true);
-            MethodReference advice = Context.Import(adviceDef);
+            MethodReference advice = Context.Import(Aspect.AspectType.GetMethod(baseReference, true));
 
-            var insc = new[]
-            {
-                Ins.Create(OpCodes.Ldsfld, Parent.AspectField),
-                iaVariableOpt != null ? Ins.Create(OpCodes.Ldloc, iaVariableOpt) : Ins.Create(OpCodes.Ldnull),
-                Ins.Create(OpCodes.Callvirt, advice)
-            };
+            var il = new ILProcessorEx();
+            il.Emit(OpCodes.Ldsfld, Parent.AspectField);
+            il.EmitLoadLocalOrFieldOrNull(iaVariableOpt, null);
+            il.Emit(OpCodes.Callvirt, advice);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         /// <summary>
@@ -665,16 +655,15 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             Ins notNullLabel = Ins.Create(OpCodes.Nop);
 
-            var insc = new[]
-            {
-                Ins.Create(OpCodes.Ldsfld, instanceField),
-                Ins.Create(OpCodes.Brtrue, notNullLabel),
-                Ins.Create(OpCodes.Newobj, constructor),
-                Ins.Create(OpCodes.Stsfld, instanceField),
-                notNullLabel
-            };
+            var il = new ILProcessorEx();
+            
+            il.Emit(OpCodes.Ldsfld, instanceField);
+            il.Emit(OpCodes.Brtrue, notNullLabel);
+            il.Emit(OpCodes.Newobj, constructor);
+            il.Emit(OpCodes.Stsfld, instanceField);
+            il.Append(notNullLabel);
 
-            method.Body.InsertInstructions(offset, true, insc);
+            method.Body.InsertInstructions(offset, true, il.Instructions);
         }
 
         protected void WriteSetMethodInfo(
@@ -691,7 +680,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             var il = new ILProcessorEx();
 
-            il.EmitLoadOrNull(maVarOpt, maFieldOpt);
+            il.EmitLoadLocalOrFieldOrNull(maVarOpt, maFieldOpt);
 
             il.Emit(OpCodes.Ldtoken, method);
             il.Emit(OpCodes.Call, getMethodFromHandle);

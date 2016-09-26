@@ -758,7 +758,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             // Invoke OnEntry with the MEA field, variable, or null.
 
             il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
+            il.EmitLoadLocalOrFieldOrNull(meaVarOpt, meaFieldOpt);
             il.Emit(OpCodes.Callvirt, onEntry);
 
             //// If this advice uses flow control, need to check for FlowBehavior.Return
@@ -894,7 +894,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             {
                 MethodReference setReturnValue = Context.Import(Context.Spinner.MethodExecutionArgs_ReturnValue.SetMethod);
 
-                il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
+                il.EmitLoadLocalOrFieldOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Ldloc, returnVarOpt);
                 il.EmitBoxIfValueType(returnVarOpt.VariableType);
                 il.Emit(OpCodes.Callvirt, setReturnValue);
@@ -903,7 +903,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             // Call OnSuccess()
 
             il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
+            il.EmitLoadLocalOrFieldOrNull(meaVarOpt, meaFieldOpt);
             il.Emit(OpCodes.Callvirt, onSuccess);
 
             // Set resultVar to ReturnValue
@@ -912,7 +912,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             {
                 MethodReference getReturnValue = Context.Import(Context.Spinner.MethodExecutionArgs_ReturnValue.GetMethod);
 
-                il.EmitLoadOrNull(meaVarOpt, meaFieldOpt);
+                il.EmitLoadLocalOrFieldOrNull(meaVarOpt, meaFieldOpt);
                 il.Emit(OpCodes.Callvirt, getReturnValue);
                 il.EmitCastOrUnbox(returnVarOpt.VariableType);
                 il.Emit(OpCodes.Stloc, returnVarOpt);
@@ -964,7 +964,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 il.Append(labelFilterTrue);
                 il.Emit(OpCodes.Stloc, exceptionHolder);
                 il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-                il.EmitLoadOrNull(meaVar, meaField);
+                il.EmitLoadLocalOrFieldOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Ldloc, exceptionHolder);
                 il.Emit(OpCodes.Callvirt, onFilterException);
 
@@ -990,12 +990,12 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             {
                 MethodReference setException = Context.Import(Context.Spinner.MethodExecutionArgs_Exception.SetMethod);
 
-                il.EmitLoadOrNull(meaVar, meaField);
+                il.EmitLoadLocalOrFieldOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Ldloc, exceptionHolder);
                 il.Emit(OpCodes.Callvirt, setException);
 
                 il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-                il.EmitLoadOrNull(meaVar, meaField);
+                il.EmitLoadLocalOrFieldOrNull(meaVar, meaField);
                 il.Emit(OpCodes.Callvirt, onException);
             }
             else
@@ -1053,7 +1053,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             // Call OnExit()
             il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-            il.EmitLoadOrNull(meaVar, meaField);
+            il.EmitLoadLocalOrFieldOrNull(meaVar, meaField);
             il.Emit(OpCodes.Callvirt, onExit);
 
             if (hasNextVarOpt != null)
@@ -1125,7 +1125,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 // Invoke OnYield()
 
                 il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-                il.EmitLoadOrNull(null, meaField);
+                il.EmitLoadLocalOrFieldOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onYield);
 
                 //// Set YieldValue to null so we don't keep the object alive. altering the YieldValue is not permitted
@@ -1158,7 +1158,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
                 //}
 
                 il.Emit(OpCodes.Ldsfld, Parent.AspectField);
-                il.EmitLoadOrNull(null, meaField);
+                il.EmitLoadLocalOrFieldOrNull(null, meaField);
                 il.Emit(OpCodes.Callvirt, onResume);
 
                 //// Unbox the YieldValue and store it back in the result. Changing it is permitted here.
