@@ -370,18 +370,13 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
 
             MethodBody body = _invokerMethod.Body;
             ILProcessorEx il = new ILProcessorEx(body);
+            Ins nullLabel = Ins.Create(OpCodes.Nop);
 
             il.EmitLoadFieldOrStaticField(_evtBackingField);
-            il.Emit(OpCodes.Dup);
-
-            Ins notNullLabel = Ins.Create(OpCodes.Nop);
-
-            il.Emit(OpCodes.Brtrue, notNullLabel);
-            il.Emit(OpCodes.Pop);
-            il.Emit(OpCodes.Ret);
-
-            il.Append(notNullLabel);
             il.Emit(OpCodes.Stloc, handlerVar);
+
+            il.Emit(OpCodes.Ldloc, handlerVar);
+            il.Emit(OpCodes.Brfalse, nullLabel);
 
             //
             // Capture arguments and initialize the aspect, binding, and advice arguments.
@@ -426,6 +421,7 @@ namespace Spinner.Fody.Weaving.AdviceWeavers
             il.Emit(OpCodes.Ldloc, adviceDelegateVar);
             il.Emit(OpCodes.Ldloc, eiaVar);
             il.Emit(OpCodes.Call, invokeEventAdvicecMethod);
+            il.Append(nullLabel);
             il.Emit(OpCodes.Ret);
 
             _invokerMethod.Body.RemoveNops();

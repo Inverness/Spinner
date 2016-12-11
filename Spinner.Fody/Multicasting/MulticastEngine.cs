@@ -648,6 +648,7 @@ namespace Spinner.Fody.Multicasting
                     AddChildItem(method, p);
             }
 
+            // TODO: What if an override skips a base?
             List<MethodDefinition> overrides = GetOverrides(method);
 
             if (overrides != null)

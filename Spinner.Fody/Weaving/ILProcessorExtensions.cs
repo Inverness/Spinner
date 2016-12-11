@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Spinner.Fody.Utilities;
@@ -9,6 +10,19 @@ namespace Spinner.Fody.Weaving
     /// </summary>
     internal static class ILProcessorExtensions
     {
+        private static readonly Dictionary<string, OpCode> s_ldindOpcodes = new Dictionary<string, OpCode>
+        {
+            { nameof(System.SByte), OpCodes.Ldind_I1 },
+            { nameof(System.Byte), OpCodes.Ldind_U1 },
+            { nameof(System.Int16), OpCodes.Ldind_I2 },
+            { nameof(System.UInt16), OpCodes.Ldind_U2 },
+            { nameof(System.Int32), OpCodes.Ldind_I4 },
+            { nameof(System.UInt32), OpCodes.Ldind_U4 },
+            { nameof(System.Int64), OpCodes.Ldind_I8 },
+            { nameof(System.Single), OpCodes.Ldind_R4 },
+            { nameof(System.Double), OpCodes.Ldind_R8 },
+        };
+
         /// <summary>
         /// Emit call or callvirt appropriately.
         /// </summary>
@@ -29,10 +43,23 @@ namespace Spinner.Fody.Weaving
         {
             if (type.IsByReference)
             {
-                if (type.GetElementType().IsValueType)
-                    il.Emit(OpCodes.Ldobj, type.GetElementType());
+                TypeReference et = type.GetElementType();
+                if (et.IsValueType)
+                {
+                    OpCode sc;
+                    if (et.Namespace == "System" && s_ldindOpcodes.TryGetValue(et.Name, out sc))
+                    {
+                        il.Emit(sc);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldobj, et);
+                    }
+                }
                 else
+                {
                     il.Emit(OpCodes.Ldind_Ref);
+                }
             }
         }
 

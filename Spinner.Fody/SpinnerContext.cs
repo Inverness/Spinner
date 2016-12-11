@@ -16,7 +16,7 @@ namespace Spinner.Fody
     /// <summary>
     /// Provides global context and functionality for weavers.
     /// </summary>
-    internal class SpinnerContext
+    internal sealed class SpinnerContext
     {
         private const string AspectInterfaceNameSuffix = "Aspect";
 
