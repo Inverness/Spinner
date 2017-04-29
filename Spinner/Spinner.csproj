@@ -1,123 +1,23 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <MinimumVisualStudioVersion>14.0</MinimumVisualStudioVersion>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{C94D87B4-8AC6-4259-87F1-7CD57ED2DBD4}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Spinner</RootNamespace>
+    <TargetFramework>netstandard1.0</TargetFramework>
     <AssemblyName>Spinner</AssemblyName>
-    <DefaultLanguage>en-US</DefaultLanguage>
-    <FileAlignment>512</FileAlignment>
-    <ProjectTypeGuids>{786C830F-07A1-408B-BD7F-6EE04809D6DB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
-    <TargetFrameworkVersion>v5.0</TargetFrameworkVersion>
+    <PackageId>Spinner</PackageId>
+    <NetStandardImplicitPackageVersion>1.6.1</NetStandardImplicitPackageVersion>
+    <GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
+    <GenerateAssemblyDescriptionAttribute>false</GenerateAssemblyDescriptionAttribute>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+    <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
+    <GenerateNeutralResourcesLanguageAttribute>false</GenerateNeutralResourcesLanguageAttribute>
+    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+    <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\Spinner.xml</DocumentationFile>
-  </PropertyGroup>
+
   <ItemGroup>
-    <!-- A reference to the entire .NET Framework is automatically included -->
-    <None Include="project.json" />
+    <PackageReference Include="Microsoft.NETCore.Portable.Compatibility" Version="1.0.1" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Aspects\AdviceArgs.cs" />
-    <Compile Include="Aspects\Advices\EventAddHandlerAdvice.cs" />
-    <Compile Include="Aspects\Advices\EventInvokeHandlerAdvice.cs" />
-    <Compile Include="Aspects\Advices\EventRemoveHandlerAdvice.cs" />
-    <Compile Include="Aspects\Advices\GroupingAdvice.cs" />
-    <Compile Include="Aspects\Advices\LocationGetValueAdvice.cs" />
-    <Compile Include="Aspects\Advices\LocationSetValueAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodBoundaryAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodEntryAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodExceptionAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodExitAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodFilterExceptionAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodInvokeAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodPointcut.cs" />
-    <Compile Include="Aspects\Advices\MethodResumeAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodSuccessAdvice.cs" />
-    <Compile Include="Aspects\Advices\MethodYieldAdvice.cs" />
-    <Compile Include="Aspects\Advices\MulticastPointcut.cs" />
-    <Compile Include="Aspects\Advices\Advice.cs" />
-    <Compile Include="Aspects\Advices\Pointcut.cs" />
-    <Compile Include="Aspects\Advices\SelfPointcut.cs" />
-    <Compile Include="Aspects\AllAttribute.cs" />
-    <Compile Include="Aspects\Arguments.cs" />
-    <Compile Include="Aspects\Aspect.cs" />
-    <Compile Include="Aspects\AspectKind.cs" />
-    <Compile Include="Aspects\EventInterceptionArgs.cs" />
-    <Compile Include="Aspects\EventInterceptionAspect.cs" />
-    <Compile Include="Aspects\EventLevelAspect.cs" />
-    <Compile Include="Aspects\Features.cs" />
-    <Compile Include="Aspects\FeaturesAttribute.cs" />
-    <Compile Include="Aspects\FlowBehavior.cs" />
-    <Compile Include="Aspects\IAspect.cs" />
-    <Compile Include="Aspects\IEventBinding.cs" />
-    <Compile Include="Aspects\IEventInterceptionAspect.cs" />
-    <Compile Include="Aspects\IEventLevelAspect.cs" />
-    <Compile Include="Aspects\IInstanceLevelAspect.cs" />
-    <Compile Include="Aspects\ILocationLevelAspect.cs" />
-    <Compile Include="Aspects\IMethodBinding.cs" />
-    <Compile Include="Aspects\IMethodBoundaryAspect.cs" />
-    <Compile Include="Aspects\IMethodInterceptionAspect.cs" />
-    <Compile Include="Aspects\IMethodLevelAspect.cs" />
-    <Compile Include="Aspects\InstanceLevelAspect.cs" />
-    <Compile Include="Aspects\Internal\AnalyzedFeaturesAttribute.cs" />
-    <Compile Include="Aspects\Internal\ArgumentsT.cs" />
-    <Compile Include="Aspects\Internal\BoundEventInterceptionArgs.cs" />
-    <Compile Include="Aspects\Internal\BoundMethodInterceptionArgs.cs" />
-    <Compile Include="Aspects\Internal\BoundMethodInterceptionArgsT.cs" />
-    <Compile Include="Aspects\Internal\BoundLocationInterceptionArgs.cs" />
-    <Compile Include="Aspects\Internal\EventBinding.cs" />
-    <Compile Include="Aspects\Internal\MethodBinding.cs" />
-    <Compile Include="Aspects\Internal\MethodBindingT.cs" />
-    <Compile Include="Aspects\Internal\LocationBinding.cs" />
-    <Compile Include="Aspects\Internal\WeaverHelpers.cs" />
-    <Compile Include="Aspects\ILocationBinding.cs" />
-    <Compile Include="Aspects\ILocationInterceptionAspect.cs" />
-    <Compile Include="Aspects\ITypeLevelAspect.cs" />
-    <Compile Include="Aspects\LocationLevelAspect.cs" />
-    <Compile Include="Aspects\MethodArgs.cs" />
-    <Compile Include="Aspects\MethodBoundaryAspect.cs" />
-    <Compile Include="Aspects\MethodExecutionArgs.cs" />
-    <Compile Include="Aspects\MethodInterceptionArgs.cs" />
-    <Compile Include="Aspects\MethodInterceptionAspect.cs" />
-    <Compile Include="Aspects\MethodLevelAspect.cs" />
-    <Compile Include="Aspects\LocationInterceptionArgs.cs" />
-    <Compile Include="Aspects\LocationInterceptionAspect.cs" />
-    <Compile Include="Aspects\TypeLevelAspect.cs" />
-    <Compile Include="Extensibility\MulticastAttribute.cs" />
-    <Compile Include="Extensibility\MulticastAttributes.cs" />
-    <Compile Include="Extensibility\MulticastInheritance.cs" />
-    <Compile Include="Extensibility\MulticastTargets.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+
 </Project>
