@@ -2,7 +2,7 @@
   "dependencies": {
     "Microsoft.Experimental.Collections": "1.0.3-alpha",
     "Mono.Cecil": "0.9.6.4",
-    "NLog": "4.3.8"
+    "NLog": "4.4.8"
   },
   "frameworks": {
     "net45": {}
