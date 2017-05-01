@@ -116,17 +116,17 @@ namespace Spinner.Fody
 
             var analysisLocks = new LockTargetProvider<TypeDefinition>();
 
-            Task[] analysisTasks = types.Select(t => CreateAnalysisAction(t, analysisLocks))
-                                        .Where(a => a != null)
-                                        .Select(RunTask)
-                                        .ToArray();
+            Action[] analysisActions = types.Select(t => CreateAnalysisAction(t, analysisLocks))
+                                            .Where(a => a != null)
+                                            .ToArray();
 
-            if (analysisTasks.Length != 0)
-                Task.WhenAll(analysisTasks).Wait();
+
+            if (analysisActions.Length != 0)
+                InvokeParallel(analysisActions);
 
             stopwatch.Stop();
 
-            s_log.Info("Finished feature analysis for {0} types in {1} ms", analysisTasks.Length, stopwatch.ElapsedMilliseconds);
+            s_log.Info("Finished feature analysis for {0} types in {1} ms", analysisActions.Length, stopwatch.ElapsedMilliseconds);
 
             s_log.Info("Beginning aspect weaving...");
 
@@ -135,29 +135,28 @@ namespace Spinner.Fody
             //
             // Weave aspects for types in the current module. This executes in parallel for each type.
             //
-            
-            Task[] weaveTasks = types.Select(CreateWeaveAction)
-                                     .Where(a => a != null)
-                                     .Select(RunTask)
-                                     .ToArray();
 
-            if (weaveTasks.Length != 0)
-                Task.WhenAll(weaveTasks).Wait();
+            Action[] weaveActions = types.Select(CreateWeaveAction)
+                                         .Where(a => a != null)
+                                         .ToArray();
+
+            if (weaveActions.Length != 0)
+                InvokeParallel(weaveActions);
 
             stopwatch.Stop();
 
-            s_log.Info("---- Finished aspect weaving for {0} types in {1} ms ----", weaveTasks.Length, stopwatch.ElapsedMilliseconds);
+            s_log.Info("---- Finished aspect weaving for {0} types in {1} ms ----", weaveActions.Length, stopwatch.ElapsedMilliseconds);
 
             _context.BuildTimeExecutionEngine.Shutdown();
         }
 
-        private static Task RunTask(Action action)
+        private static void InvokeParallel(Action[] actions)
         {
 #if WITH_THREADING
-            return Task.Run(action);
+            Parallel.Invoke(actions);
 #else
-            action();
-            return Task.FromResult(true);
+            foreach (Action a in actions)
+                a();
 #endif
         }
 
