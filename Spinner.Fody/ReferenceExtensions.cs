@@ -83,7 +83,8 @@ namespace Spinner.Fody
                 return false;
             }
 
-            return self.Resolve() == other.Resolve();
+            Debug.Assert(self.Resolve() == other.Resolve());
+            return true;
         }
 
         /// <summary>
@@ -103,7 +104,8 @@ namespace Spinner.Fody
             if (!self.DeclaringType.IsSame(other.DeclaringType))
                 return false;
 
-            return self.Resolve() == other.Resolve();
+            Debug.Assert(self.Resolve() == other.Resolve());
+            return true;
         }
 
         /// <summary>
